@@ -1,6 +1,10 @@
+mod basic_block;
+mod function;
 pub mod op;
 pub mod ty;
 
+pub use basic_block::BasicBlock;
+pub use function::Function;
 use op::BinOp;
 use ty::Ty;
 
@@ -23,6 +27,18 @@ pub enum Operand {
     Const(ValueTree),
 }
 
+impl Operand {
+    pub fn register_id(&self) -> Option<RegisterId> {
+        match self {
+            Self::Place(place) => match place {
+                Place::Register(r) => Some(*r),
+                Place::Global(_) => None,
+            },
+            Self::Const(_) => None,
+        }
+    }
+}
+
 pub enum Place {
     Register(RegisterId),
     Global(GlobalId),
@@ -42,12 +58,6 @@ pub enum Terminator {
     Return(Option<Operand>),
 }
 
-pub struct BasicBlock {
-    pub name: String,
-    pub instructions: Vec<Instruction>,
-    pub terminator: Terminator,
-}
-
 pub struct Global {
     pub name: String,
     pub ty: Ty,
@@ -57,14 +67,6 @@ pub struct Global {
 pub struct Register {
     pub name: String,
     pub ty: Ty,
-}
-
-pub struct Function {
-    pub name: String,
-    pub params: Vec<RegisterId>,
-    pub ret_ty: Ty,
-    pub blocks: Vec<BasicBlock>,
-    pub registers: Vec<Register>,
 }
 
 pub struct Program {
