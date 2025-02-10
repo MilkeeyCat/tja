@@ -1,8 +1,6 @@
+use super::register::Register;
 use crate::repr::RegisterId;
 use std::collections::{HashMap, HashSet};
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Register(pub usize);
 
 #[derive(Debug, PartialEq)]
 pub enum Operand {
