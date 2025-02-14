@@ -1,6 +1,6 @@
 macro_rules! define_registers {
     ($(($qword: ident, $dword: ident, $word: ident, $byte: ident)),+) => {
-        use super::OperandSize;
+        use super::operands::OperandSize;
 
         #[derive(Debug, Copy, Clone, PartialEq)]
         pub enum Register {

@@ -1,12 +1,6 @@
-use super::register::Register;
+use super::{operands::Operand, register::Register};
 use crate::repr::RegisterId;
 use std::collections::{HashMap, HashSet};
-
-#[derive(Debug, PartialEq)]
-pub enum Operand {
-    Register(Register),
-    Memory,
-}
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {
