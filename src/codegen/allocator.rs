@@ -1,4 +1,4 @@
-use super::{operands::Operand, register::Register};
+use super::{operands::Destination, register::Register};
 use crate::repr::RegisterId;
 use std::collections::{HashMap, HashSet};
 
@@ -7,7 +7,7 @@ pub struct Allocator {
     v_regs: HashSet<RegisterId>,
     interference: HashSet<(RegisterId, RegisterId)>,
     registers: Vec<Register>,
-    operands: HashMap<RegisterId, Operand>,
+    locations: HashMap<RegisterId, Destination>,
 }
 
 impl Allocator {
@@ -20,7 +20,7 @@ impl Allocator {
             v_regs: (0..v_regs_len).into_iter().collect(),
             interference,
             registers,
-            operands: HashMap::new(),
+            locations: HashMap::new(),
         }
     }
 
@@ -57,7 +57,7 @@ impl Allocator {
         self.v_regs
             .iter()
             // ignore precolored nodes
-            .filter(|vreg| !self.operands.contains_key(vreg))
+            .filter(|vreg| !self.locations.contains_key(vreg))
             .map(|vreg| (*vreg, self.neighbors(vreg).len()))
             .min_by(|(_, a), (_, b)| a.cmp(b))
             .map(|(vreg, _)| vreg)
@@ -67,7 +67,7 @@ impl Allocator {
         self.v_regs
             .iter()
             // ignore precolored nodes
-            .filter(|vreg| !self.operands.contains_key(vreg))
+            .filter(|vreg| !self.locations.contains_key(vreg))
             .map(|vreg| (*vreg, self.neighbors(vreg).len()))
             .max_by(|(_, a), (_, b)| a.cmp(b))
             .map(|(vreg, _)| vreg)
@@ -78,7 +78,7 @@ impl Allocator {
         for reg in &self.registers {
             let mut found = true;
             for neighbor in neighbors {
-                if let Operand::Register(r) = &self.operands[neighbor] {
+                if let Destination::Register(r) = &self.locations[neighbor] {
                     if reg == r {
                         found = false;
 
@@ -94,11 +94,11 @@ impl Allocator {
         unreachable!()
     }
 
-    pub fn precolor(&mut self, vreg: RegisterId, reg: Register) {
-        self.operands.insert(vreg, Operand::Register(reg));
+    pub fn precolor(&mut self, vreg: RegisterId, dest: Destination) {
+        self.locations.insert(vreg, dest);
     }
 
-    pub fn allocate(mut self) -> Vec<Operand> {
+    pub fn allocate(mut self) -> Vec<Destination> {
         let mut stack: Vec<(RegisterId, HashSet<(RegisterId, RegisterId)>)> = Vec::new();
 
         while self.min().is_some() {
@@ -117,9 +117,9 @@ impl Allocator {
             if edges.len() < self.registers.len() {
                 self.add_vreg(vreg, edges);
                 // Skip if the vreg was precolored
-                self.operands.insert(
+                self.locations.insert(
                     vreg,
-                    Operand::Register(self.unique_register(&self.neighbors(&vreg))),
+                    Destination::Register(self.unique_register(&self.neighbors(&vreg))),
                 );
             } else {
                 // spill but still can check for registers
@@ -127,7 +127,7 @@ impl Allocator {
             }
         }
 
-        let mut operands: Vec<_> = self.operands.into_iter().collect();
+        let mut operands: Vec<_> = self.locations.into_iter().collect();
         operands.sort_by(|(a, _), (b, _)| a.cmp(&b));
         operands.into_iter().map(|(_, operand)| operand).collect()
     }

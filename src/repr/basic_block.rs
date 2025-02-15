@@ -16,6 +16,13 @@ impl BasicBlock {
                     place: Place::Register(r),
                     ..
                 } => Some(*r),
+                Instruction::Copy { place, .. } => {
+                    if let Place::Register(r) = place {
+                        Some(*r)
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             })
             .collect()
@@ -29,6 +36,7 @@ impl BasicBlock {
                 Instruction::Binary { lhs, rhs, .. } => {
                     Some(vec![lhs.register_id(), rhs.register_id()])
                 }
+                Instruction::Copy { operand, .. } => Some(vec![operand.register_id()]),
             })
             .flatten()
             .flatten()

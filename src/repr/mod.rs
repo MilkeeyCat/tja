@@ -12,16 +12,19 @@ pub type RegisterId = usize;
 pub type GlobalId = usize;
 pub type BlockId = usize;
 
+#[derive(Debug, Clone)]
 pub enum Const {
     I8(i8),
     U8(u8),
 }
 
+#[derive(Debug)]
 pub enum ValueTree {
     Leaf(Const),
     Branch(Vec<Self>),
 }
 
+#[derive(Debug)]
 pub enum Operand {
     Place(Place),
     Const(ValueTree),
@@ -39,6 +42,7 @@ impl Operand {
     }
 }
 
+#[derive(Debug)]
 pub enum Place {
     Register(RegisterId),
     Global(GlobalId),
@@ -50,6 +54,10 @@ pub enum Instruction {
         lhs: Operand,
         rhs: Operand,
         place: Place,
+    },
+    Copy {
+        place: Place,
+        operand: Operand,
     },
 }
 
