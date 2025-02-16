@@ -3,7 +3,8 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    op::BinOp, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
+    self, op::BinOp, ty::Ty, BasicBlock, Function, Instruction, Operand, Place, Program,
+    Terminator, ValueTree,
 };
 use allocator::Allocator;
 use operands::{Destination, OperandSize, Source};
@@ -44,18 +45,16 @@ impl Operand {
     }
 }
 
-pub struct CodeGen<'a> {
-    program: &'a Program,
+pub struct CodeGen {
     locations: Vec<Destination>,
     bss: String,
     data: String,
     text: String,
 }
 
-impl<'a> CodeGen<'a> {
-    pub fn new(program: &'a Program) -> Self {
+impl CodeGen {
+    pub fn new() -> Self {
         Self {
-            program,
             locations: Vec::new(),
             bss: String::new(),
             data: String::new(),
@@ -63,8 +62,74 @@ impl<'a> CodeGen<'a> {
         }
     }
 
+    fn canonicalize(program: &mut Program) {
+        for function in &mut program.functions {
+            for block in &mut function.blocks {
+                let mut instructions = Vec::new();
+
+                for (i, instruction) in block.instructions.iter_mut().enumerate() {
+                    match instruction {
+                        Instruction::Binary {
+                            kind: BinOp::Div,
+                            rhs,
+                            place: Place::Register(r),
+                            ty,
+                            ..
+                        } => {
+                            if matches!(rhs, Operand::Const(..)) {
+                                function.registers.push(repr::Register {
+                                    name: function.registers.len().to_string(),
+                                    ty: ty.clone(),
+                                });
+                                let place = Place::Register(function.registers.len());
+                                let mut operand = Operand::Place(place.clone());
+
+                                std::mem::swap(rhs, &mut operand);
+                                instructions.push((i, Instruction::Copy { place, operand }));
+                            }
+
+                            function.registers.push(repr::Register {
+                                name: function.registers.len().to_string(),
+                                ty: ty.clone(),
+                            });
+
+                            let mut new_r = function.registers.len();
+                            std::mem::swap(r, &mut new_r);
+                            instructions.push((
+                                i + 1,
+                                Instruction::Copy {
+                                    place: Place::Register(new_r),
+                                    operand: Operand::Place(Place::Register(*r)),
+                                },
+                            ));
+                        }
+                        Instruction::Binary { .. } | Instruction::Copy { .. } => (),
+                    }
+                }
+
+                instructions
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, (at, instruction))| {
+                        block.instructions.insert(at + i, instruction)
+                    });
+            }
+        }
+    }
+
     fn precolor(allocator: &mut Allocator, function: &Function) {
         for block in &function.blocks {
+            for instruction in &block.instructions {
+                match instruction {
+                    Instruction::Binary {
+                        kind: BinOp::Div,
+                        place: Place::Register(r),
+                        ..
+                    } => allocator.precolor(*r, Register::Rax.into()),
+                    Instruction::Binary { .. } | Instruction::Copy { .. } => (),
+                }
+            }
+
             match &block.terminator {
                 Terminator::Return(operand) => {
                     if let Some(Operand::Place(Place::Register(r))) = operand {
@@ -83,12 +148,28 @@ impl<'a> CodeGen<'a> {
                 lhs,
                 rhs,
                 place,
+                ..
             } => {
-                //self.mov(&lhs.into(), &place.into(), false);
+                self.mov(&lhs.to_source(self), &place.to_dest(self), false);
 
                 match kind {
-                    BinOp::Add => {}
-                    BinOp::Sub => {}
+                    BinOp::Add => {
+                        self.add(&place.to_dest(self), &rhs.to_source(self));
+                    }
+                    BinOp::Sub => {
+                        self.sub(&place.to_dest(self), &rhs.to_source(self));
+                    }
+                    BinOp::Mul => {
+                        self.mul(&place.to_dest(self), &rhs.to_source(self));
+                    }
+                    BinOp::Div => {
+                        assert!(
+                            !matches!(rhs, Operand::Const(..)),
+                            "rhs of div can't be a const"
+                        );
+
+                        self.div(&rhs.to_dest(self));
+                    }
                 };
             }
             Instruction::Copy { place, operand } => {
@@ -106,14 +187,16 @@ impl<'a> CodeGen<'a> {
         }
     }
 
-    fn terminator(&mut self, terminator: &Terminator) {
+    fn terminator(&mut self, basic_blocks: &[BasicBlock], terminator: &Terminator) {
         match terminator {
-            Terminator::Goto(block_id) => {}
-            Terminator::Return(_) => self.text.push_str("\tret"),
+            Terminator::Goto(block_id) => self
+                .text
+                .push_str(&format!("\tjmp .L{}\n", basic_blocks[*block_id].name)),
+            Terminator::Return(_) => self.text.push_str("\tret\n"),
         }
     }
 
-    fn function(&mut self, function: &Function) {
+    fn function(&mut self, function: Function) {
         let mut allocator = Allocator::new(
             function.registers.len(),
             function.interference(),
@@ -132,23 +215,26 @@ impl<'a> CodeGen<'a> {
                 Register::Rdi,
             ],
         );
-        Self::precolor(&mut allocator, function);
+        Self::precolor(&mut allocator, &function);
 
         self.locations = allocator.allocate();
         self.text
             .push_str(&format!(".global {0}\n{0}:\n", &function.name));
 
         for block in &function.blocks {
+            self.text.push_str(&format!(".L{}:\n", &block.name));
             for instruction in &block.instructions {
                 self.instruction(instruction);
             }
 
-            self.terminator(&block.terminator);
+            self.terminator(&function.blocks, &block.terminator);
         }
     }
 
-    pub fn compile(mut self) -> Vec<u8> {
-        for function in &self.program.functions {
+    pub fn compile(mut self, mut program: Program) -> Vec<u8> {
+        Self::canonicalize(&mut program);
+
+        for function in program.functions {
             self.function(function)
         }
 
@@ -199,5 +285,21 @@ impl<'a> CodeGen<'a> {
                 }
             }
         }
+    }
+
+    fn add(&mut self, lhs: &Destination, rhs: &Source) {
+        self.text.push_str(&format!("\tadd {lhs}, {rhs}\n"));
+    }
+
+    fn sub(&mut self, lhs: &Destination, rhs: &Source) {
+        self.text.push_str(&format!("\tsub {lhs}, {rhs}\n"));
+    }
+
+    fn mul(&mut self, lhs: &Destination, rhs: &Source) {
+        self.text.push_str(&format!("\timul {lhs}, {rhs}\n"));
+    }
+
+    fn div(&mut self, op: &Destination) {
+        self.text.push_str(&format!("\tidiv {op}\n"));
     }
 }

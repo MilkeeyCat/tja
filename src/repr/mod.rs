@@ -42,15 +42,17 @@ impl Operand {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Place {
     Register(RegisterId),
     Global(GlobalId),
 }
 
+#[derive(Debug)]
 pub enum Instruction {
     Binary {
         kind: BinOp,
+        ty: Ty,
         lhs: Operand,
         rhs: Operand,
         place: Place,
@@ -61,22 +63,26 @@ pub enum Instruction {
     },
 }
 
+#[derive(Debug)]
 pub enum Terminator {
     Goto(BlockId),
     Return(Option<Operand>),
 }
 
+#[derive(Debug)]
 pub struct Global {
     pub name: String,
     pub ty: Ty,
     pub value: Const,
 }
 
+#[derive(Debug)]
 pub struct Register {
     pub name: String,
     pub ty: Ty,
 }
 
+#[derive(Debug)]
 pub struct Program {
     pub globals: Vec<Global>,
     pub functions: Vec<Function>,

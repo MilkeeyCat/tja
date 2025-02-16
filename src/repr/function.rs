@@ -1,6 +1,7 @@
 use super::{BasicBlock, Register, RegisterId, Ty};
 use std::collections::HashSet;
 
+#[derive(Debug)]
 pub struct Function {
     pub name: String,
     pub params: Vec<RegisterId>,

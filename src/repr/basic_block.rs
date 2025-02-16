@@ -1,6 +1,7 @@
 use super::{BlockId, Instruction, Place, RegisterId, Terminator};
 use std::collections::HashSet;
 
+#[derive(Debug)]
 pub struct BasicBlock {
     pub name: String,
     pub instructions: Vec<Instruction>,
