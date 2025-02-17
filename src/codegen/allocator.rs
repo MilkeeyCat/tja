@@ -98,6 +98,12 @@ impl Allocator {
         self.locations.insert(vreg, dest);
     }
 
+    pub fn add_edge(&mut self, edge: (RegisterId, RegisterId)) {
+        if !(self.interference.contains(&edge) || self.interference.contains(&(edge.1, edge.0))) {
+            self.interference.insert(edge);
+        }
+    }
+
     pub fn allocate(mut self) -> Vec<Destination> {
         let mut stack: Vec<(RegisterId, HashSet<(RegisterId, RegisterId)>)> = Vec::new();
 

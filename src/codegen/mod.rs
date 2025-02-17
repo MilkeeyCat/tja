@@ -126,6 +126,12 @@ impl CodeGen {
                         place: Place::Register(r),
                         ..
                     } => allocator.precolor(*r, Register::Rax.into()),
+                    Instruction::Binary {
+                        kind: BinOp::Sub,
+                        rhs: Operand::Place(Place::Register(rhs)),
+                        place: Place::Register(lhs),
+                        ..
+                    } => allocator.add_edge((*lhs, *rhs)),
                     Instruction::Binary { .. } | Instruction::Copy { .. } => (),
                 }
             }
@@ -261,7 +267,7 @@ impl CodeGen {
             (Destination::Memory(_), Source::Memory(_)) => {
                 unreachable!("Can't move memory to memory")
             }
-            (dest, src) => {
+            (dest, src) if dest != src => {
                 let dest_size = dest.size();
                 let src_size = src.size().unwrap_or(OperandSize::Qword);
 
@@ -284,6 +290,7 @@ impl CodeGen {
                     self.text.push_str(&format!("\tmov {dest}, {src}\n"));
                 }
             }
+            _ => (),
         }
     }
 
