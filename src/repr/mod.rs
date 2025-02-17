@@ -1,11 +1,10 @@
-mod basic_block;
 mod function;
 pub mod op;
 pub mod ty;
 
-pub use basic_block::BasicBlock;
 pub use function::Function;
 use op::BinOp;
+use std::collections::HashSet;
 use ty::Ty;
 
 pub type RegisterId = usize;
@@ -49,6 +48,13 @@ pub enum Place {
 }
 
 #[derive(Debug)]
+pub struct BasicBlock {
+    pub name: String,
+    pub instructions: Vec<Instruction>,
+    pub terminator: Terminator,
+}
+
+#[derive(Debug)]
 pub enum Instruction {
     Binary {
         kind: BinOp,
@@ -63,10 +69,45 @@ pub enum Instruction {
     },
 }
 
+impl Instruction {
+    pub fn def(&self) -> Option<RegisterId> {
+        match self {
+            Self::Binary {
+                place: Place::Register(r),
+                ..
+            } => Some(*r),
+            Self::Copy {
+                place: Place::Register(r),
+                ..
+            } => Some(*r),
+            _ => None,
+        }
+    }
+
+    pub fn uses(&self) -> HashSet<RegisterId> {
+        match self {
+            Self::Binary { lhs, rhs, .. } => vec![lhs.register_id(), rhs.register_id()],
+            Self::Copy { operand, .. } => vec![operand.register_id()],
+        }
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+}
+
 #[derive(Debug)]
 pub enum Terminator {
     Goto(BlockId),
     Return(Option<Operand>),
+}
+
+impl Terminator {
+    pub fn uses(&self) -> HashSet<RegisterId> {
+        match self {
+            Self::Return(Some(Operand::Place(Place::Register(r)))) => HashSet::from([*r]),
+            Self::Return(_) | Self::Goto(_) => HashSet::new(),
+        }
+    }
 }
 
 #[derive(Debug)]

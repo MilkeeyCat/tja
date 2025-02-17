@@ -3,8 +3,8 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    self, op::BinOp, ty::Ty, BasicBlock, Function, Instruction, Operand, Place, Program,
-    Terminator, ValueTree,
+    self, op::BinOp, BasicBlock, Function, Instruction, Operand, Place, Program, Terminator,
+    ValueTree,
 };
 use allocator::Allocator;
 use operands::{Destination, OperandSize, Source};
