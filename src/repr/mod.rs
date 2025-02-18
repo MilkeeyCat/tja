@@ -32,10 +32,7 @@ pub enum Operand {
 impl Operand {
     pub fn register_id(&self) -> Option<RegisterId> {
         match self {
-            Self::Place(place) => match place {
-                Place::Register(r) => Some(*r),
-                Place::Global(_) => None,
-            },
+            Self::Place(place) => place.register_id(),
             Self::Const(_) => None,
         }
     }
@@ -45,6 +42,15 @@ impl Operand {
 pub enum Place {
     Register(RegisterId),
     Global(GlobalId),
+}
+
+impl Place {
+    pub fn register_id(&self) -> Option<RegisterId> {
+        match self {
+            Self::Register(r) => Some(*r),
+            Self::Global(_) => None,
+        }
+    }
 }
 
 #[derive(Debug)]

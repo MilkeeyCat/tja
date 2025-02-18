@@ -104,6 +104,13 @@ impl Allocator {
         }
     }
 
+    pub fn create_vreg(&mut self) -> RegisterId {
+        let r = self.v_regs.len();
+        self.v_regs.insert(r);
+
+        r
+    }
+
     pub fn allocate(mut self) -> Vec<Destination> {
         let mut stack: Vec<(RegisterId, HashSet<(RegisterId, RegisterId)>)> = Vec::new();
 

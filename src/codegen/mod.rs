@@ -77,23 +77,23 @@ impl CodeGen {
                             ..
                         } => {
                             if matches!(rhs, Operand::Const(..)) {
+                                let r = function.registers.len();
                                 function.registers.push(repr::Register {
-                                    name: function.registers.len().to_string(),
+                                    name: r.to_string(),
                                     ty: ty.clone(),
                                 });
-                                let place = Place::Register(function.registers.len());
+                                let place = Place::Register(r);
                                 let mut operand = Operand::Place(place.clone());
 
                                 std::mem::swap(rhs, &mut operand);
                                 instructions.push((i, Instruction::Copy { place, operand }));
                             }
 
+                            let mut new_r = function.registers.len();
                             function.registers.push(repr::Register {
-                                name: function.registers.len().to_string(),
+                                name: new_r.to_string(),
                                 ty: ty.clone(),
                             });
-
-                            let mut new_r = function.registers.len();
                             std::mem::swap(r, &mut new_r);
                             instructions.push((
                                 i + 1,
@@ -123,9 +123,30 @@ impl CodeGen {
                 match instruction {
                     Instruction::Binary {
                         kind: BinOp::Div,
-                        place: Place::Register(r),
+                        lhs,
+                        rhs,
+                        place,
                         ..
-                    } => allocator.precolor(*r, Register::Rax.into()),
+                    } => {
+                        if let Some(r) = place.register_id() {
+                            allocator.precolor(r, Register::Rax.into());
+                        }
+
+                        let regs: Vec<_> =
+                            vec![lhs.register_id(), rhs.register_id(), place.register_id()]
+                                .into_iter()
+                                .flatten()
+                                .collect();
+
+                        if !regs.is_empty() {
+                            let rdx = allocator.create_vreg();
+                            allocator.precolor(rdx, Register::Rdx.into());
+
+                            for r in regs {
+                                allocator.add_edge((rdx, r));
+                            }
+                        }
+                    }
                     Instruction::Binary {
                         kind: BinOp::Sub,
                         rhs: Operand::Place(Place::Register(rhs)),
@@ -307,6 +328,6 @@ impl CodeGen {
     }
 
     fn div(&mut self, op: &Destination) {
-        self.text.push_str(&format!("\tidiv {op}\n"));
+        self.text.push_str(&format!("\tcqo\n\tidiv {op}\n"));
     }
 }
