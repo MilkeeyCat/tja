@@ -110,6 +110,31 @@ impl EffectiveAddress {
     }
 }
 
+impl From<Destination> for EffectiveAddress {
+    fn from(value: Destination) -> Self {
+        match value {
+            Destination::Memory(mem) => mem.effective_address,
+            Destination::Register(r) => Self {
+                base: Base::Register(r),
+                index: None,
+                scale: None,
+                displacement: None,
+            },
+        }
+    }
+}
+
+impl From<Register> for EffectiveAddress {
+    fn from(value: Register) -> Self {
+        EffectiveAddress {
+            base: Base::Register(value),
+            displacement: None,
+            index: None,
+            scale: None,
+        }
+    }
+}
+
 impl std::fmt::Display for EffectiveAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut str = format!("[{}", self.base);
@@ -137,17 +162,6 @@ impl std::ops::Add<Offset> for EffectiveAddress {
         self.displacement = Some(&self.displacement.unwrap_or_default() + &rhs);
 
         self
-    }
-}
-
-impl From<Register> for EffectiveAddress {
-    fn from(value: Register) -> Self {
-        EffectiveAddress {
-            base: Base::Register(value),
-            displacement: None,
-            index: None,
-            scale: None,
-        }
     }
 }
 
@@ -180,12 +194,15 @@ impl Source {
     }
 }
 
-impl std::fmt::Display for Const {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::I8(num) => num.fmt(f),
-            Self::U8(num) => num.fmt(f),
-        }
+impl From<Register> for Source {
+    fn from(value: Register) -> Self {
+        Self::Register(value)
+    }
+}
+
+impl From<Const> for Source {
+    fn from(value: Const) -> Self {
+        Self::Immediate(value)
     }
 }
 
@@ -199,9 +216,12 @@ impl std::fmt::Display for Source {
     }
 }
 
-impl Into<Source> for Const {
-    fn into(self) -> Source {
-        Source::Immediate(self)
+impl std::fmt::Display for Const {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::I8(num) => num.fmt(f),
+            Self::U8(num) => num.fmt(f),
+        }
     }
 }
 
@@ -220,25 +240,17 @@ impl Destination {
     }
 }
 
-impl Into<Source> for Destination {
-    fn into(self) -> Source {
-        match self {
-            Self::Memory(mem) => Source::Memory(mem),
-            Self::Register(r) => Source::Register(r),
-        }
+impl From<Register> for Destination {
+    fn from(value: Register) -> Self {
+        Self::Register(value)
     }
 }
 
-impl Into<EffectiveAddress> for Destination {
-    fn into(self) -> EffectiveAddress {
-        match self {
-            Self::Memory(mem) => mem.effective_address,
-            Self::Register(r) => EffectiveAddress {
-                base: Base::Register(r),
-                index: None,
-                scale: None,
-                displacement: None,
-            },
+impl From<Destination> for Source {
+    fn from(value: Destination) -> Self {
+        match value {
+            Destination::Memory(mem) => Self::Memory(mem),
+            Destination::Register(r) => Self::Register(r),
         }
     }
 }

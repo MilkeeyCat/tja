@@ -1,5 +1,3 @@
-use super::operands::{Destination, Source};
-
 macro_rules! define_registers {
     ($(($qword: ident, $dword: ident, $word: ident, $byte: ident)),+) => {
         use super::operands::OperandSize;
@@ -135,17 +133,5 @@ impl std::fmt::Display for Register {
                 Self::R8 => "r8",
             }
         )
-    }
-}
-
-impl Into<Destination> for Register {
-    fn into(self) -> Destination {
-        Destination::Register(self)
-    }
-}
-
-impl Into<Source> for Register {
-    fn into(self) -> Source {
-        Source::Register(self)
     }
 }
