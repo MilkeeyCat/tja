@@ -126,7 +126,7 @@ impl CodeGen {
                         lhs,
                         rhs,
                         place,
-                        ..
+                        ty,
                     } => {
                         if let Some(r) = place.register_id() {
                             allocator.precolor(r, Register::Rax.into());
@@ -139,7 +139,7 @@ impl CodeGen {
                                 .collect();
 
                         if !regs.is_empty() {
-                            let rdx = allocator.create_vreg();
+                            let rdx = allocator.create_node(ty.clone());
                             allocator.precolor(rdx, Register::Rdx.into());
 
                             for r in regs {
@@ -225,7 +225,11 @@ impl CodeGen {
 
     fn function(&mut self, function: Function) {
         let mut allocator = Allocator::new(
-            function.registers.len(),
+            function
+                .registers
+                .iter()
+                .map(|reg| reg.ty.clone())
+                .collect(),
             function.interference(),
             vec![
                 Register::R15,

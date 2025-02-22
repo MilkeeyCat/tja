@@ -1,76 +1,76 @@
 use super::{operands::Destination, register::Register};
-use crate::repr::RegisterId;
+use crate::repr::{RegisterId, ty::Ty};
 use std::collections::{HashMap, HashSet};
+
+type Edges = HashSet<(RegisterId, RegisterId)>;
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {
-    v_regs: HashSet<RegisterId>,
-    interference: HashSet<(RegisterId, RegisterId)>,
+    nodes: HashMap<RegisterId, Ty>,
+    edges: Edges,
     registers: Vec<Register>,
     locations: HashMap<RegisterId, Destination>,
 }
 
 impl Allocator {
-    pub fn new(
-        v_regs_len: usize,
-        interference: HashSet<(RegisterId, RegisterId)>,
-        registers: Vec<Register>,
-    ) -> Self {
+    pub fn new(types: Vec<Ty>, edges: Edges, registers: Vec<Register>) -> Self {
         Self {
-            v_regs: (0..v_regs_len).into_iter().collect(),
-            interference,
+            nodes: types
+                .into_iter()
+                .enumerate()
+                .map(|(i, ty)| (i, ty))
+                .collect(),
+            edges,
             registers,
             locations: HashMap::new(),
         }
     }
 
-    fn remove_vreg(&mut self, vreg: &RegisterId) -> HashSet<(RegisterId, RegisterId)> {
+    fn remove_node(&mut self, node: &RegisterId) -> (Ty, HashSet<(RegisterId, RegisterId)>) {
         let edges: HashSet<_> = self
-            .interference
+            .edges
             .iter()
-            .filter(|(lhs, rhs)| lhs == vreg || rhs == vreg)
+            .filter(|(lhs, rhs)| lhs == node || rhs == node)
             .cloned()
             .collect();
 
-        self.v_regs.remove(&vreg);
-        edges
-            .iter()
-            .for_each(|edge| _ = self.interference.remove(edge));
+        let ty = self.nodes.remove(&node).unwrap();
+        edges.iter().for_each(|edge| _ = self.edges.remove(edge));
 
-        edges
+        (ty, edges)
     }
 
-    fn add_vreg(&mut self, vreg: RegisterId, edges: HashSet<(RegisterId, RegisterId)>) {
-        self.v_regs.insert(vreg);
-        self.interference.extend(edges.into_iter());
+    fn add_node(&mut self, node: RegisterId, ty: Ty, edges: HashSet<(RegisterId, RegisterId)>) {
+        self.nodes.insert(node, ty);
+        self.edges.extend(edges.into_iter());
     }
 
-    fn neighbors(&self, vreg: &RegisterId) -> Vec<&RegisterId> {
-        self.interference
+    fn neighbors(&self, node: &RegisterId) -> Vec<&RegisterId> {
+        self.edges
             .iter()
-            .filter(|(lhs, rhs)| lhs == vreg || rhs == vreg)
-            .map(|(lhs, rhs)| if lhs == vreg { rhs } else { lhs })
+            .filter(|(lhs, rhs)| lhs == node || rhs == node)
+            .map(|(lhs, rhs)| if lhs == node { rhs } else { lhs })
             .collect()
     }
 
     fn min(&self) -> Option<RegisterId> {
-        self.v_regs
+        self.nodes
             .iter()
             // ignore precolored nodes
-            .filter(|vreg| !self.locations.contains_key(vreg))
-            .map(|vreg| (*vreg, self.neighbors(vreg).len()))
+            .filter(|(node, _)| !self.locations.contains_key(node))
+            .map(|(node, _)| (*node, self.neighbors(node).len()))
             .min_by(|(_, a), (_, b)| a.cmp(b))
-            .map(|(vreg, _)| vreg)
+            .map(|(node, _)| node)
     }
 
     fn max(&self) -> Option<RegisterId> {
-        self.v_regs
+        self.nodes
             .iter()
             // ignore precolored nodes
-            .filter(|vreg| !self.locations.contains_key(vreg))
-            .map(|vreg| (*vreg, self.neighbors(vreg).len()))
+            .filter(|(node, _)| !self.locations.contains_key(node))
+            .map(|(node, _)| (*node, self.neighbors(node).len()))
             .max_by(|(_, a), (_, b)| a.cmp(b))
-            .map(|(vreg, _)| vreg)
+            .map(|(node, _)| node)
     }
 
     fn unique_register(&self, neighbors: &[&RegisterId]) -> Register {
@@ -94,45 +94,44 @@ impl Allocator {
         unreachable!()
     }
 
-    pub fn precolor(&mut self, vreg: RegisterId, dest: Destination) {
-        self.locations.insert(vreg, dest);
+    pub fn precolor(&mut self, node: RegisterId, dest: Destination) {
+        self.locations.insert(node, dest);
     }
 
     pub fn add_edge(&mut self, edge: (RegisterId, RegisterId)) {
-        if !(self.interference.contains(&edge) || self.interference.contains(&(edge.1, edge.0))) {
-            self.interference.insert(edge);
+        if !(self.edges.contains(&edge) || self.edges.contains(&(edge.1, edge.0))) {
+            self.edges.insert(edge);
         }
     }
 
-    pub fn create_vreg(&mut self) -> RegisterId {
-        let r = self.v_regs.len();
-        self.v_regs.insert(r);
+    pub fn create_node(&mut self, ty: Ty) -> RegisterId {
+        let r = self.nodes.len();
+        self.nodes.insert(r, ty);
 
         r
     }
 
     pub fn allocate(mut self) -> Vec<Destination> {
-        let mut stack: Vec<(RegisterId, HashSet<(RegisterId, RegisterId)>)> = Vec::new();
+        let mut stack: Vec<(RegisterId, Ty, Edges)> = Vec::new();
 
         while self.min().is_some() {
-            let vreg = if self.min().unwrap() < self.registers.len() {
+            let node = if self.min().unwrap() < self.registers.len() {
                 self.min()
             } else {
                 self.max()
             }
             .unwrap();
-            let edges = self.remove_vreg(&vreg);
+            let (ty, edges) = self.remove_node(&node);
 
-            stack.push((vreg, edges));
+            stack.push((node, ty, edges));
         }
 
-        for (vreg, edges) in stack.into_iter().rev() {
+        for (node, ty, edges) in stack.into_iter().rev() {
             if edges.len() < self.registers.len() {
-                self.add_vreg(vreg, edges);
-                // Skip if the vreg was precolored
+                self.add_node(node, ty, edges);
                 self.locations.insert(
-                    vreg,
-                    Destination::Register(self.unique_register(&self.neighbors(&vreg))),
+                    node,
+                    Destination::Register(self.unique_register(&self.neighbors(&node))),
                 );
             } else {
                 // spill but still can check for registers
