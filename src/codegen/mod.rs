@@ -6,30 +6,23 @@ use crate::repr::{
     self, BasicBlock, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
     op::BinOp,
 };
-use allocator::Allocator;
+use allocator::{Allocator, Location};
 use operands::{Destination, OperandSize, Source};
 use register::Register;
 
 impl Place {
-    fn to_source(&self, codegen: &CodeGen) -> Source {
+    fn location<'c>(&self, codegen: &'c CodeGen) -> &'c Location {
         match self {
-            Place::Register(r) => codegen.locations[*r].clone().into(),
-            Place::Global(_) => unimplemented!(),
-        }
-    }
-
-    fn to_dest(&self, codegen: &CodeGen) -> Destination {
-        match self {
-            Place::Register(r) => codegen.locations[*r].clone().into(),
+            Place::Register(r) => &codegen.locations[*r],
             Place::Global(_) => unimplemented!(),
         }
     }
 }
 
 impl Operand {
-    fn to_source(&self, codegen: &CodeGen) -> Source {
+    fn to_source(&self, codegen: &CodeGen, size: OperandSize) -> Source {
         match self {
-            Self::Place(place) => place.to_source(codegen),
+            Self::Place(place) => place.location(codegen).to_source(size),
             Self::Const(val) => match val {
                 ValueTree::Leaf(leaf) => leaf.clone().into(),
                 ValueTree::Branch(_) => unimplemented!(),
@@ -37,16 +30,16 @@ impl Operand {
         }
     }
 
-    fn to_dest(&self, codegen: &CodeGen) -> Destination {
+    fn to_dest(&self, codegen: &CodeGen, size: OperandSize) -> Destination {
         match self {
-            Self::Place(place) => place.to_dest(codegen),
+            Self::Place(place) => place.location(codegen).to_dest(size),
             Self::Const(_) => unreachable!(),
         }
     }
 }
 
 pub struct CodeGen {
-    locations: Vec<Destination>,
+    locations: Vec<Location>,
     bss: String,
     data: String,
     text: String,
@@ -86,7 +79,14 @@ impl CodeGen {
                                 let mut operand = Operand::Place(place.clone());
 
                                 std::mem::swap(rhs, &mut operand);
-                                instructions.push((i, Instruction::Copy { place, operand }));
+                                instructions.push((
+                                    i,
+                                    Instruction::Copy {
+                                        ty: ty.clone(),
+                                        place,
+                                        operand,
+                                    },
+                                ));
                             }
 
                             let mut new_r = function.registers.len();
@@ -98,6 +98,7 @@ impl CodeGen {
                             instructions.push((
                                 i + 1,
                                 Instruction::Copy {
+                                    ty: ty.clone(),
                                     place: Place::Register(new_r),
                                     operand: Operand::Place(Place::Register(*r)),
                                 },
@@ -175,19 +176,34 @@ impl CodeGen {
                 lhs,
                 rhs,
                 place,
-                ..
+                ty,
             } => {
-                self.mov(&lhs.to_source(self), &place.to_dest(self), false);
+                let ty_size: OperandSize = ty.size().try_into().unwrap();
+
+                self.mov(
+                    &lhs.to_source(self, ty_size),
+                    &place.location(self).to_dest(ty_size),
+                    false,
+                );
 
                 match kind {
                     BinOp::Add => {
-                        self.add(&place.to_dest(self), &rhs.to_source(self));
+                        self.add(
+                            &place.location(self).to_dest(ty_size),
+                            &rhs.to_source(self, ty_size),
+                        );
                     }
                     BinOp::Sub => {
-                        self.sub(&place.to_dest(self), &rhs.to_source(self));
+                        self.sub(
+                            &place.location(self).to_dest(ty_size),
+                            &rhs.to_source(self, ty_size),
+                        );
                     }
                     BinOp::Mul => {
-                        self.mul(&place.to_dest(self), &rhs.to_source(self));
+                        self.mul(
+                            &place.location(self).to_dest(ty_size),
+                            &rhs.to_source(self, ty_size),
+                        );
                     }
                     BinOp::Div => {
                         assert!(
@@ -195,17 +211,19 @@ impl CodeGen {
                             "rhs of div can't be a const"
                         );
 
-                        self.div(&rhs.to_dest(self));
+                        self.div(&rhs.to_dest(self, ty_size));
                     }
                 };
             }
-            Instruction::Copy { place, operand } => {
+            Instruction::Copy { ty, place, operand } => {
+                let ty_size = ty.size().try_into().unwrap();
+
                 match place {
                     Place::Register(r) => {
                         self.mov(
-                            &operand.to_source(self),
-                            &self.locations[*r].clone().into(),
-                            false,
+                            &operand.to_source(self, ty_size),
+                            &self.locations[*r].to_dest(ty_size),
+                            ty.signed(),
                         );
                     }
                     Place::Global(_) => todo!(),

@@ -1,15 +1,58 @@
-use super::{operands::Destination, register::Register};
+use super::{
+    operands::{Destination, EffectiveAddress, Memory, OperandSize, Source},
+    register::Register,
+};
 use crate::repr::{RegisterId, ty::Ty};
 use std::collections::{HashMap, HashSet};
 
 type Edges = HashSet<(RegisterId, RegisterId)>;
+
+#[derive(Clone)]
+pub enum Location {
+    Register(Register),
+    Address(EffectiveAddress),
+}
+
+impl Location {
+    pub fn to_source(&self, size: OperandSize) -> Source {
+        match self {
+            Self::Register(r) => r.resize(size).into(),
+            Self::Address(addr) => Source::Memory(Memory {
+                effective_address: addr.clone(),
+                size,
+            }),
+        }
+    }
+
+    pub fn to_dest(&self, size: OperandSize) -> Destination {
+        match self {
+            Self::Register(r) => r.resize(size).into(),
+            Self::Address(addr) => Destination::Memory(Memory {
+                effective_address: addr.clone(),
+                size,
+            }),
+        }
+    }
+}
+
+impl From<Register> for Location {
+    fn from(value: Register) -> Self {
+        Self::Register(value)
+    }
+}
+
+impl From<EffectiveAddress> for Location {
+    fn from(value: EffectiveAddress) -> Self {
+        Self::Address(value)
+    }
+}
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {
     nodes: HashMap<RegisterId, Ty>,
     edges: Edges,
     registers: Vec<Register>,
-    locations: HashMap<RegisterId, Destination>,
+    locations: HashMap<RegisterId, Location>,
 }
 
 impl Allocator {
@@ -78,7 +121,7 @@ impl Allocator {
         for reg in &self.registers {
             let mut found = true;
             for neighbor in neighbors {
-                if let Destination::Register(r) = &self.locations[neighbor] {
+                if let Location::Register(r) = &self.locations[neighbor] {
                     if reg == r {
                         found = false;
 
@@ -94,8 +137,8 @@ impl Allocator {
         unreachable!()
     }
 
-    pub fn precolor(&mut self, node: RegisterId, dest: Destination) {
-        self.locations.insert(node, dest);
+    pub fn precolor(&mut self, node: RegisterId, location: Location) {
+        self.locations.insert(node, location);
     }
 
     pub fn add_edge(&mut self, edge: (RegisterId, RegisterId)) {
@@ -111,7 +154,7 @@ impl Allocator {
         r
     }
 
-    pub fn allocate(mut self) -> Vec<Destination> {
+    pub fn allocate(mut self) -> Vec<Location> {
         let mut stack: Vec<(RegisterId, Ty, Edges)> = Vec::new();
 
         while self.min().is_some() {
@@ -131,7 +174,7 @@ impl Allocator {
                 self.add_node(node, ty, edges);
                 self.locations.insert(
                     node,
-                    Destination::Register(self.unique_register(&self.neighbors(&node))),
+                    Location::Register(self.unique_register(&self.neighbors(&node))),
                 );
             } else {
                 // spill but still can check for registers

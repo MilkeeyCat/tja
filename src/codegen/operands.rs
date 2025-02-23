@@ -3,10 +3,27 @@ use crate::repr::Const;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum OperandSize {
-    Byte,
-    Word,
-    Dword,
-    Qword,
+    Byte = 1,
+    Word = 2,
+    Dword = 4,
+    Qword = 8,
+}
+
+#[derive(Debug)]
+pub struct InvalidOperandSize;
+
+impl TryFrom<usize> for OperandSize {
+    type Error = InvalidOperandSize;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        Ok(match value {
+            1 => Self::Byte,
+            2 => Self::Word,
+            4 => Self::Dword,
+            8 => Self::Qword,
+            _ => return Err(InvalidOperandSize),
+        })
+    }
 }
 
 impl std::fmt::Display for OperandSize {

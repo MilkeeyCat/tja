@@ -70,6 +70,7 @@ pub enum Instruction {
         place: Place,
     },
     Copy {
+        ty: Ty,
         place: Place,
         operand: Operand,
     },
