@@ -1,5 +1,5 @@
 use super::{
-    operands::{Destination, EffectiveAddress, Memory, OperandSize, Source},
+    operands::{Base, Destination, EffectiveAddress, Memory, Offset, OperandSize, Source},
     register::Register,
 };
 use crate::repr::{RegisterId, ty::Ty};
@@ -53,10 +53,12 @@ pub struct Allocator {
     edges: Edges,
     registers: Vec<Register>,
     locations: HashMap<RegisterId, Location>,
+    stack_frame_size: usize,
+    spill_mode: bool,
 }
 
 impl Allocator {
-    pub fn new(types: Vec<Ty>, edges: Edges, registers: Vec<Register>) -> Self {
+    pub fn new(types: Vec<Ty>, edges: Edges, registers: Vec<Register>, spill_mode: bool) -> Self {
         Self {
             nodes: types
                 .into_iter()
@@ -66,6 +68,8 @@ impl Allocator {
             edges,
             registers,
             locations: HashMap::new(),
+            stack_frame_size: 0,
+            spill_mode,
         }
     }
 
@@ -116,8 +120,7 @@ impl Allocator {
             .map(|(node, _)| node)
     }
 
-    fn unique_register(&self, neighbors: &[&RegisterId]) -> Register {
-        assert!(neighbors.len() < self.registers.len());
+    fn unique_register(&self, neighbors: &[&RegisterId]) -> Option<Register> {
         for reg in &self.registers {
             let mut found = true;
             for neighbor in neighbors {
@@ -131,10 +134,11 @@ impl Allocator {
             }
 
             if found {
-                return *reg;
+                return Some(*reg);
             }
         }
-        unreachable!()
+
+        None
     }
 
     pub fn precolor(&mut self, node: RegisterId, location: Location) {
@@ -148,14 +152,17 @@ impl Allocator {
     }
 
     pub fn create_node(&mut self, ty: Ty) -> RegisterId {
-        let r = self.nodes.len();
-        self.nodes.insert(r, ty);
+        let node = self.nodes.len();
+        self.nodes.insert(node, ty);
 
-        r
+        node
     }
 
-    pub fn allocate(mut self) -> Vec<Location> {
+    pub fn allocate(mut self) -> (Vec<Location>, usize) {
+        let locations = self.locations.clone();
+        let edges = self.edges.clone();
         let mut stack: Vec<(RegisterId, Ty, Edges)> = Vec::new();
+        let mut redo = false;
 
         while self.min().is_some() {
             let node = if self.min().unwrap() < self.registers.len() {
@@ -170,20 +177,44 @@ impl Allocator {
         }
 
         for (node, ty, edges) in stack.into_iter().rev() {
-            if edges.len() < self.registers.len() {
-                self.add_node(node, ty, edges);
-                self.locations.insert(
-                    node,
-                    Location::Register(self.unique_register(&self.neighbors(&node))),
-                );
+            let ty_size = ty.size();
+            self.add_node(node, ty, edges);
+
+            if let Some(r) = self.unique_register(&self.neighbors(&node)) {
+                self.locations.insert(node, r.into());
             } else {
-                // spill but still can check for registers
-                panic!("Spilling is not implemented yet!");
+                if self.spill_mode {
+                    self.stack_frame_size += ty_size;
+                    self.locations.insert(
+                        node,
+                        Location::Address(EffectiveAddress {
+                            base: Base::Register(Register::Rbp),
+                            index: None,
+                            scale: None,
+                            displacement: Some(Offset(-(self.stack_frame_size as isize))),
+                        }),
+                    );
+                } else {
+                    self.spill_mode = true;
+                    redo = true;
+                    break;
+                }
             }
         }
 
-        let mut operands: Vec<_> = self.locations.into_iter().collect();
-        operands.sort_by(|(a, _), (b, _)| a.cmp(&b));
-        operands.into_iter().map(|(_, operand)| operand).collect()
+        if redo {
+            self.locations = locations;
+            self.edges = edges;
+
+            self.allocate()
+        } else {
+            let mut operands: Vec<_> = self.locations.into_iter().collect();
+            operands.sort_by(|(a, _), (b, _)| a.cmp(&b));
+
+            (
+                operands.into_iter().map(|(_, operand)| operand).collect(),
+                self.stack_frame_size,
+            )
+        }
     }
 }

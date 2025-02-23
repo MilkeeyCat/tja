@@ -40,7 +40,7 @@ define_registers! {
     (Rdx, Edx, Dx, Dl),
     (Rsi, Esi, Si, Sil),
     (Rdi, Edi, Di, Dil),
-    (Spl, Sp, Esp, Rsp),
+    (Rsp, Esp, Sp, Spl),
     (R15, R15d, R15w, R15b),
     (R14, R14d, R14w, R14b),
     (R13, R13d, R13w, R13b),

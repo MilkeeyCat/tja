@@ -3,7 +3,7 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    self, BasicBlock, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
+    self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
     op::BinOp,
 };
 use allocator::{Allocator, Location};
@@ -232,12 +232,17 @@ impl CodeGen {
         }
     }
 
-    fn terminator(&mut self, basic_blocks: &[BasicBlock], terminator: &Terminator) {
+    fn terminator(
+        &mut self,
+        basic_blocks: &[BasicBlock],
+        terminator: &Terminator,
+        ret_label: &str,
+    ) {
         match terminator {
             Terminator::Goto(block_id) => self
                 .text
                 .push_str(&format!("\tjmp .L{}\n", basic_blocks[*block_id].name)),
-            Terminator::Return(_) => self.text.push_str("\tret\n"),
+            Terminator::Return(_) => self.text.push_str(&format!("\tjmp {ret_label}\n")),
         }
     }
 
@@ -263,12 +268,24 @@ impl CodeGen {
                 Register::Rsi,
                 Register::Rdi,
             ],
+            false,
         );
         Self::precolor(&mut allocator, &function);
 
-        self.locations = allocator.allocate();
+        let ret_label = format!(".L{}_ret", &function.name);
+        let (locations, stack_frame_size) = allocator.allocate();
+        self.locations = locations;
         self.text
             .push_str(&format!(".global {0}\n{0}:\n", &function.name));
+
+        if stack_frame_size > 0 {
+            self.mov(&Register::Rsp.into(), &Register::Rbp.into(), false);
+            self.sub(
+                &Register::Rsp.into(),
+                //TODO: refactor dis
+                &Source::Immediate(Const::U8(stack_frame_size as u8)),
+            );
+        }
 
         for block in &function.blocks {
             self.text.push_str(&format!(".L{}:\n", &block.name));
@@ -276,8 +293,14 @@ impl CodeGen {
                 self.instruction(instruction);
             }
 
-            self.terminator(&function.blocks, &block.terminator);
+            self.terminator(&function.blocks, &block.terminator, &ret_label);
         }
+
+        self.text.push_str(&format!("{ret_label}:\n"));
+        if stack_frame_size > 0 {
+            self.text.push_str("\tleave\n");
+        }
+        self.text.push_str("\tret\n");
     }
 
     pub fn compile(mut self, mut program: Program) -> Vec<u8> {
