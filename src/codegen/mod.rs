@@ -179,11 +179,16 @@ impl CodeGen {
                 ty,
             } => {
                 let ty_size: OperandSize = ty.size().try_into().unwrap();
+                let dest_size = if kind == &BinOp::Div {
+                    OperandSize::Qword
+                } else {
+                    ty_size
+                };
 
                 self.mov(
                     &lhs.to_source(self, ty_size),
-                    &place.location(self).to_dest(ty_size),
-                    false,
+                    &place.location(self).to_dest(dest_size),
+                    ty.signed(),
                 );
 
                 match kind {
