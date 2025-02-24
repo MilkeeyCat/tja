@@ -74,6 +74,10 @@ pub enum Instruction {
         place: Place,
         operand: Operand,
     },
+    Alloca {
+        ty: Ty,
+        place: Place,
+    },
 }
 
 impl Instruction {
@@ -87,6 +91,10 @@ impl Instruction {
                 place: Place::Register(r),
                 ..
             } => Some(*r),
+            Self::Alloca {
+                place: Place::Register(r),
+                ..
+            } => Some(*r),
             _ => None,
         }
     }
@@ -95,6 +103,7 @@ impl Instruction {
         match self {
             Self::Binary { lhs, rhs, .. } => vec![lhs.register_id(), rhs.register_id()],
             Self::Copy { operand, .. } => vec![operand.register_id()],
+            Self::Alloca { .. } => Vec::new(),
         }
         .into_iter()
         .flatten()

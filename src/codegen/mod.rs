@@ -7,7 +7,7 @@ use crate::repr::{
     op::BinOp,
 };
 use allocator::{Allocator, Location};
-use operands::{Destination, OperandSize, Source};
+use operands::{Base, Destination, EffectiveAddress, Offset, OperandSize, Source};
 use register::Register;
 
 impl Place {
@@ -104,7 +104,9 @@ impl CodeGen {
                                 },
                             ));
                         }
-                        Instruction::Binary { .. } | Instruction::Copy { .. } => (),
+                        Instruction::Binary { .. }
+                        | Instruction::Copy { .. }
+                        | Instruction::Alloca { .. } => (),
                     }
                 }
 
@@ -154,7 +156,24 @@ impl CodeGen {
                         place: Place::Register(lhs),
                         ..
                     } => allocator.add_edge((*lhs, *rhs)),
-                    Instruction::Binary { .. } | Instruction::Copy { .. } => (),
+                    Instruction::Alloca {
+                        ty,
+                        place: Place::Register(lhs),
+                    } => {
+                        allocator.stack_frame_size += ty.size();
+                        allocator.precolor(
+                            *lhs,
+                            Location::Address(EffectiveAddress {
+                                base: Base::Register(Register::Rbp),
+                                index: None,
+                                scale: None,
+                                displacement: Some(Offset(-(allocator.stack_frame_size as isize))),
+                            }),
+                        );
+                    }
+                    Instruction::Binary { .. }
+                    | Instruction::Copy { .. }
+                    | Instruction::Alloca { .. } => (),
                 }
             }
 
@@ -234,6 +253,7 @@ impl CodeGen {
                     Place::Global(_) => todo!(),
                 };
             }
+            Instruction::Alloca { .. } => (),
         }
     }
 
@@ -284,6 +304,7 @@ impl CodeGen {
             .push_str(&format!(".global {0}\n{0}:\n", &function.name));
 
         if stack_frame_size > 0 {
+            self.push(&Register::Rbp.into());
             self.mov(&Register::Rsp.into(), &Register::Rbp.into(), false);
             self.sub(
                 &Register::Rsp.into(),
@@ -363,6 +384,10 @@ impl CodeGen {
             }
             _ => (),
         }
+    }
+
+    fn push(&mut self, dest: &Destination) {
+        self.text.push_str(&format!("\tpush {dest}\n"));
     }
 
     fn add(&mut self, lhs: &Destination, rhs: &Source) {

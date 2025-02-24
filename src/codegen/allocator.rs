@@ -53,7 +53,7 @@ pub struct Allocator {
     edges: Edges,
     registers: Vec<Register>,
     locations: HashMap<RegisterId, Location>,
-    stack_frame_size: usize,
+    pub stack_frame_size: usize,
     spill_mode: bool,
 }
 

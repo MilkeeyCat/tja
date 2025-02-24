@@ -25,15 +25,13 @@ impl Function {
         for (i, block) in self.blocks.iter().enumerate() {
             for instruction in &block.instructions {
                 match instruction {
-                    Instruction::Binary { .. } | Instruction::Copy { .. } => {
-                        blocks.push(DefUseBlock {
-                            defs: HashSet::from(
-                                instruction.def().map(|def| [def]).unwrap_or_default(),
-                            ),
-                            uses: instruction.uses(),
-                            next: HashSet::from([blocks.len() + 1]),
-                        })
-                    }
+                    Instruction::Binary { .. }
+                    | Instruction::Copy { .. }
+                    | Instruction::Alloca { .. } => blocks.push(DefUseBlock {
+                        defs: HashSet::from(instruction.def().map(|def| [def]).unwrap_or_default()),
+                        uses: instruction.uses(),
+                        next: HashSet::from([blocks.len() + 1]),
+                    }),
                 };
             }
 
