@@ -38,7 +38,7 @@ impl Operand {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Place {
     Register(RegisterId),
     Global(GlobalId),
@@ -64,13 +64,11 @@ pub struct BasicBlock {
 pub enum Instruction {
     Binary {
         kind: BinOp,
-        ty: Ty,
         lhs: Operand,
         rhs: Operand,
         place: Place,
     },
     Copy {
-        ty: Ty,
         place: Place,
         operand: Operand,
     },

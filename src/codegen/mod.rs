@@ -4,25 +4,17 @@ mod register;
 
 use crate::repr::{
     self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
-    op::BinOp,
+    op::BinOp, ty::Ty,
 };
 use allocator::{Allocator, Location};
 use operands::{Base, Destination, EffectiveAddress, Offset, OperandSize, Source};
 use register::Register;
-
-impl Place {
-    fn location<'c>(&self, codegen: &'c CodeGen) -> &'c Location {
-        match self {
-            Place::Register(r) => &codegen.locations[*r],
-            Place::Global(_) => unimplemented!(),
-        }
-    }
-}
+use std::collections::HashMap;
 
 impl Operand {
     fn to_source(&self, codegen: &CodeGen, size: OperandSize) -> Source {
         match self {
-            Self::Place(place) => place.location(codegen).to_source(size),
+            Self::Place(place) => codegen.variables[place].location.to_source(size),
             Self::Const(val) => match val {
                 ValueTree::Leaf(leaf) => leaf.clone().into(),
                 ValueTree::Branch(_) => unimplemented!(),
@@ -32,14 +24,19 @@ impl Operand {
 
     fn to_dest(&self, codegen: &CodeGen, size: OperandSize) -> Destination {
         match self {
-            Self::Place(place) => place.location(codegen).to_dest(size),
+            Self::Place(place) => codegen.variables[place].location.to_dest(size),
             Self::Const(_) => unreachable!(),
         }
     }
 }
 
+struct Variable {
+    ty: Ty,
+    location: Location,
+}
+
 pub struct CodeGen {
-    locations: Vec<Location>,
+    variables: HashMap<Place, Variable>,
     bss: String,
     data: String,
     text: String,
@@ -48,7 +45,7 @@ pub struct CodeGen {
 impl CodeGen {
     pub fn new() -> Self {
         Self {
-            locations: Vec::new(),
+            variables: HashMap::new(),
             bss: String::new(),
             data: String::new(),
             text: String::new(),
@@ -66,39 +63,30 @@ impl CodeGen {
                             kind: BinOp::Div,
                             rhs,
                             place: Place::Register(r),
-                            ty,
                             ..
                         } => {
                             if matches!(rhs, Operand::Const(..)) {
-                                let r = function.registers.len();
+                                let new_r = function.registers.len();
                                 function.registers.push(repr::Register {
-                                    name: r.to_string(),
-                                    ty: ty.clone(),
+                                    name: new_r.to_string(),
+                                    ty: function.registers[*r].ty.clone(),
                                 });
-                                let place = Place::Register(r);
+                                let place = Place::Register(new_r);
                                 let mut operand = Operand::Place(place.clone());
 
                                 std::mem::swap(rhs, &mut operand);
-                                instructions.push((
-                                    i,
-                                    Instruction::Copy {
-                                        ty: ty.clone(),
-                                        place,
-                                        operand,
-                                    },
-                                ));
+                                instructions.push((i, Instruction::Copy { place, operand }));
                             }
 
                             let mut new_r = function.registers.len();
                             function.registers.push(repr::Register {
                                 name: new_r.to_string(),
-                                ty: ty.clone(),
+                                ty: function.registers[*r].ty.clone(),
                             });
                             std::mem::swap(r, &mut new_r);
                             instructions.push((
                                 i + 1,
                                 Instruction::Copy {
-                                    ty: ty.clone(),
                                     place: Place::Register(new_r),
                                     operand: Operand::Place(Place::Register(*r)),
                                 },
@@ -120,7 +108,7 @@ impl CodeGen {
         }
     }
 
-    fn precolor(allocator: &mut Allocator, function: &Function) {
+    fn precolor(&self, allocator: &mut Allocator, function: &Function) {
         for block in &function.blocks {
             for instruction in &block.instructions {
                 match instruction {
@@ -129,7 +117,6 @@ impl CodeGen {
                         lhs,
                         rhs,
                         place,
-                        ty,
                     } => {
                         if let Some(r) = place.register_id() {
                             allocator.precolor(r, Register::Rax.into());
@@ -140,6 +127,11 @@ impl CodeGen {
                                 .into_iter()
                                 .flatten()
                                 .collect();
+
+                        let ty = match place {
+                            Place::Register(r) => &function.registers[*r].ty,
+                            place @ Place::Global(_) => &self.variables[place].ty,
+                        };
 
                         if !regs.is_empty() {
                             let rdx = allocator.create_node(ty.clone());
@@ -195,8 +187,8 @@ impl CodeGen {
                 lhs,
                 rhs,
                 place,
-                ty,
             } => {
+                let ty = &self.variables[place].ty;
                 let ty_size: OperandSize = ty.size().try_into().unwrap();
                 let dest_size = if kind == &BinOp::Div {
                     OperandSize::Qword
@@ -206,26 +198,26 @@ impl CodeGen {
 
                 self.mov(
                     &lhs.to_source(self, ty_size),
-                    &place.location(self).to_dest(dest_size),
+                    &self.variables[place].location.to_dest(dest_size),
                     ty.signed(),
                 );
 
                 match kind {
                     BinOp::Add => {
                         self.add(
-                            &place.location(self).to_dest(ty_size),
+                            &self.variables[place].location.to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
                     BinOp::Sub => {
                         self.sub(
-                            &place.location(self).to_dest(ty_size),
+                            &self.variables[place].location.to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
                     BinOp::Mul => {
                         self.mul(
-                            &place.location(self).to_dest(ty_size),
+                            &self.variables[place].location.to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
@@ -239,19 +231,15 @@ impl CodeGen {
                     }
                 };
             }
-            Instruction::Copy { ty, place, operand } => {
+            Instruction::Copy { place, operand } => {
+                let ty = &self.variables[place].ty;
                 let ty_size = ty.size().try_into().unwrap();
 
-                match place {
-                    Place::Register(r) => {
-                        self.mov(
-                            &operand.to_source(self, ty_size),
-                            &self.locations[*r].to_dest(ty_size),
-                            ty.signed(),
-                        );
-                    }
-                    Place::Global(_) => todo!(),
-                };
+                self.mov(
+                    &operand.to_source(self, ty_size),
+                    &self.variables[place].location.to_dest(ty_size),
+                    ty.signed(),
+                );
             }
             Instruction::Alloca { .. } => (),
         }
@@ -295,11 +283,25 @@ impl CodeGen {
             ],
             false,
         );
-        Self::precolor(&mut allocator, &function);
+        self.precolor(&mut allocator, &function);
 
         let ret_label = format!(".L{}_ret", &function.name);
         let (locations, stack_frame_size) = allocator.allocate();
-        self.locations = locations;
+        self.variables.extend(
+            locations
+                .into_iter()
+                .zip(function.registers)
+                .enumerate()
+                .map(|(i, (location, vreg))| {
+                    (
+                        Place::Register(i),
+                        Variable {
+                            ty: vreg.ty,
+                            location,
+                        },
+                    )
+                }),
+        );
         self.text
             .push_str(&format!(".global {0}\n{0}:\n", &function.name));
 
@@ -327,6 +329,8 @@ impl CodeGen {
             self.text.push_str("\tleave\n");
         }
         self.text.push_str("\tret\n");
+        self.variables
+            .retain(|_, variable| matches!(variable.location, Location::Address(..)));
     }
 
     pub fn compile(mut self, mut program: Program) -> Vec<u8> {
