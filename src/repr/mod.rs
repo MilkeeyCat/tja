@@ -66,34 +66,24 @@ pub enum Instruction {
         kind: BinOp,
         lhs: Operand,
         rhs: Operand,
-        place: Place,
+        out: RegisterId,
     },
     Copy {
-        place: Place,
         operand: Operand,
+        out: RegisterId,
     },
     Alloca {
         ty: Ty,
-        place: Place,
+        out: RegisterId,
     },
 }
 
 impl Instruction {
     pub fn def(&self) -> Option<RegisterId> {
         match self {
-            Self::Binary {
-                place: Place::Register(r),
-                ..
-            } => Some(*r),
-            Self::Copy {
-                place: Place::Register(r),
-                ..
-            } => Some(*r),
-            Self::Alloca {
-                place: Place::Register(r),
-                ..
-            } => Some(*r),
-            _ => None,
+            Self::Binary { out, .. } => Some(*out),
+            Self::Copy { out, .. } => Some(*out),
+            Self::Alloca { out, .. } => Some(*out),
         }
     }
 
