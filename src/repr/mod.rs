@@ -17,6 +17,15 @@ pub enum Const {
     U8(u8),
 }
 
+impl Const {
+    pub fn ty(&self) -> Ty {
+        match self {
+            Self::I8(_) => Ty::I8,
+            Self::U8(_) => Ty::U8,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ValueTree {
     Leaf(Const),
@@ -76,6 +85,10 @@ pub enum Instruction {
         ty: Ty,
         out: RegisterId,
     },
+    Store {
+        place: Place,
+        value: Operand,
+    },
 }
 
 impl Instruction {
@@ -84,6 +97,7 @@ impl Instruction {
             Self::Binary { out, .. } => Some(*out),
             Self::Copy { out, .. } => Some(*out),
             Self::Alloca { out, .. } => Some(*out),
+            Self::Store { .. } => None,
         }
     }
 
@@ -92,6 +106,7 @@ impl Instruction {
             Self::Binary { lhs, rhs, .. } => vec![lhs.register_id(), rhs.register_id()],
             Self::Copy { operand, .. } => vec![operand.register_id()],
             Self::Alloca { .. } => Vec::new(),
+            Self::Store { place, value } => vec![place.register_id(), value.register_id()],
         }
         .into_iter()
         .flatten()

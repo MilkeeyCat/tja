@@ -93,7 +93,8 @@ impl CodeGen {
                         }
                         Instruction::Binary { .. }
                         | Instruction::Copy { .. }
-                        | Instruction::Alloca { .. } => (),
+                        | Instruction::Alloca { .. }
+                        | Instruction::Store { .. } => (),
                     }
                 }
 
@@ -152,7 +153,9 @@ impl CodeGen {
                             }),
                         );
                     }
-                    Instruction::Binary { .. } | Instruction::Copy { .. } => (),
+                    Instruction::Binary { .. }
+                    | Instruction::Copy { .. }
+                    | Instruction::Store { .. } => (),
                 }
             }
 
@@ -231,6 +234,22 @@ impl CodeGen {
                 );
             }
             Instruction::Alloca { .. } => (),
+            Instruction::Store { place, value } => {
+                let ty = match value {
+                    Operand::Place(place) => &self.variables[place].ty,
+                    Operand::Const(ValueTree::Leaf(c)) => &c.ty(),
+                    Operand::Const(ValueTree::Branch(_)) => {
+                        unimplemented!("Can't do anything about `ValueTree::Branch`")
+                    }
+                };
+                let ty_size = ty.size().try_into().unwrap();
+
+                self.mov(
+                    &value.to_source(self, ty_size),
+                    &self.variables[place].location.to_dest(ty_size),
+                    ty.signed(),
+                )
+            }
         }
     }
 
