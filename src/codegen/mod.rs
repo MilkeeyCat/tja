@@ -94,7 +94,8 @@ impl CodeGen {
                         Instruction::Binary { .. }
                         | Instruction::Copy { .. }
                         | Instruction::Alloca { .. }
-                        | Instruction::Store { .. } => (),
+                        | Instruction::Store { .. }
+                        | Instruction::Load { .. } => (),
                     }
                 }
 
@@ -155,7 +156,8 @@ impl CodeGen {
                     }
                     Instruction::Binary { .. }
                     | Instruction::Copy { .. }
-                    | Instruction::Store { .. } => (),
+                    | Instruction::Store { .. }
+                    | Instruction::Load { .. } => (),
                 }
             }
 
@@ -247,6 +249,17 @@ impl CodeGen {
                 self.mov(
                     &value.to_source(self, ty_size),
                     &self.variables[place].location.to_dest(ty_size),
+                    ty.signed(),
+                )
+            }
+            Instruction::Load { place, out } => {
+                let out = Place::Register(*out);
+                let ty = &self.variables[&out].ty;
+                let ty_size = ty.size().try_into().unwrap();
+
+                self.mov(
+                    &self.variables[place].location.to_source(ty_size),
+                    &self.variables[&out].location.to_dest(ty_size),
                     ty.signed(),
                 )
             }

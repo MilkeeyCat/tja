@@ -89,6 +89,10 @@ pub enum Instruction {
         place: Place,
         value: Operand,
     },
+    Load {
+        place: Place,
+        out: RegisterId,
+    },
 }
 
 impl Instruction {
@@ -98,6 +102,7 @@ impl Instruction {
             Self::Copy { out, .. } => Some(*out),
             Self::Alloca { out, .. } => Some(*out),
             Self::Store { .. } => None,
+            Self::Load { out, .. } => Some(*out),
         }
     }
 
@@ -107,6 +112,7 @@ impl Instruction {
             Self::Copy { operand, .. } => vec![operand.register_id()],
             Self::Alloca { .. } => Vec::new(),
             Self::Store { place, value } => vec![place.register_id(), value.register_id()],
+            Self::Load { place, .. } => vec![place.register_id()],
         }
         .into_iter()
         .flatten()
