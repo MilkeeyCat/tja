@@ -229,11 +229,32 @@ impl CodeGen {
                 let ty = &self.variables[&place].ty;
                 let ty_size = ty.size().try_into().unwrap();
 
-                self.mov(
-                    &operand.to_source(self, ty_size),
-                    &self.variables[&place].location.to_dest(ty_size),
-                    ty.signed(),
-                );
+                if ty == &Ty::Ptr {
+                    match operand {
+                        Operand::Const(_) => unreachable!(),
+                        Operand::Place(place) => match &self.variables[&place].location {
+                            Location::Register(r) => {
+                                self.mov(
+                                    &(*r).into(),
+                                    &self.variables[&place].location.to_dest(ty_size),
+                                    false,
+                                );
+                            }
+                            Location::Address(addr) => {
+                                self.lea(
+                                    &self.variables[&place].location.to_dest(ty_size),
+                                    &addr.clone(),
+                                );
+                            }
+                        },
+                    };
+                } else {
+                    self.mov(
+                        &operand.to_source(self, ty_size),
+                        &self.variables[&place].location.to_dest(ty_size),
+                        ty.signed(),
+                    );
+                }
             }
             Instruction::Alloca { .. } => (),
             Instruction::Store { place, value } => {
@@ -429,5 +450,9 @@ impl CodeGen {
 
     fn div(&mut self, op: &Destination) {
         self.text.push_str(&format!("\tcqo\n\tidiv {op}\n"));
+    }
+
+    fn lea(&mut self, dest: &Destination, address: &EffectiveAddress) {
+        self.text.push_str(&format!("\tlea {dest}, {address}\n"));
     }
 }
