@@ -322,6 +322,7 @@ impl CodeGen {
                 Register::Rdx,
                 Register::Rsi,
                 Register::Rdi,
+                Register::Rax,
             ],
             false,
         );
