@@ -15,6 +15,12 @@ pub type BlockId = usize;
 pub enum Const {
     I8(i8),
     U8(u8),
+    I16(i16),
+    U16(u16),
+    I32(i32),
+    U32(u32),
+    I64(i64),
+    U64(u64),
 }
 
 impl Const {
@@ -22,6 +28,12 @@ impl Const {
         match self {
             Self::I8(_) => Ty::I8,
             Self::U8(_) => Ty::U8,
+            Self::I16(_) => Ty::I16,
+            Self::U16(_) => Ty::U16,
+            Self::I32(_) => Ty::I32,
+            Self::U32(_) => Ty::U32,
+            Self::I64(_) => Ty::I64,
+            Self::U64(_) => Ty::U64,
         }
     }
 }

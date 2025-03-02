@@ -238,6 +238,12 @@ impl std::fmt::Display for Const {
         match self {
             Self::I8(num) => num.fmt(f),
             Self::U8(num) => num.fmt(f),
+            Self::I16(num) => num.fmt(f),
+            Self::U16(num) => num.fmt(f),
+            Self::I32(num) => num.fmt(f),
+            Self::U32(num) => num.fmt(f),
+            Self::I64(num) => num.fmt(f),
+            Self::U64(num) => num.fmt(f),
         }
     }
 }
