@@ -329,7 +329,8 @@ impl CodeGen {
         self.precolor(&mut allocator, &function);
 
         let ret_label = format!(".L{}_ret", &function.name);
-        let (locations, stack_frame_size) = allocator.allocate();
+        let (locations, mut stack_frame_size) = allocator.allocate();
+        stack_frame_size = stack_frame_size.next_multiple_of(16);
         self.variables.extend(
             locations
                 .into_iter()
