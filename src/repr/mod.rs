@@ -38,7 +38,7 @@ impl Const {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ValueTree {
     Leaf(Const),
     Branch(Vec<Self>),

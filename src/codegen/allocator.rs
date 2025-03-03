@@ -1,4 +1,5 @@
 use super::{
+    abi::Abi,
     operands::{Base, Destination, EffectiveAddress, Memory, Offset, OperandSize, Source},
     register::Register,
 };
@@ -177,11 +178,15 @@ impl Allocator {
         }
 
         for (node, ty, edges) in stack.into_iter().rev() {
-            let ty_size = ty.size();
+            let ty_size = Abi::ty_size(&ty);
+            let force_stack = matches!(ty, Ty::Struct(..));
             self.add_node(node, ty, edges);
 
-            if let Some(r) = self.unique_register(&self.neighbors(&node)) {
-                self.locations.insert(node, r.into());
+            if self.unique_register(&self.neighbors(&node)).is_some() && !force_stack {
+                self.locations.insert(
+                    node,
+                    self.unique_register(&self.neighbors(&node)).unwrap().into(),
+                );
             } else {
                 if self.spill_mode {
                     self.stack_frame_size += ty_size;

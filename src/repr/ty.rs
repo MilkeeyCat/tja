@@ -9,6 +9,7 @@ pub enum Ty {
     U32,
     U64,
     Ptr,
+    Struct(Vec<Self>),
 }
 
 impl Ty {
@@ -18,13 +19,15 @@ impl Ty {
             Self::I16 | Self::U16 => 2,
             Self::I32 | Self::U32 => 4,
             Self::I64 | Self::U64 | Self::Ptr => 8,
+            // aggregate types size is determined by abi
+            Self::Struct(_) => unreachable!(),
         }
     }
 
     pub fn signed(&self) -> bool {
         match self {
             Self::I8 | Self::I16 | Self::I32 | Self::I64 => true,
-            Self::U8 | Self::U16 | Self::U32 | Self::U64 | Self::Ptr => false,
+            Self::U8 | Self::U16 | Self::U32 | Self::U64 | Self::Ptr | Self::Struct(_) => false,
         }
     }
 }

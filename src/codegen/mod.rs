@@ -1,3 +1,4 @@
+mod abi;
 mod allocator;
 mod operands;
 mod register;
@@ -6,8 +7,11 @@ use crate::repr::{
     self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
     op::BinOp, ty::Ty,
 };
+use abi::Abi;
 use allocator::{Allocator, Location};
-use operands::{Base, Destination, EffectiveAddress, Offset, OperandSize, Source};
+use operands::{
+    Base, Destination, EffectiveAddress, InvalidOperandSize, Offset, OperandSize, Source,
+};
 use register::Register;
 use std::collections::HashMap;
 
@@ -143,7 +147,7 @@ impl CodeGen {
                         ..
                     } => allocator.add_edge((*out, *rhs)),
                     Instruction::Alloca { ty, out } => {
-                        allocator.stack_frame_size += ty.size();
+                        allocator.stack_frame_size += Abi::ty_size(ty);
                         allocator.precolor(
                             *out,
                             Location::Address(EffectiveAddress {
@@ -182,18 +186,10 @@ impl CodeGen {
             } => {
                 let place = Place::Register(*out);
                 let ty = &self.variables[&place].ty;
-                let ty_size: OperandSize = ty.size().try_into().unwrap();
-                let dest_size = if kind == &BinOp::Div {
-                    OperandSize::Qword
-                } else {
-                    ty_size
-                };
+                let ty_size: OperandSize = Abi::ty_size(ty).try_into().unwrap();
 
-                self.mov(
-                    &lhs.to_source(self, ty_size),
-                    &self.variables[&place].location.to_dest(dest_size),
-                    ty.signed(),
-                );
+                self.copy(lhs, &self.variables[&place].location.clone(), &ty.clone())
+                    .unwrap();
 
                 match kind {
                     BinOp::Add => {
@@ -227,62 +223,30 @@ impl CodeGen {
             Instruction::Copy { out, operand } => {
                 let place = Place::Register(*out);
                 let ty = &self.variables[&place].ty;
-                let ty_size = ty.size().try_into().unwrap();
 
-                if ty == &Ty::Ptr {
-                    match operand {
-                        Operand::Const(_) => unreachable!(),
-                        Operand::Place(place) => match &self.variables[&place].location {
-                            Location::Register(r) => {
-                                self.mov(
-                                    &(*r).into(),
-                                    &self.variables[&place].location.to_dest(ty_size),
-                                    false,
-                                );
-                            }
-                            Location::Address(addr) => {
-                                self.lea(
-                                    &self.variables[&place].location.to_dest(ty_size),
-                                    &addr.clone(),
-                                );
-                            }
-                        },
-                    };
-                } else {
-                    self.mov(
-                        &operand.to_source(self, ty_size),
-                        &self.variables[&place].location.to_dest(ty_size),
-                        ty.signed(),
-                    );
-                }
+                self.copy(
+                    operand,
+                    &self.variables[&place].location.clone(),
+                    &ty.clone(),
+                )
+                .unwrap();
             }
             Instruction::Alloca { .. } => (),
             Instruction::Store { place, value } => {
-                let ty = match value {
-                    Operand::Place(place) => &self.variables[place].ty,
-                    Operand::Const(ValueTree::Leaf(c)) => &c.ty(),
-                    Operand::Const(ValueTree::Branch(_)) => {
-                        unimplemented!("Can't do anything about `ValueTree::Branch`")
-                    }
-                };
-                let ty_size = ty.size().try_into().unwrap();
-
-                self.mov(
-                    &value.to_source(self, ty_size),
-                    &self.variables[place].location.to_dest(ty_size),
-                    ty.signed(),
+                self.copy(
+                    value,
+                    &self.variables[place].location.clone(),
+                    &self.variables[place].ty.clone(),
                 )
+                .unwrap();
             }
             Instruction::Load { place, out } => {
-                let out = Place::Register(*out);
-                let ty = &self.variables[&out].ty;
-                let ty_size = ty.size().try_into().unwrap();
-
-                self.mov(
-                    &self.variables[place].location.to_source(ty_size),
-                    &self.variables[&out].location.to_dest(ty_size),
-                    ty.signed(),
+                self.copy(
+                    &Operand::Place(place.clone()),
+                    &self.variables[&Place::Register(*out)].location.clone(),
+                    &self.variables[place].ty.clone(),
                 )
+                .unwrap();
             }
         }
     }
@@ -354,8 +318,7 @@ impl CodeGen {
             self.mov(&Register::Rsp.into(), &Register::Rbp.into(), false);
             self.sub(
                 &Register::Rsp.into(),
-                //TODO: refactor dis
-                &Source::Immediate(Const::U8(stack_frame_size as u8)),
+                &Source::Immediate(Const::U64(stack_frame_size.next_multiple_of(16) as u64)),
             );
         }
 
@@ -400,6 +363,65 @@ impl CodeGen {
         }
 
         result.into_bytes()
+    }
+
+    fn inline_memcpy(&mut self, src: &EffectiveAddress, dest: &EffectiveAddress, size: usize) {
+        self.mov(
+            &Source::Immediate(Const::U8(size as u8)),
+            &Register::Rcx.into(),
+            false,
+        );
+        self.lea(&Register::Rsi.into(), src);
+        self.lea(&Register::Rdi.into(), dest);
+        self.text.push_str("\trep movsb\n");
+    }
+
+    fn copy(&mut self, src: &Operand, dest: &Location, ty: &Ty) -> Result<(), InvalidOperandSize> {
+        match src {
+            Operand::Place(place) => {
+                let src = &self.variables[place].location;
+
+                match (src, dest) {
+                    (Location::Address(src), dest) if ty == &Ty::Ptr => {
+                        self.lea(&dest.to_dest(OperandSize::Byte), &src.clone());
+                    }
+                    (Location::Address(src), Location::Address(dest)) => {
+                        self.inline_memcpy(&src.clone(), &dest.clone(), Abi::ty_size(ty));
+                    }
+                    (lhs, rhs) => {
+                        let size = Abi::ty_size(ty).try_into()?;
+
+                        self.mov(&lhs.to_source(size), &rhs.to_dest(size), ty.signed());
+                    }
+                };
+            }
+            Operand::Const(ValueTree::Leaf(imm)) => self.mov(
+                &imm.clone().into(),
+                &dest.to_dest(Abi::ty_size(ty).try_into()?),
+                ty.signed(),
+            ),
+            Operand::Const(ValueTree::Branch(values)) => match ty {
+                Ty::Struct(fields) => {
+                    let addr = match dest {
+                        Location::Address(addr) => addr,
+                        Location::Register(_) => unreachable!(),
+                    };
+
+                    for (i, (value, ty)) in values.iter().zip(fields).enumerate() {
+                        let offset = Offset(Abi::field_offset(fields, i) as isize);
+
+                        self.copy(
+                            &Operand::Const(value.clone()),
+                            &Location::Address(addr.clone() + offset),
+                            ty,
+                        )?;
+                    }
+                }
+                _ => unreachable!(),
+            },
+        };
+
+        Ok(())
     }
 
     fn mov(&mut self, src: &Source, dest: &Destination, signed: bool) {
