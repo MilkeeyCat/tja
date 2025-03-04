@@ -236,15 +236,20 @@ impl CodeGen {
                 self.copy(
                     value,
                     &self.variables[place].location.clone(),
-                    &self.variables[place].ty.clone(),
+                    &match value {
+                        Operand::Place(place) => self.variables[place].ty.clone(),
+                        Operand::Const(tree) => tree.ty(),
+                    },
                 )
                 .unwrap();
             }
             Instruction::Load { place, out } => {
+                let out = Place::Register(*out);
+
                 self.copy(
                     &Operand::Place(place.clone()),
-                    &self.variables[&Place::Register(*out)].location.clone(),
-                    &self.variables[place].ty.clone(),
+                    &self.variables[&out].location.clone(),
+                    &self.variables[&out].ty.clone(),
                 )
                 .unwrap();
             }

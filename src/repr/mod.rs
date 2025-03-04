@@ -44,6 +44,15 @@ pub enum ValueTree {
     Branch(Vec<Self>),
 }
 
+impl ValueTree {
+    pub fn ty(&self) -> Ty {
+        match self {
+            Self::Leaf(c) => c.ty(),
+            Self::Branch(trees) => Ty::Struct(trees.iter().map(|tree| tree.ty()).collect()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Operand {
     Place(Place),
