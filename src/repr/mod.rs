@@ -36,6 +36,19 @@ impl Const {
             Self::U64(_) => Ty::U64,
         }
     }
+
+    pub fn usize_unchecked(&self) -> usize {
+        match self {
+            Const::I8(value) => (*value).try_into().unwrap(),
+            Const::U8(value) => (*value).try_into().unwrap(),
+            Const::I16(value) => (*value).try_into().unwrap(),
+            Const::U16(value) => (*value).try_into().unwrap(),
+            Const::I32(value) => (*value).try_into().unwrap(),
+            Const::U32(value) => (*value).try_into().unwrap(),
+            Const::I64(value) => (*value).try_into().unwrap(),
+            Const::U64(value) => (*value).try_into().unwrap(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +127,12 @@ pub enum Instruction {
         place: Place,
         out: RegisterId,
     },
+    GetElementPtr {
+        ty: Ty,
+        base: Place,
+        indices: Vec<Operand>,
+        out: RegisterId,
+    },
 }
 
 impl Instruction {
@@ -124,6 +143,7 @@ impl Instruction {
             Self::Alloca { out, .. } => Some(*out),
             Self::Store { .. } => None,
             Self::Load { out, .. } => Some(*out),
+            Self::GetElementPtr { out, .. } => Some(*out),
         }
     }
 
@@ -134,6 +154,16 @@ impl Instruction {
             Self::Alloca { .. } => Vec::new(),
             Self::Store { place, value } => vec![place.register_id(), value.register_id()],
             Self::Load { place, .. } => vec![place.register_id()],
+            Self::GetElementPtr { indices, base, .. } => {
+                let mut uses: Vec<_> = indices
+                    .iter()
+                    .map(|operand| operand.register_id())
+                    .collect();
+
+                uses.push(base.register_id());
+
+                uses
+            }
         }
         .into_iter()
         .flatten()

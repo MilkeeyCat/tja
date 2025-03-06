@@ -4,8 +4,8 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, Terminator, ValueTree,
-    op::BinOp, ty::Ty,
+    self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, RegisterId,
+    Terminator, ValueTree, op::BinOp, ty::Ty,
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
@@ -99,7 +99,8 @@ impl CodeGen {
                         | Instruction::Copy { .. }
                         | Instruction::Alloca { .. }
                         | Instruction::Store { .. }
-                        | Instruction::Load { .. } => (),
+                        | Instruction::Load { .. }
+                        | Instruction::GetElementPtr { .. } => (),
                     }
                 }
 
@@ -161,7 +162,8 @@ impl CodeGen {
                     Instruction::Binary { .. }
                     | Instruction::Copy { .. }
                     | Instruction::Store { .. }
-                    | Instruction::Load { .. } => (),
+                    | Instruction::Load { .. }
+                    | Instruction::GetElementPtr { .. } => (),
                 }
             }
 
@@ -253,6 +255,31 @@ impl CodeGen {
                 )
                 .unwrap();
             }
+            Instruction::GetElementPtr {
+                ty,
+                base,
+                indices,
+                out,
+            } => match indices.as_slice() {
+                [operand, rest @ ..] => {
+                    let mut base = match self.variables[base].location.clone() {
+                        Location::Address(addr) => addr,
+                        Location::Register(_) => unreachable!(),
+                    };
+                    let index = match operand {
+                        Operand::Const(tree) => match tree {
+                            ValueTree::Leaf(leaf) => leaf.usize_unchecked(),
+                            ValueTree::Branch(_) => unreachable!(),
+                        },
+                        Operand::Place(_) => unreachable!(),
+                    };
+
+                    base = base + Offset((Abi::ty_size(ty) * index) as isize);
+
+                    self.get_element_ptr(ty, &base, rest, *out);
+                }
+                [] => (),
+            },
         }
     }
 
@@ -343,6 +370,44 @@ impl CodeGen {
         self.text.push_str("\tret\n");
         self.variables
             .retain(|_, variable| matches!(variable.location, Location::Address(..)));
+    }
+
+    fn get_element_ptr(
+        &mut self,
+        ty: &Ty,
+        base: &EffectiveAddress,
+        indices: &[Operand],
+        out: RegisterId,
+    ) {
+        match indices {
+            [] => {
+                self.lea(
+                    &self.variables[&Place::Register(out)]
+                        .location
+                        .to_dest(OperandSize::Qword),
+                    base,
+                );
+            }
+            [operand, rest @ ..] => {
+                let (ty, base) = match ty {
+                    Ty::Struct(fields) => {
+                        let index = match operand {
+                            Operand::Const(tree) => match tree {
+                                ValueTree::Leaf(leaf) => leaf.usize_unchecked(),
+                                ValueTree::Branch(_) => unreachable!(),
+                            },
+                            Operand::Place(_) => unreachable!(),
+                        };
+                        let base = base.clone() + Offset(Abi::field_offset(fields, index) as isize);
+
+                        (&fields[index], base)
+                    }
+                    _ => unreachable!(),
+                };
+
+                self.get_element_ptr(ty, &base, rest, out);
+            }
+        }
     }
 
     pub fn compile(mut self, mut program: Program) -> Vec<u8> {
