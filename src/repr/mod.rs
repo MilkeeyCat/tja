@@ -26,14 +26,10 @@ pub enum Const {
 impl Const {
     pub fn ty(&self) -> Ty {
         match self {
-            Self::I8(_) => Ty::I8,
-            Self::U8(_) => Ty::U8,
-            Self::I16(_) => Ty::I16,
-            Self::U16(_) => Ty::U16,
-            Self::I32(_) => Ty::I32,
-            Self::U32(_) => Ty::U32,
-            Self::I64(_) => Ty::I64,
-            Self::U64(_) => Ty::U64,
+            Self::I8(_) | Self::U8(_) => Ty::I8,
+            Self::I16(_) | Self::U16(_) => Ty::I16,
+            Self::I32(_) | Self::U32(_) => Ty::I32,
+            Self::I64(_) | Self::U64(_) => Ty::I64,
         }
     }
 
@@ -111,6 +107,14 @@ pub enum Instruction {
         rhs: Operand,
         out: RegisterId,
     },
+    Sext {
+        operand: Operand,
+        out: RegisterId,
+    },
+    Zext {
+        operand: Operand,
+        out: RegisterId,
+    },
     Copy {
         operand: Operand,
         out: RegisterId,
@@ -140,6 +144,8 @@ impl Instruction {
         match self {
             Self::Binary { out, .. } => Some(*out),
             Self::Copy { out, .. } => Some(*out),
+            Self::Sext { out, .. } => Some(*out),
+            Self::Zext { out, .. } => Some(*out),
             Self::Alloca { out, .. } => Some(*out),
             Self::Store { .. } => None,
             Self::Load { out, .. } => Some(*out),
@@ -151,6 +157,8 @@ impl Instruction {
         match self {
             Self::Binary { lhs, rhs, .. } => vec![lhs.register_id(), rhs.register_id()],
             Self::Copy { operand, .. } => vec![operand.register_id()],
+            Self::Sext { operand, .. } => vec![operand.register_id()],
+            Self::Zext { operand, .. } => vec![operand.register_id()],
             Self::Alloca { .. } => Vec::new(),
             Self::Store { place, value } => vec![place.register_id(), value.register_id()],
             Self::Load { place, .. } => vec![place.register_id()],

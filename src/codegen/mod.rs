@@ -97,6 +97,8 @@ impl CodeGen {
                         }
                         Instruction::Binary { .. }
                         | Instruction::Copy { .. }
+                        | Instruction::Sext { .. }
+                        | Instruction::Zext { .. }
                         | Instruction::Alloca { .. }
                         | Instruction::Store { .. }
                         | Instruction::Load { .. }
@@ -161,6 +163,8 @@ impl CodeGen {
                     }
                     Instruction::Binary { .. }
                     | Instruction::Copy { .. }
+                    | Instruction::Sext { .. }
+                    | Instruction::Zext { .. }
                     | Instruction::Store { .. }
                     | Instruction::Load { .. }
                     | Instruction::GetElementPtr { .. } => (),
@@ -232,6 +236,38 @@ impl CodeGen {
                     &ty.clone(),
                 )
                 .unwrap();
+            }
+            Instruction::Sext { operand, out } => {
+                let op_ty = match operand {
+                    Operand::Const(tree) => match tree {
+                        ValueTree::Leaf(leaf) => &leaf.ty(),
+                        ValueTree::Branch(_) => unreachable!(),
+                    },
+                    Operand::Place(place) => &self.variables[place].ty,
+                };
+                let out = &self.variables[&Place::Register(*out)];
+
+                self.sext(
+                    &operand.to_source(self, Abi::ty_size(op_ty).try_into().unwrap()),
+                    &out.location
+                        .to_dest(Abi::ty_size(&out.ty).try_into().unwrap()),
+                );
+            }
+            Instruction::Zext { operand, out } => {
+                let op_ty = match operand {
+                    Operand::Const(tree) => match tree {
+                        ValueTree::Leaf(leaf) => &leaf.ty(),
+                        ValueTree::Branch(_) => unreachable!(),
+                    },
+                    Operand::Place(place) => &self.variables[place].ty,
+                };
+                let out = &self.variables[&Place::Register(*out)];
+
+                self.zext(
+                    &operand.to_source(self, Abi::ty_size(op_ty).try_into().unwrap()),
+                    &out.location
+                        .to_dest(Abi::ty_size(&out.ty).try_into().unwrap()),
+                );
             }
             Instruction::Alloca { .. } => (),
             Instruction::Store { place, value } => {
@@ -347,7 +383,7 @@ impl CodeGen {
 
         if stack_frame_size > 0 {
             self.push(&Register::Rbp.into());
-            self.mov(&Register::Rsp.into(), &Register::Rbp.into(), false);
+            self.mov(&Register::Rsp.into(), &Register::Rbp.into());
             self.sub(
                 &Register::Rsp.into(),
                 &Source::Immediate(Const::U64(stack_frame_size.next_multiple_of(16) as u64)),
@@ -437,9 +473,8 @@ impl CodeGen {
 
     fn inline_memcpy(&mut self, src: &EffectiveAddress, dest: &EffectiveAddress, size: usize) {
         self.mov(
-            &Source::Immediate(Const::U8(size as u8)),
+            &Source::Immediate(Const::U64(size as u64)),
             &Register::Rcx.into(),
-            false,
         );
         self.lea(&Register::Rsi.into(), src);
         self.lea(&Register::Rdi.into(), dest);
@@ -461,14 +496,13 @@ impl CodeGen {
                     (lhs, rhs) => {
                         let size = Abi::ty_size(ty).try_into()?;
 
-                        self.mov(&lhs.to_source(size), &rhs.to_dest(size), ty.signed());
+                        self.mov(&lhs.to_source(size), &rhs.to_dest(size));
                     }
                 };
             }
             Operand::Const(ValueTree::Leaf(imm)) => self.mov(
                 &imm.clone().into(),
                 &dest.to_dest(Abi::ty_size(ty).try_into()?),
-                ty.signed(),
             ),
             Operand::Const(ValueTree::Branch(values)) => match ty {
                 Ty::Struct(fields) => {
@@ -494,35 +528,41 @@ impl CodeGen {
         Ok(())
     }
 
-    fn mov(&mut self, src: &Source, dest: &Destination, signed: bool) {
-        match (dest, src) {
-            (Destination::Memory(_), Source::Memory(_)) => {
-                unreachable!("Can't move memory to memory")
+    fn mov(&mut self, src: &Source, dest: &Destination) {
+        assert!(
+            !(matches!(src, Source::Memory(..)) && matches!(dest, Destination::Memory(..))),
+            "can't move memory to memory"
+        );
+        self.text.push_str(&format!("\tmov {dest}, {src}\n"));
+    }
+
+    fn sext(&mut self, src: &Source, dest: &Destination) {
+        if let Source::Immediate(c) = src {
+            let tmp = dest.clone().resize(c.ty().size().try_into().unwrap());
+
+            self.mov(src, &tmp);
+            self.sext(&tmp.into(), dest);
+        } else {
+            self.text.push_str(&format!("\tmovsx {dest}, {src}\n"));
+        }
+    }
+
+    fn zext(&mut self, src: &Source, dest: &Destination) {
+        match (src.size(), dest.size()) {
+            // on x86_64 you can move 32 bit value in 64 bit register, and upper 32 bits of the register will be zeroed
+            (Some(OperandSize::Dword), OperandSize::Qword) => {
+                self.mov(src, &dest.clone().resize(OperandSize::Dword));
             }
-            (dest, src) if dest != src => {
-                let dest_size = dest.size();
-                let src_size = src.size().unwrap_or(OperandSize::Qword);
+            _ => {
+                if let Source::Immediate(c) = src {
+                    let tmp = dest.clone().resize(c.ty().size().try_into().unwrap());
 
-                if dest_size == OperandSize::Qword && src_size == OperandSize::Dword {
-                    // on x86_64 you can move 32 bit value in 64 bit register, and upper 32 bits of the register will be zeroed
-                    self.mov(src, &Register::Eax.into(), false);
-
-                    if signed {
-                        self.text.push_str("\tcdqe\n");
-                    }
-
-                    self.mov(&Register::Rax.into(), dest, false);
-                } else if dest_size > src_size {
-                    if signed {
-                        self.text.push_str(&format!("\tmovsx {dest}, {src}\n"));
-                    } else {
-                        self.text.push_str(&format!("\tmovzx {dest}, {src}\n"));
-                    }
+                    self.mov(src, &tmp);
+                    self.zext(&tmp.into(), dest);
                 } else {
-                    self.text.push_str(&format!("\tmov {dest}, {src}\n"));
+                    self.text.push_str(&format!("\tmovzx {dest}, {src}\n"));
                 }
             }
-            _ => (),
         }
     }
 

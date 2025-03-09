@@ -261,6 +261,17 @@ impl Destination {
             Self::Register(reg) => reg.size(),
         }
     }
+
+    pub fn resize(mut self, size: OperandSize) -> Self {
+        match &mut self {
+            Self::Memory(mem) => {
+                mem.size = size;
+
+                self
+            }
+            Self::Register(r) => r.resize(size).into(),
+        }
+    }
 }
 
 impl From<Register> for Destination {
