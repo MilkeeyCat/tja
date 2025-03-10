@@ -161,6 +161,7 @@ impl Allocator {
 
     pub fn allocate(mut self) -> (Vec<Location>, usize) {
         let locations = self.locations.clone();
+        let nodes = self.nodes.clone();
         let edges = self.edges.clone();
         let mut stack: Vec<(RegisterId, Ty, Edges)> = Vec::new();
         let mut redo = false;
@@ -209,6 +210,7 @@ impl Allocator {
 
         if redo {
             self.locations = locations;
+            self.nodes = nodes;
             self.edges = edges;
 
             self.allocate()
