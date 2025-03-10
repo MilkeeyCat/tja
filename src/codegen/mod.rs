@@ -488,7 +488,7 @@ impl CodeGen {
 
                 match (src, dest) {
                     (Location::Address(src), dest) if ty == &Ty::Ptr => {
-                        self.lea(&dest.to_dest(OperandSize::Byte), &src.clone());
+                        self.lea(&dest.to_dest(OperandSize::Qword), &src.clone());
                     }
                     (Location::Address(src), Location::Address(dest)) => {
                         self.inline_memcpy(&src.clone(), &dest.clone(), Abi::ty_size(ty));
