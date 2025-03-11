@@ -34,6 +34,7 @@ impl Operand {
     }
 }
 
+#[derive(Debug)]
 struct Variable {
     ty: Ty,
     location: Location,
@@ -41,6 +42,7 @@ struct Variable {
 
 pub struct CodeGen {
     variables: HashMap<Place, Variable>,
+    spill_register: Register,
     bss: String,
     data: String,
     text: String,
@@ -50,6 +52,7 @@ impl CodeGen {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            spill_register: Register::R8,
             bss: String::new(),
             data: String::new(),
             text: String::new(),
@@ -153,12 +156,17 @@ impl CodeGen {
                         allocator.stack_frame_size += Abi::ty_size(ty);
                         allocator.precolor(
                             *out,
-                            Location::Address(EffectiveAddress {
-                                base: Base::Register(Register::Rbp),
-                                index: None,
-                                scale: None,
-                                displacement: Some(Offset(-(allocator.stack_frame_size as isize))),
-                            }),
+                            Location::Address {
+                                effective_address: EffectiveAddress {
+                                    base: Base::Register(Register::Rbp),
+                                    index: None,
+                                    scale: None,
+                                    displacement: Some(Offset(
+                                        -(allocator.stack_frame_size as isize),
+                                    )),
+                                },
+                                spilled: false,
+                            },
                         );
                     }
                     Instruction::Binary { .. }
@@ -282,14 +290,39 @@ impl CodeGen {
                 .unwrap();
             }
             Instruction::Load { place, out } => {
-                let out = Place::Register(*out);
+                let src = match &self.variables[place].location {
+                    Location::Address {
+                        spilled: true,
+                        effective_address,
+                    } => {
+                        self.mov(
+                            &effective_address.src(OperandSize::Qword),
+                            &self.spill_register.into(),
+                        );
 
-                self.copy(
-                    &Operand::Place(place.clone()),
-                    &self.variables[&out].location.clone(),
-                    &self.variables[&out].ty.clone(),
-                )
-                .unwrap();
+                        &EffectiveAddress::from(self.spill_register)
+                    }
+                    Location::Address {
+                        effective_address, ..
+                    } => effective_address,
+                    Location::Register(r) => &EffectiveAddress::from(*r),
+                };
+
+                let place = Place::Register(*out);
+                let size = Abi::ty_size(&self.variables[&place].ty);
+
+                match &self.variables[&place].location {
+                    Location::Register(r) => {
+                        let operand_size = size.try_into().unwrap();
+
+                        self.mov(&src.src(operand_size), &(*r).resize(operand_size).into());
+                    }
+                    Location::Address {
+                        effective_address, ..
+                    } => {
+                        self.inline_memcpy(&src.clone(), &effective_address.clone(), size);
+                    }
+                }
             }
             Instruction::GetElementPtr {
                 ty,
@@ -299,7 +332,9 @@ impl CodeGen {
             } => match indices.as_slice() {
                 [operand, rest @ ..] => {
                     let mut base = match self.variables[base].location.clone() {
-                        Location::Address(addr) => addr,
+                        Location::Address {
+                            effective_address, ..
+                        } => effective_address,
                         Location::Register(_) => unreachable!(),
                     };
                     let index = match operand {
@@ -349,12 +384,12 @@ impl CodeGen {
                 Register::R11,
                 Register::R10,
                 Register::R9,
-                Register::R8,
                 Register::Rcx,
                 Register::Rdx,
                 Register::Rsi,
                 Register::Rdi,
                 Register::Rax,
+                self.spill_register,
             ],
             false,
         );
@@ -405,7 +440,7 @@ impl CodeGen {
         }
         self.text.push_str("\tret\n");
         self.variables
-            .retain(|_, variable| matches!(variable.location, Location::Address(..)));
+            .retain(|_, variable| matches!(variable.location, Location::Address { .. }));
     }
 
     fn get_element_ptr(
@@ -487,10 +522,27 @@ impl CodeGen {
                 let src = &self.variables[place].location;
 
                 match (src, dest) {
-                    (Location::Address(src), dest) if ty == &Ty::Ptr => {
-                        self.lea(&dest.to_dest(OperandSize::Qword), &src.clone());
+                    (
+                        Location::Address {
+                            effective_address, ..
+                        },
+                        dest,
+                    ) if ty == &Ty::Ptr => {
+                        self.lea(
+                            &dest.to_dest(OperandSize::Qword),
+                            &effective_address.clone(),
+                        );
                     }
-                    (Location::Address(src), Location::Address(dest)) => {
+                    (
+                        Location::Address {
+                            effective_address: src,
+                            ..
+                        },
+                        Location::Address {
+                            effective_address: dest,
+                            ..
+                        },
+                    ) => {
                         self.inline_memcpy(&src.clone(), &dest.clone(), Abi::ty_size(ty));
                     }
                     (lhs, rhs) => {
@@ -507,7 +559,9 @@ impl CodeGen {
             Operand::Const(ValueTree::Branch(values)) => match ty {
                 Ty::Struct(fields) => {
                     let addr = match dest {
-                        Location::Address(addr) => addr,
+                        Location::Address {
+                            effective_address, ..
+                        } => effective_address,
                         Location::Register(_) => unreachable!(),
                     };
 
@@ -516,7 +570,10 @@ impl CodeGen {
 
                         self.copy(
                             &Operand::Const(value.clone()),
-                            &Location::Address(addr.clone() + offset),
+                            &Location::Address {
+                                effective_address: addr.clone() + offset,
+                                spilled: false,
+                            },
                             ty,
                         )?;
                     }

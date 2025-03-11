@@ -8,18 +8,23 @@ use std::collections::{HashMap, HashSet};
 
 type Edges = HashSet<(RegisterId, RegisterId)>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Location {
     Register(Register),
-    Address(EffectiveAddress),
+    Address {
+        effective_address: EffectiveAddress,
+        spilled: bool,
+    },
 }
 
 impl Location {
     pub fn to_source(&self, size: OperandSize) -> Source {
         match self {
             Self::Register(r) => r.resize(size).into(),
-            Self::Address(addr) => Source::Memory(Memory {
-                effective_address: addr.clone(),
+            Self::Address {
+                effective_address, ..
+            } => Source::Memory(Memory {
+                effective_address: effective_address.clone(),
                 size,
             }),
         }
@@ -28,8 +33,10 @@ impl Location {
     pub fn to_dest(&self, size: OperandSize) -> Destination {
         match self {
             Self::Register(r) => r.resize(size).into(),
-            Self::Address(addr) => Destination::Memory(Memory {
-                effective_address: addr.clone(),
+            Self::Address {
+                effective_address, ..
+            } => Destination::Memory(Memory {
+                effective_address: effective_address.clone(),
                 size,
             }),
         }
@@ -39,12 +46,6 @@ impl Location {
 impl From<Register> for Location {
     fn from(value: Register) -> Self {
         Self::Register(value)
-    }
-}
-
-impl From<EffectiveAddress> for Location {
-    fn from(value: EffectiveAddress) -> Self {
-        Self::Address(value)
     }
 }
 
@@ -193,12 +194,15 @@ impl Allocator {
                     self.stack_frame_size += ty_size;
                     self.locations.insert(
                         node,
-                        Location::Address(EffectiveAddress {
-                            base: Base::Register(Register::Rbp),
-                            index: None,
-                            scale: None,
-                            displacement: Some(Offset(-(self.stack_frame_size as isize))),
-                        }),
+                        Location::Address {
+                            effective_address: EffectiveAddress {
+                                base: Base::Register(Register::Rbp),
+                                index: None,
+                                scale: None,
+                                displacement: Some(Offset(-(self.stack_frame_size as isize))),
+                            },
+                            spilled: true,
+                        },
                     );
                 } else {
                     self.spill_mode = true;
