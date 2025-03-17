@@ -552,11 +552,24 @@ impl CodeGen {
                     }
                 };
             }
-            Operand::Const(ValueTree::Leaf(imm)) => self.mov(
+            Operand::Const(value_tree) => self.mov_value_tree(dest, value_tree, ty)?,
+        };
+
+        Ok(())
+    }
+
+    fn mov_value_tree(
+        &mut self,
+        dest: &Location,
+        src: &ValueTree,
+        ty: &Ty,
+    ) -> Result<(), InvalidOperandSize> {
+        match src {
+            ValueTree::Leaf(imm) => self.mov(
                 &imm.clone().into(),
                 &dest.to_dest(Abi::ty_size(ty).try_into()?),
             ),
-            Operand::Const(ValueTree::Branch(values)) => match ty {
+            ValueTree::Branch(values) => match ty {
                 Ty::Struct(fields) => {
                     let addr = match dest {
                         Location::Address {
