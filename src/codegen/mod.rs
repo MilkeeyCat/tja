@@ -576,7 +576,8 @@ impl CodeGen {
         match (src, dest) {
             (
                 Location::Address {
-                    effective_address, ..
+                    effective_address,
+                    spilled: false,
                 },
                 dest,
             ) if ty == &Ty::Ptr => {
@@ -667,5 +668,94 @@ impl CodeGen {
 
     fn lea(&mut self, dest: &Destination, address: &EffectiveAddress) {
         self.text.push_str(&format!("\tlea {dest}, {address}\n"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CodeGen,
+        allocator::Location,
+        operands::{Base, EffectiveAddress, InvalidOperandSize, Offset},
+        register::Register,
+    };
+    use crate::repr::ty::Ty;
+
+    #[test]
+    fn mov_location() -> Result<(), InvalidOperandSize> {
+        let cases = [
+            (
+                (
+                    &Location::Register(Register::Rdi),
+                    &Location::Register(Register::Rsi),
+                    &Ty::I64,
+                ),
+                "\tmov rsi, rdi\n",
+            ),
+            (
+                (
+                    &Location::Address {
+                        effective_address: EffectiveAddress {
+                            base: Base::Register(Register::Rbp),
+                            index: None,
+                            scale: None,
+                            displacement: Some(Offset(-12)),
+                        },
+                        spilled: false,
+                    },
+                    &Location::Address {
+                        effective_address: EffectiveAddress {
+                            base: Base::Register(Register::Rbp),
+                            index: None,
+                            scale: None,
+                            displacement: Some(Offset(-24)),
+                        },
+                        spilled: false,
+                    },
+                    &Ty::Struct(vec![Ty::I8, Ty::Struct(vec![Ty::I8, Ty::I32])]),
+                ),
+                "\tmov rcx, 12\n\tlea rsi, [rbp - 12]\n\tlea rdi, [rbp - 24]\n\trep movsb\n",
+            ),
+            (
+                (
+                    &Location::Address {
+                        effective_address: EffectiveAddress {
+                            base: Base::Register(Register::Rbp),
+                            index: None,
+                            scale: None,
+                            displacement: Some(Offset(-6)),
+                        },
+                        spilled: false,
+                    },
+                    &Location::Register(Register::Rax),
+                    &Ty::Ptr,
+                ),
+                "\tlea rax, [rbp - 6]\n",
+            ),
+            (
+                (
+                    &Location::Address {
+                        effective_address: EffectiveAddress {
+                            base: Base::Register(Register::Rbp),
+                            index: None,
+                            scale: None,
+                            displacement: Some(Offset(-8)),
+                        },
+                        spilled: true,
+                    },
+                    &Location::Register(Register::Rax),
+                    &Ty::Ptr,
+                ),
+                "\tmov rax, qword ptr [rbp - 8]\n",
+            ),
+        ];
+
+        for ((src, dest, ty), expected) in cases {
+            let mut codegen = CodeGen::new();
+            codegen.mov_location(src, dest, ty)?;
+            assert_eq!(codegen.text, expected);
+        }
+
+        Ok(())
     }
 }
