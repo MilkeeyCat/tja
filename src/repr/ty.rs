@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ty {
+    Void,
     I8,
     I16,
     I32,
@@ -11,6 +12,7 @@ pub enum Ty {
 impl Ty {
     pub fn size(&self) -> usize {
         match self {
+            Self::Void => 0,
             Self::I8 => 1,
             Self::I16 => 2,
             Self::I32 => 4,
