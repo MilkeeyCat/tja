@@ -519,38 +519,7 @@ impl CodeGen {
     fn copy(&mut self, src: &Operand, dest: &Location, ty: &Ty) -> Result<(), InvalidOperandSize> {
         match src {
             Operand::Place(place) => {
-                let src = &self.variables[place].location;
-
-                match (src, dest) {
-                    (
-                        Location::Address {
-                            effective_address, ..
-                        },
-                        dest,
-                    ) if ty == &Ty::Ptr => {
-                        self.lea(
-                            &dest.to_dest(OperandSize::Qword),
-                            &effective_address.clone(),
-                        );
-                    }
-                    (
-                        Location::Address {
-                            effective_address: src,
-                            ..
-                        },
-                        Location::Address {
-                            effective_address: dest,
-                            ..
-                        },
-                    ) => {
-                        self.inline_memcpy(&src.clone(), &dest.clone(), Abi::ty_size(ty));
-                    }
-                    (lhs, rhs) => {
-                        let size = Abi::ty_size(ty).try_into()?;
-
-                        self.mov(&lhs.to_source(size), &rhs.to_dest(size));
-                    }
-                };
+                self.mov_location(&self.variables[place].location.clone(), dest, ty)?
             }
             Operand::Const(value_tree) => self.mov_value_tree(dest, value_tree, ty)?,
         };
@@ -593,6 +562,46 @@ impl CodeGen {
                 }
                 _ => unreachable!(),
             },
+        };
+
+        Ok(())
+    }
+
+    fn mov_location(
+        &mut self,
+        src: &Location,
+        dest: &Location,
+        ty: &Ty,
+    ) -> Result<(), InvalidOperandSize> {
+        match (src, dest) {
+            (
+                Location::Address {
+                    effective_address, ..
+                },
+                dest,
+            ) if ty == &Ty::Ptr => {
+                self.lea(
+                    &dest.to_dest(OperandSize::Qword),
+                    &effective_address.clone(),
+                );
+            }
+            (
+                Location::Address {
+                    effective_address: src,
+                    ..
+                },
+                Location::Address {
+                    effective_address: dest,
+                    ..
+                },
+            ) => {
+                self.inline_memcpy(&src.clone(), &dest.clone(), Abi::ty_size(ty));
+            }
+            (lhs, rhs) => {
+                let size = Abi::ty_size(ty).try_into()?;
+
+                self.mov(&lhs.to_source(size), &rhs.to_dest(size));
+            }
         };
 
         Ok(())
