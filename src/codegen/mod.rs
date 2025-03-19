@@ -67,7 +67,7 @@ impl CodeGen {
                 for (i, instruction) in block.instructions.iter_mut().enumerate() {
                     match instruction {
                         Instruction::Binary {
-                            kind: BinOp::Div,
+                            kind: BinOp::SDiv | BinOp::UDiv,
                             rhs,
                             out,
                             ..
@@ -124,7 +124,7 @@ impl CodeGen {
             for instruction in &block.instructions {
                 match instruction {
                     Instruction::Binary {
-                        kind: BinOp::Div,
+                        kind: BinOp::SDiv | BinOp::UDiv,
                         lhs,
                         rhs,
                         out,
@@ -224,13 +224,55 @@ impl CodeGen {
                             &rhs.to_source(self, ty_size),
                         );
                     }
-                    BinOp::Div => {
+                    BinOp::SDiv => {
                         assert!(
                             !matches!(rhs, Operand::Const(..)),
-                            "rhs of div can't be a const"
+                            "rhs of sdiv can't be a const"
                         );
 
-                        self.div(&rhs.to_dest(self, ty_size));
+                        let dest = rhs.to_dest(self, ty_size);
+
+                        match ty_size {
+                            OperandSize::Byte => {
+                                self.sext(
+                                    &dest.clone().into(),
+                                    &dest.clone().resize(OperandSize::Word),
+                                );
+                            }
+                            OperandSize::Word => {
+                                self.text.push_str("\tcwd\n");
+                            }
+                            OperandSize::Dword => {
+                                self.text.push_str("\tcdq\n");
+                            }
+                            OperandSize::Qword => {
+                                self.text.push_str("\tcqo\n");
+                            }
+                        };
+                        self.div(&dest);
+                    }
+                    BinOp::UDiv => {
+                        assert!(
+                            !matches!(rhs, Operand::Const(..)),
+                            "rhs of udiv can't be a const"
+                        );
+
+                        let dest = rhs.to_dest(self, ty_size);
+
+                        match ty_size {
+                            OperandSize::Byte => {
+                                self.zext(
+                                    &dest.clone().into(),
+                                    &dest.clone().resize(OperandSize::Word),
+                                );
+                            }
+                            size => {
+                                let r = Register::Rdx.resize(size);
+
+                                self.xor(&r.into(), &r.into());
+                            }
+                        };
+                        self.div(&dest);
                     }
                 };
             }
@@ -663,11 +705,15 @@ impl CodeGen {
     }
 
     fn div(&mut self, op: &Destination) {
-        self.text.push_str(&format!("\tcqo\n\tidiv {op}\n"));
+        self.text.push_str(&format!("\tidiv {op}\n"));
     }
 
     fn lea(&mut self, dest: &Destination, address: &EffectiveAddress) {
         self.text.push_str(&format!("\tlea {dest}, {address}\n"));
+    }
+
+    fn xor(&mut self, lhs: &Destination, rhs: &Source) {
+        self.text.push_str(&format!("\txor {lhs}, {rhs}\n"));
     }
 }
 
