@@ -5,12 +5,12 @@ mod register;
 
 use crate::repr::{
     self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, RegisterId,
-    Terminator, ValueTree, op::BinOp, ty::Ty,
+    Terminator, op::BinOp, ty::Ty,
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
 use operands::{
-    Base, Destination, EffectiveAddress, InvalidOperandSize, Offset, OperandSize, Source,
+    Base, Destination, EffectiveAddress, Immediate, InvalidOperandSize, Offset, OperandSize, Source,
 };
 use register::Register;
 use std::collections::HashMap;
@@ -19,10 +19,7 @@ impl Operand {
     fn to_source(&self, codegen: &CodeGen, size: OperandSize) -> Source {
         match self {
             Self::Place(place) => codegen.variables[place].location.to_source(size),
-            Self::Const(val) => match val {
-                ValueTree::Leaf(leaf) => leaf.clone().into(),
-                ValueTree::Branch(_) => unimplemented!(),
-            },
+            Self::Const(c) => c.clone().into(),
         }
     }
 
@@ -289,11 +286,8 @@ impl CodeGen {
             }
             Instruction::Sext { operand, out } => {
                 let op_ty = match operand {
-                    Operand::Const(tree) => match tree {
-                        ValueTree::Leaf(leaf) => &leaf.ty(),
-                        ValueTree::Branch(_) => unreachable!(),
-                    },
                     Operand::Place(place) => &self.variables[place].ty,
+                    Operand::Const(c) => &c.ty(),
                 };
                 let out = &self.variables[&Place::Register(*out)];
 
@@ -305,11 +299,8 @@ impl CodeGen {
             }
             Instruction::Zext { operand, out } => {
                 let op_ty = match operand {
-                    Operand::Const(tree) => match tree {
-                        ValueTree::Leaf(leaf) => &leaf.ty(),
-                        ValueTree::Branch(_) => unreachable!(),
-                    },
                     Operand::Place(place) => &self.variables[place].ty,
+                    Operand::Const(c) => &c.ty(),
                 };
                 let out = &self.variables[&Place::Register(*out)];
 
@@ -326,7 +317,7 @@ impl CodeGen {
                     &self.variables[place].location.clone(),
                     &match value {
                         Operand::Place(place) => self.variables[place].ty.clone(),
-                        Operand::Const(tree) => tree.ty(),
+                        Operand::Const(c) => c.ty(),
                     },
                 )
                 .unwrap();
@@ -380,10 +371,7 @@ impl CodeGen {
                         Location::Register(_) => unreachable!(),
                     };
                     let index = match operand {
-                        Operand::Const(tree) => match tree {
-                            ValueTree::Leaf(leaf) => leaf.usize_unchecked(),
-                            ValueTree::Branch(_) => unreachable!(),
-                        },
+                        Operand::Const(c) => c.usize_unchecked(),
                         Operand::Place(_) => unreachable!(),
                     };
 
@@ -463,7 +451,7 @@ impl CodeGen {
             self.mov(&Register::Rsp.into(), &Register::Rbp.into());
             self.sub(
                 &Register::Rsp.into(),
-                &Source::Immediate(Const::U64(stack_frame_size.next_multiple_of(16) as u64)),
+                &Source::Immediate(Immediate::Uint(stack_frame_size.next_multiple_of(16) as u64)),
             );
         }
 
@@ -505,10 +493,7 @@ impl CodeGen {
                 let (ty, base) = match ty {
                     Ty::Struct(fields) => {
                         let index = match operand {
-                            Operand::Const(tree) => match tree {
-                                ValueTree::Leaf(leaf) => leaf.usize_unchecked(),
-                                ValueTree::Branch(_) => unreachable!(),
-                            },
+                            Operand::Const(c) => c.usize_unchecked(),
                             Operand::Place(_) => unreachable!(),
                         };
                         let base = base.clone() + Offset(Abi::field_offset(fields, index) as isize);
@@ -550,7 +535,7 @@ impl CodeGen {
 
     fn inline_memcpy(&mut self, src: &EffectiveAddress, dest: &EffectiveAddress, size: usize) {
         self.mov(
-            &Source::Immediate(Const::U64(size as u64)),
+            &Source::Immediate(Immediate::Uint(size as u64)),
             &Register::Rcx.into(),
         );
         self.lea(&Register::Rsi.into(), src);
@@ -563,24 +548,20 @@ impl CodeGen {
             Operand::Place(place) => {
                 self.mov_location(&self.variables[place].location.clone(), dest, ty)?
             }
-            Operand::Const(value_tree) => self.mov_value_tree(dest, value_tree, ty)?,
+            Operand::Const(c) => self.mov_const(dest, c, ty)?,
         };
 
         Ok(())
     }
 
-    fn mov_value_tree(
+    fn mov_const(
         &mut self,
         dest: &Location,
-        src: &ValueTree,
+        src: &Const,
         ty: &Ty,
     ) -> Result<(), InvalidOperandSize> {
         match src {
-            ValueTree::Leaf(imm) => self.mov(
-                &imm.clone().into(),
-                &dest.to_dest(Abi::ty_size(ty).try_into()?),
-            ),
-            ValueTree::Branch(values) => match ty {
+            Const::Aggregate(values) => match ty {
                 Ty::Struct(fields) => {
                     let addr = match dest {
                         Location::Address {
@@ -604,6 +585,10 @@ impl CodeGen {
                 }
                 _ => unreachable!(),
             },
+            c => self.mov(
+                &c.clone().into(),
+                &dest.to_dest(Abi::ty_size(ty).try_into()?),
+            ),
         };
 
         Ok(())
@@ -659,11 +644,8 @@ impl CodeGen {
     }
 
     fn sext(&mut self, src: &Source, dest: &Destination) {
-        if let Source::Immediate(c) = src {
-            let tmp = dest.clone().resize(c.ty().size().try_into().unwrap());
-
-            self.mov(src, &tmp);
-            self.sext(&tmp.into(), dest);
+        if let Source::Immediate(_) = src {
+            self.mov(src, dest);
         } else {
             self.text.push_str(&format!("\tmovsx {dest}, {src}\n"));
         }
@@ -676,11 +658,8 @@ impl CodeGen {
                 self.mov(src, &dest.clone().resize(OperandSize::Dword));
             }
             _ => {
-                if let Source::Immediate(c) = src {
-                    let tmp = dest.clone().resize(c.ty().size().try_into().unwrap());
-
-                    self.mov(src, &tmp);
-                    self.zext(&tmp.into(), dest);
+                if let Source::Immediate(_) = src {
+                    self.mov(src, dest);
                 } else {
                     self.text.push_str(&format!("\tmovzx {dest}, {src}\n"));
                 }

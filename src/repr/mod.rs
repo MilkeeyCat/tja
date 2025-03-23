@@ -21,6 +21,7 @@ pub enum Const {
     U32(u32),
     I64(i64),
     U64(u64),
+    Aggregate(Vec<Self>),
 }
 
 impl Const {
@@ -30,34 +31,21 @@ impl Const {
             Self::I16(_) | Self::U16(_) => Ty::I16,
             Self::I32(_) | Self::U32(_) => Ty::I32,
             Self::I64(_) | Self::U64(_) => Ty::I64,
+            Self::Aggregate(values) => Ty::Struct(values.iter().map(|c| c.ty()).collect()),
         }
     }
 
     pub fn usize_unchecked(&self) -> usize {
         match self {
-            Const::I8(value) => (*value).try_into().unwrap(),
-            Const::U8(value) => (*value).try_into().unwrap(),
-            Const::I16(value) => (*value).try_into().unwrap(),
-            Const::U16(value) => (*value).try_into().unwrap(),
-            Const::I32(value) => (*value).try_into().unwrap(),
-            Const::U32(value) => (*value).try_into().unwrap(),
-            Const::I64(value) => (*value).try_into().unwrap(),
-            Const::U64(value) => (*value).try_into().unwrap(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum ValueTree {
-    Leaf(Const),
-    Branch(Vec<Self>),
-}
-
-impl ValueTree {
-    pub fn ty(&self) -> Ty {
-        match self {
-            Self::Leaf(c) => c.ty(),
-            Self::Branch(trees) => Ty::Struct(trees.iter().map(|tree| tree.ty()).collect()),
+            Self::I8(value) => (*value).try_into().unwrap(),
+            Self::U8(value) => (*value).try_into().unwrap(),
+            Self::I16(value) => (*value).try_into().unwrap(),
+            Self::U16(value) => (*value).try_into().unwrap(),
+            Self::I32(value) => (*value).try_into().unwrap(),
+            Self::U32(value) => (*value).try_into().unwrap(),
+            Self::I64(value) => (*value).try_into().unwrap(),
+            Self::U64(value) => (*value).try_into().unwrap(),
+            Self::Aggregate(_) => unreachable!(),
         }
     }
 }
@@ -65,7 +53,7 @@ impl ValueTree {
 #[derive(Debug)]
 pub enum Operand {
     Place(Place),
-    Const(ValueTree),
+    Const(Const),
 }
 
 impl Operand {

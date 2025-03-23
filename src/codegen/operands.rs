@@ -195,10 +195,44 @@ impl std::fmt::Display for Memory {
 }
 
 #[derive(Debug, Clone)]
+pub enum Immediate {
+    Int(i64),
+    Uint(u64),
+    Label(String),
+}
+
+impl std::fmt::Display for Immediate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(int) => int.fmt(f),
+            Self::Uint(uint) => uint.fmt(f),
+            Self::Label(label) => label.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Source {
     Memory(Memory),
     Register(Register),
-    Immediate(Const),
+    Immediate(Immediate),
+}
+
+// FIXME: implement TryFrom instead
+impl From<Const> for Immediate {
+    fn from(value: Const) -> Self {
+        match value {
+            Const::I8(num) => Immediate::Int(num as i64),
+            Const::U8(num) => Immediate::Uint(num as u64),
+            Const::I16(num) => Immediate::Int(num as i64),
+            Const::U16(num) => Immediate::Uint(num as u64),
+            Const::I32(num) => Immediate::Int(num as i64),
+            Const::U32(num) => Immediate::Uint(num as u64),
+            Const::I64(num) => Immediate::Int(num),
+            Const::U64(num) => Immediate::Uint(num),
+            Const::Aggregate(_) => unreachable!(),
+        }
+    }
 }
 
 impl Source {
@@ -217,9 +251,10 @@ impl From<Register> for Source {
     }
 }
 
+// FIXME: implement TryFrom instead
 impl From<Const> for Source {
     fn from(value: Const) -> Self {
-        Self::Immediate(value)
+        Self::Immediate(value.into())
     }
 }
 
@@ -244,6 +279,15 @@ impl std::fmt::Display for Const {
             Self::U32(num) => num.fmt(f),
             Self::I64(num) => num.fmt(f),
             Self::U64(num) => num.fmt(f),
+            Self::Aggregate(values) => write!(
+                f,
+                "{{{}}}",
+                values
+                    .iter()
+                    .map(|value| value.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }
