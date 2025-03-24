@@ -196,7 +196,7 @@ pub struct Register {
 }
 
 #[derive(Debug)]
-pub struct Program {
+pub struct Module {
     pub globals: Vec<Global>,
     pub functions: Vec<Function>,
     //TODO: add aggregate types

@@ -2,7 +2,7 @@ pub mod codegen;
 pub mod repr;
 
 use codegen::CodeGen;
-use repr::Program;
+use repr::Module;
 use std::{
     fs::File,
     io::Write,
@@ -20,7 +20,7 @@ pub struct CompileArgs {
     pub shared: bool,
 }
 
-pub fn compile(program: Program, args: CompileArgs) -> std::io::Result<()> {
+pub fn compile(program: Module, args: CompileArgs) -> std::io::Result<()> {
     let code = CodeGen::new().compile(program);
 
     if args.assembly_only {

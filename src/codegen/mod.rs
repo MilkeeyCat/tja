@@ -4,8 +4,8 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    self, BasicBlock, Const, Function, Instruction, Operand, Place, Program, RegisterId,
-    Terminator, op::BinOp, ty::Ty,
+    self, BasicBlock, Const, Function, Instruction, Module, Operand, Place, RegisterId, Terminator,
+    op::BinOp, ty::Ty,
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
@@ -56,7 +56,7 @@ impl CodeGen {
         }
     }
 
-    fn canonicalize(program: &mut Program) {
+    fn canonicalize(program: &mut Module) {
         for function in &mut program.functions {
             for block in &mut function.blocks {
                 let mut instructions = Vec::new();
@@ -508,7 +508,7 @@ impl CodeGen {
         }
     }
 
-    pub fn compile(mut self, mut program: Program) -> Vec<u8> {
+    pub fn compile(mut self, mut program: Module) -> Vec<u8> {
         Self::canonicalize(&mut program);
 
         for function in program.functions {
