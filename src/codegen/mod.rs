@@ -4,8 +4,8 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    self, BasicBlock, Const, Function, Instruction, Module, Operand, Place, RegisterId, Terminator,
-    op::BinOp, ty::Ty,
+    BasicBlock, Const, Function, Global, Instruction, LocalIdx, LocalStorage, Module, Operand,
+    Terminator, op::BinOp, ty::Ty,
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
@@ -13,20 +13,30 @@ use operands::{
     Base, Destination, EffectiveAddress, Immediate, InvalidOperandSize, Offset, OperandSize, Source,
 };
 use register::Register;
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 impl Operand {
-    fn to_source(&self, codegen: &CodeGen, size: OperandSize) -> Source {
+    fn get_location<T: LocationStorage>(&self, storage: &T) -> Option<Location> {
         match self {
-            Self::Place(place) => codegen.variables[place].location.to_source(size),
+            Self::Global(global) => Some(storage.get_global(global)),
+            Self::Local(idx) => Some(storage.get_local(*idx)),
+            Self::Const(_) => None,
+        }
+    }
+
+    fn to_source<T: LocationStorage>(&self, storage: &T, size: OperandSize) -> Source {
+        match self {
+            Self::Global(global) => storage.get_global(&global).to_source(size),
+            Self::Local(idx) => storage.get_local(*idx).to_source(size),
             Self::Const(c) => c.clone().into(),
         }
     }
 
-    fn to_dest(&self, codegen: &CodeGen, size: OperandSize) -> Destination {
+    fn to_dest<T: LocationStorage>(&self, storage: &T, size: OperandSize) -> Destination {
         match self {
-            Self::Place(place) => codegen.variables[place].location.to_dest(size),
-            Self::Const(_) => unreachable!(),
+            Self::Global(global) => storage.get_global(&global).to_dest(size),
+            Self::Local(idx) => storage.get_local(*idx).to_dest(size),
+            Self::Const(_) => unreachable!("can't turn const into Destination"),
         }
     }
 }
@@ -38,7 +48,8 @@ struct Variable {
 }
 
 pub struct CodeGen {
-    variables: HashMap<Place, Variable>,
+    locals: HashMap<LocalIdx, Variable>,
+    globals: HashMap<Rc<Global>, Location>,
     spill_register: Register,
     bss: String,
     data: String,
@@ -48,7 +59,8 @@ pub struct CodeGen {
 impl CodeGen {
     pub fn new() -> Self {
         Self {
-            variables: HashMap::new(),
+            locals: HashMap::new(),
+            globals: HashMap::new(),
             spill_register: Register::R8,
             bss: String::new(),
             data: String::new(),
@@ -70,28 +82,22 @@ impl CodeGen {
                             ..
                         } => {
                             if matches!(rhs, Operand::Const(..)) {
-                                let r = function.registers.len();
-                                function.registers.push(repr::Register {
-                                    name: r.to_string(),
-                                    ty: function.registers[*out].ty.clone(),
-                                });
-                                let mut operand = Operand::Place(Place::Register(r));
+                                let idx = function.locals.len();
+                                function.locals.push(function.locals[*out].clone());
+                                let mut operand = Operand::Local(idx);
 
                                 std::mem::swap(rhs, &mut operand);
-                                instructions.push((i, Instruction::Copy { out: r, operand }));
+                                instructions.push((i, Instruction::Copy { out: idx, operand }));
                             }
 
-                            let mut r = function.registers.len();
-                            function.registers.push(repr::Register {
-                                name: r.to_string(),
-                                ty: function.registers[*out].ty.clone(),
-                            });
-                            std::mem::swap(out, &mut r);
+                            let mut idx = function.locals.len();
+                            function.locals.push(function.locals[*out].clone());
+                            std::mem::swap(out, &mut idx);
                             instructions.push((
                                 i + 1,
                                 Instruction::Copy {
-                                    out: r,
-                                    operand: Operand::Place(Place::Register(*out)),
+                                    out: idx,
+                                    operand: Operand::Local(*out),
                                 },
                             ));
                         }
@@ -128,24 +134,24 @@ impl CodeGen {
                     } => {
                         allocator.precolor(*out, Register::Rax.into());
 
-                        let regs: Vec<_> = vec![lhs.register_id(), rhs.register_id(), Some(*out)]
+                        let indices: Vec<_> = vec![lhs.local_idx(), rhs.local_idx(), Some(*out)]
                             .into_iter()
                             .flatten()
                             .collect();
 
-                        if !regs.is_empty() {
-                            let ty = &function.registers[*out].ty;
+                        if !indices.is_empty() {
+                            let ty = &function.locals[*out];
                             let rdx = allocator.create_node(ty.clone());
                             allocator.precolor(rdx, Register::Rdx.into());
 
-                            for r in regs {
-                                allocator.add_edge((rdx, r));
+                            for idx in indices {
+                                allocator.add_edge((rdx, idx));
                             }
                         }
                     }
                     Instruction::Binary {
                         kind: BinOp::Sub,
-                        rhs: Operand::Place(Place::Register(rhs)),
+                        rhs: Operand::Local(rhs),
                         out,
                         ..
                     } => allocator.add_edge((*out, *rhs)),
@@ -178,8 +184,8 @@ impl CodeGen {
 
             match &block.terminator {
                 Terminator::Return(operand) => {
-                    if let Some(Operand::Place(Place::Register(r))) = operand {
-                        allocator.precolor(*r, Register::Rax.into());
+                    if let Some(Operand::Local(idx)) = operand {
+                        allocator.precolor(*idx, Register::Rax.into());
                     }
                 }
                 Terminator::Goto(_) => (),
@@ -195,29 +201,28 @@ impl CodeGen {
                 rhs,
                 out,
             } => {
-                let place = Place::Register(*out);
-                let ty = &self.variables[&place].ty;
+                let ty = &self.locals[out].ty;
                 let ty_size: OperandSize = Abi::ty_size(ty).try_into().unwrap();
 
-                self.copy(lhs, &self.variables[&place].location.clone(), &ty.clone())
+                self.copy(lhs, &self.locals[out].location.clone(), &ty.clone())
                     .unwrap();
 
                 match kind {
                     BinOp::Add => {
                         self.add(
-                            &self.variables[&place].location.to_dest(ty_size),
+                            &self.locals[out].location.to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
                     BinOp::Sub => {
                         self.sub(
-                            &self.variables[&place].location.to_dest(ty_size),
+                            &self.locals[out].location.to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
                     BinOp::Mul => {
                         self.mul(
-                            &self.variables[&place].location.to_dest(ty_size),
+                            &self.locals[out].location.to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
@@ -274,56 +279,38 @@ impl CodeGen {
                 };
             }
             Instruction::Copy { out, operand } => {
-                let place = Place::Register(*out);
-                let ty = &self.variables[&place].ty;
-
                 self.copy(
                     operand,
-                    &self.variables[&place].location.clone(),
-                    &ty.clone(),
+                    &self.locals[out].location.clone(),
+                    &self.locals[out].ty.clone(),
                 )
                 .unwrap();
             }
             Instruction::Sext { operand, out } => {
-                let op_ty = match operand {
-                    Operand::Place(place) => &self.variables[place].ty,
-                    Operand::Const(c) => &c.ty(),
-                };
-                let out = &self.variables[&Place::Register(*out)];
+                let out = &self.locals[out];
 
                 self.sext(
-                    &operand.to_source(self, Abi::ty_size(op_ty).try_into().unwrap()),
+                    &operand.to_source(self, Abi::ty_size(&operand.ty(self)).try_into().unwrap()),
                     &out.location
                         .to_dest(Abi::ty_size(&out.ty).try_into().unwrap()),
                 );
             }
             Instruction::Zext { operand, out } => {
-                let op_ty = match operand {
-                    Operand::Place(place) => &self.variables[place].ty,
-                    Operand::Const(c) => &c.ty(),
-                };
-                let out = &self.variables[&Place::Register(*out)];
+                let out = &self.locals[out];
 
                 self.zext(
-                    &operand.to_source(self, Abi::ty_size(op_ty).try_into().unwrap()),
+                    &operand.to_source(self, Abi::ty_size(&operand.ty(self)).try_into().unwrap()),
                     &out.location
                         .to_dest(Abi::ty_size(&out.ty).try_into().unwrap()),
                 );
             }
             Instruction::Alloca { .. } => (),
-            Instruction::Store { place, value } => {
-                self.copy(
-                    value,
-                    &self.variables[place].location.clone(),
-                    &match value {
-                        Operand::Place(place) => self.variables[place].ty.clone(),
-                        Operand::Const(c) => c.ty(),
-                    },
-                )
-                .unwrap();
+            Instruction::Store { ptr, value } => {
+                self.copy(value, &ptr.get_location(self).unwrap(), &value.ty(self))
+                    .unwrap();
             }
-            Instruction::Load { place, out } => {
-                let src = match &self.variables[place].location {
+            Instruction::Load { ptr, out } => {
+                let src = match ptr.get_location(self).unwrap() {
                     Location::Address {
                         spilled: true,
                         effective_address,
@@ -333,22 +320,21 @@ impl CodeGen {
                             &self.spill_register.into(),
                         );
 
-                        &EffectiveAddress::from(self.spill_register)
+                        EffectiveAddress::from(self.spill_register)
                     }
                     Location::Address {
                         effective_address, ..
                     } => effective_address,
-                    Location::Register(r) => &EffectiveAddress::from(*r),
+                    Location::Register(r) => EffectiveAddress::from(r),
                 };
 
-                let place = Place::Register(*out);
-                let size = Abi::ty_size(&self.variables[&place].ty);
+                let size = Abi::ty_size(&self.locals[out].ty);
 
-                match &self.variables[&place].location {
+                match Operand::Local(*out).get_location(self).unwrap() {
                     Location::Register(r) => {
                         let operand_size = size.try_into().unwrap();
 
-                        self.mov(&src.src(operand_size), &(*r).resize(operand_size).into());
+                        self.mov(&src.src(operand_size), &r.resize(operand_size).into());
                     }
                     Location::Address {
                         effective_address, ..
@@ -358,13 +344,13 @@ impl CodeGen {
                 }
             }
             Instruction::GetElementPtr {
-                ty,
-                base,
+                ptr,
+                ptr_ty,
                 indices,
                 out,
             } => match indices.as_slice() {
                 [operand, rest @ ..] => {
-                    let mut base = match self.variables[base].location.clone() {
+                    let mut base = match ptr.get_location(self).unwrap() {
                         Location::Address {
                             effective_address, ..
                         } => effective_address,
@@ -372,12 +358,13 @@ impl CodeGen {
                     };
                     let index = match operand {
                         Operand::Const(c) => c.usize_unchecked(),
-                        Operand::Place(_) => unreachable!(),
+                        Operand::Local(_) => unreachable!(),
+                        Operand::Global(_) => unreachable!(),
                     };
 
-                    base = base + Offset((Abi::ty_size(ty) * index) as isize);
+                    base = base + Offset((Abi::ty_size(ptr_ty) * index) as isize);
 
-                    self.get_element_ptr(ty, &base, rest, *out);
+                    self.get_element_ptr(ptr_ty, &base, rest, *out);
                 }
                 [] => (),
             },
@@ -400,11 +387,7 @@ impl CodeGen {
 
     fn function(&mut self, function: Function) {
         let mut allocator = Allocator::new(
-            function
-                .registers
-                .iter()
-                .map(|reg| reg.ty.clone())
-                .collect(),
+            function.locals.clone(),
             function.interference(),
             vec![
                 Register::R15,
@@ -428,20 +411,12 @@ impl CodeGen {
         let ret_label = format!(".L{}_ret", &function.name);
         let (locations, mut stack_frame_size) = allocator.allocate();
         stack_frame_size = stack_frame_size.next_multiple_of(16);
-        self.variables.extend(
+        self.locals.extend(
             locations
                 .into_iter()
-                .zip(function.registers)
+                .zip(function.locals)
                 .enumerate()
-                .map(|(i, (location, vreg))| {
-                    (
-                        Place::Register(i),
-                        Variable {
-                            ty: vreg.ty,
-                            location,
-                        },
-                    )
-                }),
+                .map(|(i, (location, ty))| (i, Variable { ty, location })),
         );
         self.text
             .push_str(&format!(".global {0}\n{0}:\n", &function.name));
@@ -469,7 +444,7 @@ impl CodeGen {
             self.text.push_str("\tleave\n");
         }
         self.text.push_str("\tret\n");
-        self.variables
+        self.locals
             .retain(|_, variable| matches!(variable.location, Location::Address { .. }));
     }
 
@@ -478,14 +453,12 @@ impl CodeGen {
         ty: &Ty,
         base: &EffectiveAddress,
         indices: &[Operand],
-        out: RegisterId,
+        out: LocalIdx,
     ) {
         match indices {
             [] => {
                 self.lea(
-                    &self.variables[&Place::Register(out)]
-                        .location
-                        .to_dest(OperandSize::Qword),
+                    &self.locals[&out].location.to_dest(OperandSize::Qword),
                     base,
                 );
             }
@@ -494,7 +467,8 @@ impl CodeGen {
                     Ty::Struct(fields) => {
                         let index = match operand {
                             Operand::Const(c) => c.usize_unchecked(),
-                            Operand::Place(_) => unreachable!(),
+                            Operand::Global(_) => unreachable!(),
+                            Operand::Local(_) => unreachable!(),
                         };
                         let base = base.clone() + Offset(Abi::field_offset(fields, index) as isize);
 
@@ -508,10 +482,29 @@ impl CodeGen {
         }
     }
 
-    pub fn compile(mut self, mut program: Module) -> Vec<u8> {
-        Self::canonicalize(&mut program);
+    pub fn compile(mut self, mut module: Module) -> Vec<u8> {
+        Self::canonicalize(&mut module);
 
-        for function in program.functions {
+        self.globals = module
+            .globals
+            .iter()
+            .map(|global| {
+                (
+                    Rc::clone(global),
+                    Location::Address {
+                        effective_address: EffectiveAddress {
+                            base: Base::Label(global.name.clone()),
+                            index: None,
+                            scale: None,
+                            displacement: None,
+                        },
+                        spilled: false,
+                    },
+                )
+            })
+            .collect();
+
+        for function in module.functions {
             self.function(function)
         }
 
@@ -545,8 +538,8 @@ impl CodeGen {
 
     fn copy(&mut self, src: &Operand, dest: &Location, ty: &Ty) -> Result<(), InvalidOperandSize> {
         match src {
-            Operand::Place(place) => {
-                self.mov_location(&self.variables[place].location.clone(), dest, ty)?
+            Operand::Global(_) | Operand::Local(_) => {
+                self.mov_location(&src.get_location(self).unwrap(), dest, ty)?
             }
             Operand::Const(c) => self.mov_const(dest, c, ty)?,
         };
@@ -782,5 +775,26 @@ mod tests {
         }
 
         Ok(())
+    }
+}
+
+trait LocationStorage {
+    fn get_global(&self, global: &Global) -> Location;
+    fn get_local(&self, idx: LocalIdx) -> Location;
+}
+
+impl LocationStorage for CodeGen {
+    fn get_local(&self, idx: LocalIdx) -> Location {
+        self.locals[&idx].location.clone()
+    }
+
+    fn get_global(&self, global: &Global) -> Location {
+        self.globals[global].clone()
+    }
+}
+
+impl LocalStorage for CodeGen {
+    fn get_local_ty(&self, idx: LocalIdx) -> &Ty {
+        &self.locals[&idx].ty
     }
 }

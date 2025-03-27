@@ -1,23 +1,48 @@
-use super::{BasicBlock, Register, RegisterId, Terminator, Ty};
+use super::{BasicBlock, BlockIdx, Builder, LocalIdx, Terminator, Ty};
 use std::collections::{HashMap, HashSet};
+
+pub type FunctionIdx = usize;
 
 #[derive(Debug)]
 struct DefUseBlock {
-    defs: HashSet<RegisterId>,
-    uses: HashSet<RegisterId>,
+    defs: HashSet<LocalIdx>,
+    uses: HashSet<LocalIdx>,
     next: HashSet<usize>,
 }
 
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
-    pub params: Vec<RegisterId>,
     pub ret_ty: Ty,
+    pub params_count: usize,
     pub blocks: Vec<BasicBlock>,
-    pub registers: Vec<Register>,
+    pub locals: Vec<Ty>,
 }
 
 impl Function {
+    pub fn param(&self, idx: usize) -> &Ty {
+        assert!(idx <= self.params_count, "invalid param index");
+        &self.locals[idx]
+    }
+
+    pub fn create_block(&mut self, name: String, terminator: Terminator) -> BlockIdx {
+        let idx = self.blocks.len();
+        self.blocks.push(BasicBlock {
+            name,
+            instructions: Vec::new(),
+            terminator,
+        });
+
+        idx
+    }
+
+    pub fn get_block_builder(&mut self, idx: BlockIdx) -> Builder {
+        Builder {
+            fn_locals: &mut self.locals,
+            block: &mut self.blocks[idx],
+        }
+    }
+
     fn defs_uses(&self) -> Vec<DefUseBlock> {
         let mut basic_block_to_def_use_block = HashMap::new();
         let mut blocks = Vec::new();
@@ -60,7 +85,7 @@ impl Function {
         blocks
     }
 
-    fn liveness(&self) -> Vec<(HashSet<RegisterId>, HashSet<RegisterId>)> {
+    fn liveness(&self) -> Vec<(HashSet<LocalIdx>, HashSet<LocalIdx>)> {
         let defs_uses = self.defs_uses();
         let mut liveness: Vec<_> = defs_uses
             .iter()
@@ -101,7 +126,7 @@ impl Function {
         liveness
     }
 
-    pub fn interference(&self) -> HashSet<(RegisterId, RegisterId)> {
+    pub fn interference(&self) -> HashSet<(LocalIdx, LocalIdx)> {
         let mut edges = HashSet::new();
         let liveness = self.liveness();
 

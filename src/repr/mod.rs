@@ -1,17 +1,20 @@
+mod basic_block;
 mod function;
+mod module;
 pub mod op;
 pub mod ty;
 
+pub use basic_block::{BasicBlock, Builder};
 pub use function::Function;
+pub use module::Module;
 use op::BinOp;
-use std::collections::HashSet;
+use std::{collections::HashSet, rc::Rc};
 use ty::Ty;
 
-pub type RegisterId = usize;
-pub type GlobalId = usize;
-pub type BlockId = usize;
+pub type LocalIdx = usize;
+pub type BlockIdx = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Const {
     I8(i8),
     U8(u8),
@@ -52,39 +55,30 @@ impl Const {
 
 #[derive(Debug)]
 pub enum Operand {
-    Place(Place),
+    Global(Rc<Global>),
+    Local(LocalIdx),
     Const(Const),
 }
 
 impl Operand {
-    pub fn register_id(&self) -> Option<RegisterId> {
+    pub fn local_idx(&self) -> Option<LocalIdx> {
         match self {
-            Self::Place(place) => place.register_id(),
-            Self::Const(_) => None,
+            Self::Local(local_idx) => Some(*local_idx),
+            Self::Global(_) | Self::Const(_) => None,
+        }
+    }
+
+    pub fn ty<T: LocalStorage>(&self, storage: &T) -> Ty {
+        match self {
+            Self::Global(global) => global.ty.clone(),
+            Self::Local(idx) => storage.get_local_ty(*idx).clone(),
+            Self::Const(c) => c.ty(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Place {
-    Register(RegisterId),
-    Global(GlobalId),
-}
-
-impl Place {
-    pub fn register_id(&self) -> Option<RegisterId> {
-        match self {
-            Self::Register(r) => Some(*r),
-            Self::Global(_) => None,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct BasicBlock {
-    pub name: String,
-    pub instructions: Vec<Instruction>,
-    pub terminator: Terminator,
+pub trait LocalStorage {
+    fn get_local_ty(&self, idx: LocalIdx) -> &Ty;
 }
 
 #[derive(Debug)]
@@ -93,42 +87,42 @@ pub enum Instruction {
         kind: BinOp,
         lhs: Operand,
         rhs: Operand,
-        out: RegisterId,
+        out: LocalIdx,
     },
     Sext {
         operand: Operand,
-        out: RegisterId,
+        out: LocalIdx,
     },
     Zext {
         operand: Operand,
-        out: RegisterId,
+        out: LocalIdx,
     },
     Copy {
         operand: Operand,
-        out: RegisterId,
+        out: LocalIdx,
     },
     Alloca {
         ty: Ty,
-        out: RegisterId,
+        out: LocalIdx,
     },
     Store {
-        place: Place,
+        ptr: Operand,
         value: Operand,
     },
     Load {
-        place: Place,
-        out: RegisterId,
+        ptr: Operand,
+        out: LocalIdx,
     },
     GetElementPtr {
-        ty: Ty,
-        base: Place,
+        ptr: Operand,
+        ptr_ty: Ty,
         indices: Vec<Operand>,
-        out: RegisterId,
+        out: LocalIdx,
     },
 }
 
 impl Instruction {
-    pub fn def(&self) -> Option<RegisterId> {
+    pub fn def(&self) -> Option<LocalIdx> {
         match self {
             Self::Binary { out, .. } => Some(*out),
             Self::Copy { out, .. } => Some(*out),
@@ -141,22 +135,19 @@ impl Instruction {
         }
     }
 
-    pub fn uses(&self) -> HashSet<RegisterId> {
+    pub fn uses(&self) -> HashSet<LocalIdx> {
         match self {
-            Self::Binary { lhs, rhs, .. } => vec![lhs.register_id(), rhs.register_id()],
-            Self::Copy { operand, .. } => vec![operand.register_id()],
-            Self::Sext { operand, .. } => vec![operand.register_id()],
-            Self::Zext { operand, .. } => vec![operand.register_id()],
+            Self::Binary { lhs, rhs, .. } => vec![lhs.local_idx(), rhs.local_idx()],
+            Self::Copy { operand, .. } => vec![operand.local_idx()],
+            Self::Sext { operand, .. } => vec![operand.local_idx()],
+            Self::Zext { operand, .. } => vec![operand.local_idx()],
             Self::Alloca { .. } => Vec::new(),
-            Self::Store { place, value } => vec![place.register_id(), value.register_id()],
-            Self::Load { place, .. } => vec![place.register_id()],
-            Self::GetElementPtr { indices, base, .. } => {
-                let mut uses: Vec<_> = indices
-                    .iter()
-                    .map(|operand| operand.register_id())
-                    .collect();
+            Self::Store { ptr, value } => vec![ptr.local_idx(), value.local_idx()],
+            Self::Load { ptr, .. } => vec![ptr.local_idx()],
+            Self::GetElementPtr { indices, ptr, .. } => {
+                let mut uses: Vec<_> = indices.iter().map(|operand| operand.local_idx()).collect();
 
-                uses.push(base.register_id());
+                uses.push(ptr.local_idx());
 
                 uses
             }
@@ -169,35 +160,22 @@ impl Instruction {
 
 #[derive(Debug)]
 pub enum Terminator {
-    Goto(BlockId),
+    Goto(BlockIdx),
     Return(Option<Operand>),
 }
 
 impl Terminator {
-    pub fn uses(&self) -> HashSet<RegisterId> {
+    pub fn uses(&self) -> HashSet<LocalIdx> {
         match self {
-            Self::Return(Some(Operand::Place(Place::Register(r)))) => HashSet::from([*r]),
+            Self::Return(Some(Operand::Local(idx))) => HashSet::from([*idx]),
             Self::Return(_) | Self::Goto(_) => HashSet::new(),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Global {
     pub name: String,
     pub ty: Ty,
     pub value: Const,
-}
-
-#[derive(Debug)]
-pub struct Register {
-    pub name: String,
-    pub ty: Ty,
-}
-
-#[derive(Debug)]
-pub struct Module {
-    pub globals: Vec<Global>,
-    pub functions: Vec<Function>,
-    //TODO: add aggregate types
 }

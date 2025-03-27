@@ -3,10 +3,10 @@ use super::{
     operands::{Base, Destination, EffectiveAddress, Memory, Offset, OperandSize, Source},
     register::Register,
 };
-use crate::repr::{RegisterId, ty::Ty};
+use crate::repr::{LocalIdx, ty::Ty};
 use std::collections::{HashMap, HashSet};
 
-type Edges = HashSet<(RegisterId, RegisterId)>;
+type Edges = HashSet<(LocalIdx, LocalIdx)>;
 
 #[derive(Debug, Clone)]
 pub enum Location {
@@ -51,10 +51,10 @@ impl From<Register> for Location {
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {
-    nodes: HashMap<RegisterId, Ty>,
+    nodes: HashMap<LocalIdx, Ty>,
     edges: Edges,
     registers: Vec<Register>,
-    locations: HashMap<RegisterId, Location>,
+    locations: HashMap<LocalIdx, Location>,
     pub stack_frame_size: usize,
     spill_mode: bool,
 }
@@ -75,7 +75,7 @@ impl Allocator {
         }
     }
 
-    fn remove_node(&mut self, node: &RegisterId) -> (Ty, HashSet<(RegisterId, RegisterId)>) {
+    fn remove_node(&mut self, node: &LocalIdx) -> (Ty, Edges) {
         let edges: HashSet<_> = self
             .edges
             .iter()
@@ -89,12 +89,12 @@ impl Allocator {
         (ty, edges)
     }
 
-    fn add_node(&mut self, node: RegisterId, ty: Ty, edges: HashSet<(RegisterId, RegisterId)>) {
+    fn add_node(&mut self, node: LocalIdx, ty: Ty, edges: Edges) {
         self.nodes.insert(node, ty);
         self.edges.extend(edges.into_iter());
     }
 
-    fn neighbors(&self, node: &RegisterId) -> Vec<&RegisterId> {
+    fn neighbors(&self, node: &LocalIdx) -> Vec<&LocalIdx> {
         self.edges
             .iter()
             .filter(|(lhs, rhs)| lhs == node || rhs == node)
@@ -102,7 +102,7 @@ impl Allocator {
             .collect()
     }
 
-    fn min(&self) -> Option<RegisterId> {
+    fn min(&self) -> Option<LocalIdx> {
         self.nodes
             .iter()
             // ignore precolored nodes
@@ -112,7 +112,7 @@ impl Allocator {
             .map(|(node, _)| node)
     }
 
-    fn max(&self) -> Option<RegisterId> {
+    fn max(&self) -> Option<LocalIdx> {
         self.nodes
             .iter()
             // ignore precolored nodes
@@ -122,7 +122,7 @@ impl Allocator {
             .map(|(node, _)| node)
     }
 
-    fn unique_register(&self, neighbors: &[&RegisterId]) -> Option<Register> {
+    fn unique_register(&self, neighbors: &[&LocalIdx]) -> Option<Register> {
         for reg in &self.registers {
             let mut found = true;
             for neighbor in neighbors {
@@ -143,17 +143,17 @@ impl Allocator {
         None
     }
 
-    pub fn precolor(&mut self, node: RegisterId, location: Location) {
+    pub fn precolor(&mut self, node: LocalIdx, location: Location) {
         self.locations.insert(node, location);
     }
 
-    pub fn add_edge(&mut self, edge: (RegisterId, RegisterId)) {
+    pub fn add_edge(&mut self, edge: (LocalIdx, LocalIdx)) {
         if !(self.edges.contains(&edge) || self.edges.contains(&(edge.1, edge.0))) {
             self.edges.insert(edge);
         }
     }
 
-    pub fn create_node(&mut self, ty: Ty) -> RegisterId {
+    pub fn create_node(&mut self, ty: Ty) -> LocalIdx {
         let node = self.nodes.len();
         self.nodes.insert(node, ty);
 
@@ -164,7 +164,7 @@ impl Allocator {
         let locations = self.locations.clone();
         let nodes = self.nodes.clone();
         let edges = self.edges.clone();
-        let mut stack: Vec<(RegisterId, Ty, Edges)> = Vec::new();
+        let mut stack: Vec<(LocalIdx, Ty, Edges)> = Vec::new();
         let mut redo = false;
 
         while self.min().is_some() {
