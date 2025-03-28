@@ -25,13 +25,9 @@ impl Function {
         self.locals[idx]
     }
 
-    pub fn create_block(&mut self, name: String, terminator: Terminator) -> BlockIdx {
+    pub fn create_block(&mut self, name: String) -> BlockIdx {
         let idx = self.blocks.len();
-        self.blocks.push(BasicBlock {
-            name,
-            instructions: Vec::new(),
-            terminator,
-        });
+        self.blocks.push(BasicBlock::new(name));
 
         idx
     }

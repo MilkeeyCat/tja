@@ -4,11 +4,23 @@ use super::{
     ty::{self, TyIdx},
 };
 
+pub type BlockIdx = usize;
+
 #[derive(Debug)]
 pub struct BasicBlock {
     pub name: String,
     pub instructions: Vec<Instruction>,
     pub terminator: Terminator,
+}
+
+impl BasicBlock {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            instructions: Vec::new(),
+            terminator: Terminator::Return(None),
+        }
+    }
 }
 
 pub struct Wrapper<'ctx> {
@@ -18,6 +30,14 @@ pub struct Wrapper<'ctx> {
 }
 
 impl<'ctx> Wrapper<'ctx> {
+    pub fn create_jmp(&mut self, idx: BlockIdx) {
+        self.block.terminator = Terminator::Goto(idx);
+    }
+
+    pub fn create_ret(&mut self, value: Option<Operand>) {
+        self.block.terminator = Terminator::Return(value);
+    }
+
     pub fn create_bin(&mut self, lhs: Operand, rhs: Operand, kind: BinOp) -> Operand {
         assert!(lhs.ty(self) == rhs.ty(self));
         let idx = self.create_local(lhs.ty(self));

@@ -4,7 +4,7 @@ mod module;
 pub mod op;
 pub mod ty;
 
-pub use basic_block::BasicBlock;
+pub use basic_block::{BasicBlock, BlockIdx};
 pub use function::{Function, FunctionIdx};
 pub use module::Module;
 use module::ModuleIdx;
@@ -17,7 +17,6 @@ use std::{
 use ty::TyIdx;
 
 pub type LocalIdx = usize;
-pub type BlockIdx = usize;
 pub type InstructionIdx = usize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
