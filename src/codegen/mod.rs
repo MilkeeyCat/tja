@@ -808,7 +808,7 @@ mod tests {
             ),
         ];
 
-        let module_idx = ctx.create_module();
+        let module_idx = ctx.create_module("test".into());
 
         for ((src, dest, ty), expected) in cases {
             let mut codegen = CodeGen::new(ctx.get_module(module_idx));

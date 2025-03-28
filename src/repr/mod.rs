@@ -189,9 +189,9 @@ impl Context {
         }
     }
 
-    pub fn create_module(&mut self) -> ModuleIdx {
+    pub fn create_module(&mut self, name: String) -> ModuleIdx {
         let idx = self.modules.len();
-        self.modules.push(Module::new());
+        self.modules.push(Module::new(name));
 
         idx
     }

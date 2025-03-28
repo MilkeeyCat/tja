@@ -5,14 +5,15 @@ pub type ModuleIdx = usize;
 
 #[derive(Debug)]
 pub struct Module {
+    pub name: String,
     pub globals: Vec<Rc<Global>>,
     pub functions: Vec<Function>,
-    //TODO: add aggregate types
 }
 
 impl Module {
-    pub fn new() -> Self {
+    pub fn new(name: String) -> Self {
         Self {
+            name,
             globals: Vec::new(),
             functions: Vec::new(),
         }

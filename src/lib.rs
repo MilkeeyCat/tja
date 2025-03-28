@@ -11,8 +11,6 @@ use std::{
 };
 
 pub struct CompileArgs {
-    /// Output binary file name
-    pub output: Option<PathBuf>,
     /// Produce assembly output
     pub assembly_only: bool,
     /// Compile and assemble but do not link
@@ -21,13 +19,11 @@ pub struct CompileArgs {
 }
 
 pub fn compile(module: Wrapper<'_, &mut Module>, args: CompileArgs) -> std::io::Result<()> {
+    let name = module.name.clone();
     let code = CodeGen::new(module).compile();
 
     if args.assembly_only {
-        let asm_filename = args
-            .output
-            .unwrap_or_else(|| "main".into())
-            .with_extension("s");
+        let asm_filename = PathBuf::from(&name).with_extension("s");
         let mut file = File::create(&asm_filename)?;
 
         file.write_all(&code)?;
@@ -35,11 +31,7 @@ pub fn compile(module: Wrapper<'_, &mut Module>, args: CompileArgs) -> std::io::
         return Ok(());
     }
 
-    let obj_filename = args
-        .output
-        .clone()
-        .unwrap_or_else(|| "main".into())
-        .with_extension("o");
+    let obj_filename = PathBuf::from(&name).with_extension("o");
 
     assemble(&code, &obj_filename)?;
 
@@ -47,9 +39,7 @@ pub fn compile(module: Wrapper<'_, &mut Module>, args: CompileArgs) -> std::io::
         return Ok(());
     }
 
-    let binary_filename = args.output.unwrap_or_else(|| "a.out".into());
-
-    link(&obj_filename, &binary_filename, args.shared)?;
+    link(&obj_filename, Path::new(&name), args.shared)?;
     std::fs::remove_file(&obj_filename)?;
 
     Ok(())
