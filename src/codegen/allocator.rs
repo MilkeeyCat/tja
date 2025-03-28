@@ -3,7 +3,10 @@ use super::{
     operands::{Base, Destination, EffectiveAddress, Memory, Offset, OperandSize, Source},
     register::Register,
 };
-use crate::repr::{LocalIdx, ty::Ty};
+use crate::repr::{
+    LocalIdx,
+    ty::{self, Ty, TyIdx},
+};
 use std::collections::{HashMap, HashSet};
 
 type Edges = HashSet<(LocalIdx, LocalIdx)>;
@@ -51,7 +54,7 @@ impl From<Register> for Location {
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {
-    nodes: HashMap<LocalIdx, Ty>,
+    nodes: HashMap<LocalIdx, TyIdx>,
     edges: Edges,
     registers: Vec<Register>,
     locations: HashMap<LocalIdx, Location>,
@@ -60,7 +63,12 @@ pub struct Allocator {
 }
 
 impl Allocator {
-    pub fn new(types: Vec<Ty>, edges: Edges, registers: Vec<Register>, spill_mode: bool) -> Self {
+    pub fn new(
+        types: Vec<TyIdx>,
+        edges: Edges,
+        registers: Vec<Register>,
+        spill_mode: bool,
+    ) -> Self {
         Self {
             nodes: types
                 .into_iter()
@@ -75,7 +83,7 @@ impl Allocator {
         }
     }
 
-    fn remove_node(&mut self, node: &LocalIdx) -> (Ty, Edges) {
+    fn remove_node(&mut self, node: &LocalIdx) -> (TyIdx, Edges) {
         let edges: HashSet<_> = self
             .edges
             .iter()
@@ -89,7 +97,7 @@ impl Allocator {
         (ty, edges)
     }
 
-    fn add_node(&mut self, node: LocalIdx, ty: Ty, edges: Edges) {
+    fn add_node(&mut self, node: LocalIdx, ty: TyIdx, edges: Edges) {
         self.nodes.insert(node, ty);
         self.edges.extend(edges.into_iter());
     }
@@ -153,18 +161,18 @@ impl Allocator {
         }
     }
 
-    pub fn create_node(&mut self, ty: Ty) -> LocalIdx {
+    pub fn create_node(&mut self, ty: TyIdx) -> LocalIdx {
         let node = self.nodes.len();
         self.nodes.insert(node, ty);
 
         node
     }
 
-    pub fn allocate(mut self) -> (Vec<Location>, usize) {
+    pub fn allocate(mut self, storage: &ty::Storage) -> (Vec<Location>, usize) {
         let locations = self.locations.clone();
         let nodes = self.nodes.clone();
         let edges = self.edges.clone();
-        let mut stack: Vec<(LocalIdx, Ty, Edges)> = Vec::new();
+        let mut stack: Vec<(LocalIdx, TyIdx, Edges)> = Vec::new();
         let mut redo = false;
 
         while self.min().is_some() {
@@ -180,8 +188,8 @@ impl Allocator {
         }
 
         for (node, ty, edges) in stack.into_iter().rev() {
-            let ty_size = Abi::ty_size(&ty);
-            let force_stack = matches!(ty, Ty::Struct(..));
+            let ty_size = Abi::ty_size(storage, ty);
+            let force_stack = matches!(storage.get_ty(ty), Ty::Struct(..));
             self.add_node(node, ty, edges);
 
             if self.unique_register(&self.neighbors(&node)).is_some() && !force_stack {
@@ -217,7 +225,7 @@ impl Allocator {
             self.nodes = nodes;
             self.edges = edges;
 
-            self.allocate()
+            self.allocate(storage)
         } else {
             let mut operands: Vec<_> = self.locations.into_iter().collect();
             operands.sort_by(|(a, _), (b, _)| a.cmp(&b));

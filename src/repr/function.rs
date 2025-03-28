@@ -1,4 +1,4 @@
-use super::{BasicBlock, BlockIdx, Builder, LocalIdx, Terminator, Ty};
+use super::{BasicBlock, BlockIdx, LocalIdx, Terminator, Wrapper, basic_block, ty::TyIdx};
 use std::collections::{HashMap, HashSet};
 
 pub type FunctionIdx = usize;
@@ -13,16 +13,16 @@ struct DefUseBlock {
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
-    pub ret_ty: Ty,
+    pub ret_ty: TyIdx,
     pub params_count: usize,
     pub blocks: Vec<BasicBlock>,
-    pub locals: Vec<Ty>,
+    pub locals: Vec<TyIdx>,
 }
 
 impl Function {
-    pub fn param(&self, idx: usize) -> &Ty {
+    pub fn param(&self, idx: usize) -> TyIdx {
         assert!(idx <= self.params_count, "invalid param index");
-        &self.locals[idx]
+        self.locals[idx]
     }
 
     pub fn create_block(&mut self, name: String, terminator: Terminator) -> BlockIdx {
@@ -34,13 +34,6 @@ impl Function {
         });
 
         idx
-    }
-
-    pub fn get_block_builder(&mut self, idx: BlockIdx) -> Builder {
-        Builder {
-            fn_locals: &mut self.locals,
-            block: &mut self.blocks[idx],
-        }
     }
 
     fn defs_uses(&self) -> Vec<DefUseBlock> {
@@ -141,5 +134,15 @@ impl Function {
         }
 
         edges
+    }
+}
+
+impl Wrapper<'_, &mut Function> {
+    pub fn get_block(&mut self, idx: BlockIdx) -> basic_block::Wrapper {
+        basic_block::Wrapper {
+            ty_storage: self.ty_storage,
+            fn_locals: &mut self.inner.locals,
+            block: &mut self.inner.blocks[idx],
+        }
     }
 }

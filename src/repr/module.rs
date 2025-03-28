@@ -1,5 +1,7 @@
-use super::{Function, Global, function::FunctionIdx, ty::Ty};
+use super::{Function, Global, Wrapper, function::FunctionIdx, ty::TyIdx};
 use std::rc::Rc;
+
+pub type ModuleIdx = usize;
 
 #[derive(Debug)]
 pub struct Module {
@@ -16,7 +18,7 @@ impl Module {
         }
     }
 
-    pub fn create_fn(&mut self, name: String, params: Vec<Ty>, ret_ty: Ty) -> FunctionIdx {
+    pub fn create_fn(&mut self, name: String, params: Vec<TyIdx>, ret_ty: TyIdx) -> FunctionIdx {
         let idx = self.functions.len();
         self.functions.push(Function {
             name,
@@ -28,12 +30,13 @@ impl Module {
 
         idx
     }
+}
 
-    pub fn get_fn(&self, idx: FunctionIdx) -> &Function {
-        &self.functions[idx]
-    }
-
-    pub fn get_fn_mut(&mut self, idx: FunctionIdx) -> &mut Function {
-        &mut self.functions[idx]
+impl Wrapper<'_, &mut Module> {
+    pub fn get_fn(&mut self, idx: FunctionIdx) -> Wrapper<&mut Function> {
+        Wrapper {
+            ty_storage: self.ty_storage,
+            inner: &mut self.inner.functions[idx],
+        }
     }
 }

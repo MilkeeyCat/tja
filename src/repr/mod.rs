@@ -4,15 +4,21 @@ mod module;
 pub mod op;
 pub mod ty;
 
-pub use basic_block::{BasicBlock, Builder};
-pub use function::Function;
+pub use basic_block::BasicBlock;
+pub use function::{Function, FunctionIdx};
 pub use module::Module;
+use module::ModuleIdx;
 use op::BinOp;
-use std::{collections::HashSet, rc::Rc};
-use ty::Ty;
+use std::{
+    collections::HashSet,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
+use ty::TyIdx;
 
 pub type LocalIdx = usize;
 pub type BlockIdx = usize;
+pub type InstructionIdx = usize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Const {
@@ -28,16 +34,6 @@ pub enum Const {
 }
 
 impl Const {
-    pub fn ty(&self) -> Ty {
-        match self {
-            Self::I8(_) | Self::U8(_) => Ty::I8,
-            Self::I16(_) | Self::U16(_) => Ty::I16,
-            Self::I32(_) | Self::U32(_) => Ty::I32,
-            Self::I64(_) | Self::U64(_) => Ty::I64,
-            Self::Aggregate(values) => Ty::Struct(values.iter().map(|c| c.ty()).collect()),
-        }
-    }
-
     pub fn usize_unchecked(&self) -> usize {
         match self {
             Self::I8(value) => (*value).try_into().unwrap(),
@@ -53,35 +49,35 @@ impl Const {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operand {
     Global(Rc<Global>),
     Local(LocalIdx),
-    Const(Const),
+    Const(Const, TyIdx),
 }
 
 impl Operand {
     pub fn local_idx(&self) -> Option<LocalIdx> {
         match self {
             Self::Local(local_idx) => Some(*local_idx),
-            Self::Global(_) | Self::Const(_) => None,
+            Self::Global(_) | Self::Const(_, _) => None,
         }
     }
 
-    pub fn ty<T: LocalStorage>(&self, storage: &T) -> Ty {
+    pub fn ty<T: LocalStorage>(&self, storage: &T) -> TyIdx {
         match self {
-            Self::Global(global) => global.ty.clone(),
-            Self::Local(idx) => storage.get_local_ty(*idx).clone(),
-            Self::Const(c) => c.ty(),
+            Self::Global(global) => global.ty,
+            Self::Local(idx) => storage.get_local_ty(*idx),
+            Self::Const(_, ty) => *ty,
         }
     }
 }
 
 pub trait LocalStorage {
-    fn get_local_ty(&self, idx: LocalIdx) -> &Ty;
+    fn get_local_ty(&self, idx: LocalIdx) -> TyIdx;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Binary {
         kind: BinOp,
@@ -102,7 +98,7 @@ pub enum Instruction {
         out: LocalIdx,
     },
     Alloca {
-        ty: Ty,
+        ty: TyIdx,
         out: LocalIdx,
     },
     Store {
@@ -115,7 +111,7 @@ pub enum Instruction {
     },
     GetElementPtr {
         ptr: Operand,
-        ptr_ty: Ty,
+        ptr_ty: TyIdx,
         indices: Vec<Operand>,
         out: LocalIdx,
     },
@@ -176,6 +172,55 @@ impl Terminator {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Global {
     pub name: String,
-    pub ty: Ty,
+    pub ty: TyIdx,
     pub value: Const,
+}
+
+pub struct Context {
+    pub ty_storage: ty::Storage,
+    modules: Vec<Module>,
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Self {
+            ty_storage: ty::Storage::new(),
+            modules: Vec::new(),
+        }
+    }
+
+    pub fn create_module(&mut self) -> ModuleIdx {
+        let idx = self.modules.len();
+        self.modules.push(Module::new());
+
+        idx
+    }
+
+    pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<&mut Module> {
+        Wrapper {
+            ty_storage: &mut self.ty_storage,
+            inner: &mut self.modules[idx],
+        }
+    }
+}
+
+/// [`Wrapper`] struct is used to wrap [`Module`], [`Function`] to have access
+/// to [`Context::ty_storage`]
+pub struct Wrapper<'ctx, T> {
+    pub ty_storage: &'ctx mut ty::Storage,
+    inner: T,
+}
+
+impl<T> Deref for Wrapper<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T> DerefMut for Wrapper<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
 }

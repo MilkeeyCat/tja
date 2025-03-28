@@ -4,8 +4,10 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    BasicBlock, Const, Function, Global, Instruction, LocalIdx, LocalStorage, Module, Operand,
-    Terminator, op::BinOp, ty::Ty,
+    BlockIdx, Const, FunctionIdx, Global, Instruction, InstructionIdx, LocalIdx, LocalStorage,
+    Module, Operand, Terminator, Wrapper,
+    op::BinOp,
+    ty::{Ty, TyIdx},
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
@@ -20,7 +22,7 @@ impl Operand {
         match self {
             Self::Global(global) => Some(storage.get_global(global)),
             Self::Local(idx) => Some(storage.get_local(*idx)),
-            Self::Const(_) => None,
+            Self::Const(_, _) => None,
         }
     }
 
@@ -28,7 +30,7 @@ impl Operand {
         match self {
             Self::Global(global) => storage.get_global(&global).to_source(size),
             Self::Local(idx) => storage.get_local(*idx).to_source(size),
-            Self::Const(c) => c.clone().into(),
+            Self::Const(c, _) => c.clone().into(),
         }
     }
 
@@ -36,18 +38,19 @@ impl Operand {
         match self {
             Self::Global(global) => storage.get_global(&global).to_dest(size),
             Self::Local(idx) => storage.get_local(*idx).to_dest(size),
-            Self::Const(_) => unreachable!("can't turn const into Destination"),
+            Self::Const(_, _) => unreachable!("can't turn const into Destination"),
         }
     }
 }
 
 #[derive(Debug)]
 struct Variable {
-    ty: Ty,
+    ty: TyIdx,
     location: Location,
 }
 
-pub struct CodeGen {
+pub struct CodeGen<'ctx> {
+    module: Wrapper<'ctx, &'ctx mut Module>,
     locals: HashMap<LocalIdx, Variable>,
     globals: HashMap<Rc<Global>, Location>,
     spill_register: Register,
@@ -56,9 +59,10 @@ pub struct CodeGen {
     text: String,
 }
 
-impl CodeGen {
-    pub fn new() -> Self {
+impl<'ctx> CodeGen<'ctx> {
+    pub fn new(module: Wrapper<'ctx, &'ctx mut Module>) -> Self {
         Self {
+            module,
             locals: HashMap::new(),
             globals: HashMap::new(),
             spill_register: Register::R8,
@@ -68,8 +72,8 @@ impl CodeGen {
         }
     }
 
-    fn canonicalize(program: &mut Module) {
-        for function in &mut program.functions {
+    fn canonicalize(&mut self) {
+        for function in &mut self.module.functions {
             for block in &mut function.blocks {
                 let mut instructions = Vec::new();
 
@@ -122,8 +126,8 @@ impl CodeGen {
         }
     }
 
-    fn precolor(&self, allocator: &mut Allocator, function: &Function) {
-        for block in &function.blocks {
+    fn precolor(&self, allocator: &mut Allocator, idx: FunctionIdx) {
+        for block in &self.module.functions[idx].blocks {
             for instruction in &block.instructions {
                 match instruction {
                     Instruction::Binary {
@@ -140,8 +144,8 @@ impl CodeGen {
                             .collect();
 
                         if !indices.is_empty() {
-                            let ty = &function.locals[*out];
-                            let rdx = allocator.create_node(ty.clone());
+                            let ty = self.module.functions[idx].locals[*out];
+                            let rdx = allocator.create_node(ty);
                             allocator.precolor(rdx, Register::Rdx.into());
 
                             for idx in indices {
@@ -156,7 +160,7 @@ impl CodeGen {
                         ..
                     } => allocator.add_edge((*out, *rhs)),
                     Instruction::Alloca { ty, out } => {
-                        allocator.stack_frame_size += Abi::ty_size(ty);
+                        allocator.stack_frame_size += self.ty_size(*ty);
                         allocator.precolor(
                             *out,
                             Location::Address {
@@ -193,8 +197,8 @@ impl CodeGen {
         }
     }
 
-    fn instruction(&mut self, instruction: &Instruction) {
-        match instruction {
+    fn instruction(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx, instr_idx: InstructionIdx) {
+        match &self.module.functions[fn_idx].blocks[block_idx].instructions[instr_idx].clone() {
             Instruction::Binary {
                 kind,
                 lhs,
@@ -202,9 +206,9 @@ impl CodeGen {
                 out,
             } => {
                 let ty = &self.locals[out].ty;
-                let ty_size: OperandSize = Abi::ty_size(ty).try_into().unwrap();
+                let ty_size: OperandSize = self.ty_size(*ty).try_into().unwrap();
 
-                self.copy(lhs, &self.locals[out].location.clone(), &ty.clone())
+                self.copy(lhs, &self.locals[out].location.clone(), *ty)
                     .unwrap();
 
                 match kind {
@@ -282,7 +286,7 @@ impl CodeGen {
                 self.copy(
                     operand,
                     &self.locals[out].location.clone(),
-                    &self.locals[out].ty.clone(),
+                    self.locals[out].ty,
                 )
                 .unwrap();
             }
@@ -290,23 +294,23 @@ impl CodeGen {
                 let out = &self.locals[out];
 
                 self.sext(
-                    &operand.to_source(self, Abi::ty_size(&operand.ty(self)).try_into().unwrap()),
+                    &operand.to_source(self, self.ty_size(operand.ty(self)).try_into().unwrap()),
                     &out.location
-                        .to_dest(Abi::ty_size(&out.ty).try_into().unwrap()),
+                        .to_dest(self.ty_size(out.ty).try_into().unwrap()),
                 );
             }
             Instruction::Zext { operand, out } => {
                 let out = &self.locals[out];
 
                 self.zext(
-                    &operand.to_source(self, Abi::ty_size(&operand.ty(self)).try_into().unwrap()),
+                    &operand.to_source(self, self.ty_size(operand.ty(self)).try_into().unwrap()),
                     &out.location
-                        .to_dest(Abi::ty_size(&out.ty).try_into().unwrap()),
+                        .to_dest(self.ty_size(out.ty).try_into().unwrap()),
                 );
             }
             Instruction::Alloca { .. } => (),
             Instruction::Store { ptr, value } => {
-                self.copy(value, &ptr.get_location(self).unwrap(), &value.ty(self))
+                self.copy(value, &ptr.get_location(self).unwrap(), value.ty(self))
                     .unwrap();
             }
             Instruction::Load { ptr, out } => {
@@ -328,7 +332,7 @@ impl CodeGen {
                     Location::Register(r) => EffectiveAddress::from(r),
                 };
 
-                let size = Abi::ty_size(&self.locals[out].ty);
+                let size = self.ty_size(self.locals[out].ty);
 
                 match Operand::Local(*out).get_location(self).unwrap() {
                     Location::Register(r) => {
@@ -350,45 +354,41 @@ impl CodeGen {
                 out,
             } => match indices.as_slice() {
                 [operand, rest @ ..] => {
-                    let mut base = match ptr.get_location(self).unwrap() {
+                    let mut ptr = match ptr.get_location(self).unwrap() {
                         Location::Address {
                             effective_address, ..
                         } => effective_address,
                         Location::Register(_) => unreachable!(),
                     };
                     let index = match operand {
-                        Operand::Const(c) => c.usize_unchecked(),
+                        Operand::Const(c, _) => c.usize_unchecked(),
                         Operand::Local(_) => unreachable!(),
                         Operand::Global(_) => unreachable!(),
                     };
 
-                    base = base + Offset((Abi::ty_size(ptr_ty) * index) as isize);
+                    ptr = ptr + Offset((self.ty_size(*ptr_ty) * index) as isize);
 
-                    self.get_element_ptr(ptr_ty, &base, rest, *out);
+                    self.get_element_ptr(*ptr_ty, &ptr, rest, *out);
                 }
                 [] => (),
             },
         }
     }
 
-    fn terminator(
-        &mut self,
-        basic_blocks: &[BasicBlock],
-        terminator: &Terminator,
-        ret_label: &str,
-    ) {
-        match terminator {
-            Terminator::Goto(block_id) => self
-                .text
-                .push_str(&format!("\tjmp .L{}\n", basic_blocks[*block_id].name)),
+    fn terminator(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx, ret_label: &str) {
+        match &self.module.functions[fn_idx].blocks[block_idx].terminator {
+            Terminator::Goto(block_idx) => self.text.push_str(&format!(
+                "\tjmp .L{}\n",
+                self.module.functions[fn_idx].blocks[*block_idx].name
+            )),
             Terminator::Return(_) => self.text.push_str(&format!("\tjmp {ret_label}\n")),
         }
     }
 
-    fn function(&mut self, function: Function) {
+    fn function(&mut self, idx: FunctionIdx) {
         let mut allocator = Allocator::new(
-            function.locals.clone(),
-            function.interference(),
+            self.module.functions[idx].locals.clone(),
+            self.module.functions[idx].interference(),
             vec![
                 Register::R15,
                 Register::R14,
@@ -406,20 +406,22 @@ impl CodeGen {
             ],
             false,
         );
-        self.precolor(&mut allocator, &function);
+        self.precolor(&mut allocator, idx);
 
-        let ret_label = format!(".L{}_ret", &function.name);
-        let (locations, mut stack_frame_size) = allocator.allocate();
+        let ret_label = format!(".L{}_ret", &self.module.functions[idx].name);
+        let (locations, mut stack_frame_size) = allocator.allocate(self.module.ty_storage);
         stack_frame_size = stack_frame_size.next_multiple_of(16);
         self.locals.extend(
             locations
                 .into_iter()
-                .zip(function.locals)
+                .zip(&self.module.functions[idx].locals)
                 .enumerate()
-                .map(|(i, (location, ty))| (i, Variable { ty, location })),
+                .map(|(i, (location, ty))| (i, Variable { ty: *ty, location })),
         );
-        self.text
-            .push_str(&format!(".global {0}\n{0}:\n", &function.name));
+        self.text.push_str(&format!(
+            ".global {0}\n{0}:\n",
+            &self.module.functions[idx].name
+        ));
 
         if stack_frame_size > 0 {
             self.push(&Register::Rbp.into());
@@ -430,13 +432,15 @@ impl CodeGen {
             );
         }
 
-        for block in &function.blocks {
+        for block_idx in 0..self.module.functions[idx].blocks.len() {
+            let block = &self.module.functions[idx].blocks[block_idx];
             self.text.push_str(&format!(".L{}:\n", &block.name));
-            for instruction in &block.instructions {
-                self.instruction(instruction);
+
+            for instr_idx in 0..block.instructions.len() {
+                self.instruction(idx, block_idx, instr_idx);
             }
 
-            self.terminator(&function.blocks, &block.terminator, &ret_label);
+            self.terminator(idx, block_idx, &ret_label);
         }
 
         self.text.push_str(&format!("{ret_label}:\n"));
@@ -450,7 +454,7 @@ impl CodeGen {
 
     fn get_element_ptr(
         &mut self,
-        ty: &Ty,
+        ty: TyIdx,
         base: &EffectiveAddress,
         indices: &[Operand],
         out: LocalIdx,
@@ -463,29 +467,30 @@ impl CodeGen {
                 );
             }
             [operand, rest @ ..] => {
-                let (ty, base) = match ty {
+                let (ty, base) = match self.module.ty_storage.get_ty(ty) {
                     Ty::Struct(fields) => {
                         let index = match operand {
-                            Operand::Const(c) => c.usize_unchecked(),
+                            Operand::Const(c, _) => c.usize_unchecked(),
                             Operand::Global(_) => unreachable!(),
                             Operand::Local(_) => unreachable!(),
                         };
-                        let base = base.clone() + Offset(Abi::field_offset(fields, index) as isize);
+                        let base = base.clone() + Offset(self.field_offset(fields, index) as isize);
 
                         (&fields[index], base)
                     }
                     _ => unreachable!(),
                 };
 
-                self.get_element_ptr(ty, &base, rest, out);
+                self.get_element_ptr(*ty, &base, rest, out);
             }
         }
     }
 
-    pub fn compile(mut self, mut module: Module) -> Vec<u8> {
-        Self::canonicalize(&mut module);
+    pub fn compile(mut self) -> Vec<u8> {
+        self.canonicalize();
 
-        self.globals = module
+        self.globals = self
+            .module
             .globals
             .iter()
             .map(|global| {
@@ -504,8 +509,8 @@ impl CodeGen {
             })
             .collect();
 
-        for function in module.functions {
-            self.function(function)
+        for idx in 0..self.module.functions.len() {
+            self.function(idx);
         }
 
         let mut result = String::new();
@@ -536,12 +541,17 @@ impl CodeGen {
         self.text.push_str("\trep movsb\n");
     }
 
-    fn copy(&mut self, src: &Operand, dest: &Location, ty: &Ty) -> Result<(), InvalidOperandSize> {
+    fn copy(
+        &mut self,
+        src: &Operand,
+        dest: &Location,
+        ty: TyIdx,
+    ) -> Result<(), InvalidOperandSize> {
         match src {
             Operand::Global(_) | Operand::Local(_) => {
                 self.mov_location(&src.get_location(self).unwrap(), dest, ty)?
             }
-            Operand::Const(c) => self.mov_const(dest, c, ty)?,
+            Operand::Const(c, _) => self.mov_const(dest, c, ty)?,
         };
 
         Ok(())
@@ -551,10 +561,10 @@ impl CodeGen {
         &mut self,
         dest: &Location,
         src: &Const,
-        ty: &Ty,
+        ty: TyIdx,
     ) -> Result<(), InvalidOperandSize> {
         match src {
-            Const::Aggregate(values) => match ty {
+            Const::Aggregate(values) => match self.module.ty_storage.get_ty(ty) {
                 Ty::Struct(fields) => {
                     let addr = match dest {
                         Location::Address {
@@ -563,11 +573,15 @@ impl CodeGen {
                         Location::Register(_) => unreachable!(),
                     };
 
-                    for (i, (value, ty)) in values.iter().zip(fields).enumerate() {
-                        let offset = Offset(Abi::field_offset(fields, i) as isize);
+                    let offsets: Vec<_> = fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, ty)| (Offset(self.field_offset(fields, i) as isize), *ty))
+                        .collect();
 
+                    for (value, (offset, ty)) in values.iter().zip(offsets) {
                         self.copy(
-                            &Operand::Const(value.clone()),
+                            &Operand::Const(value.clone(), ty),
                             &Location::Address {
                                 effective_address: addr.clone() + offset,
                                 spilled: false,
@@ -580,7 +594,7 @@ impl CodeGen {
             },
             c => self.mov(
                 &c.clone().into(),
-                &dest.to_dest(Abi::ty_size(ty).try_into()?),
+                &dest.to_dest(self.ty_size(ty).try_into()?),
             ),
         };
 
@@ -591,7 +605,7 @@ impl CodeGen {
         &mut self,
         src: &Location,
         dest: &Location,
-        ty: &Ty,
+        ty: TyIdx,
     ) -> Result<(), InvalidOperandSize> {
         match (src, dest) {
             (
@@ -600,7 +614,7 @@ impl CodeGen {
                     spilled: false,
                 },
                 dest,
-            ) if ty == &Ty::Ptr => {
+            ) if ty == self.module.ty_storage.ptr_ty => {
                 self.lea(
                     &dest.to_dest(OperandSize::Qword),
                     &effective_address.clone(),
@@ -616,10 +630,10 @@ impl CodeGen {
                     ..
                 },
             ) => {
-                self.inline_memcpy(&src.clone(), &dest.clone(), Abi::ty_size(ty));
+                self.inline_memcpy(&src.clone(), &dest.clone(), self.ty_size(ty));
             }
             (lhs, rhs) => {
-                let size = Abi::ty_size(ty).try_into()?;
+                let size = self.ty_size(ty).try_into()?;
 
                 self.mov(&lhs.to_source(size), &rhs.to_dest(size));
             }
@@ -687,6 +701,21 @@ impl CodeGen {
     fn xor(&mut self, lhs: &Destination, rhs: &Source) {
         self.text.push_str(&format!("\txor {lhs}, {rhs}\n"));
     }
+
+    #[inline]
+    fn field_offset(&self, fields: &[TyIdx], i: usize) -> usize {
+        Abi::field_offset(self.module.ty_storage, fields, i)
+    }
+
+    #[inline]
+    fn ty_size(&self, ty: TyIdx) -> usize {
+        Abi::ty_size(self.module.ty_storage, ty)
+    }
+
+    #[inline]
+    pub fn alignment(&self, ty: TyIdx) -> usize {
+        Abi::alignment(self.module.ty_storage, ty)
+    }
 }
 
 #[cfg(test)]
@@ -697,16 +726,27 @@ mod tests {
         operands::{Base, EffectiveAddress, InvalidOperandSize, Offset},
         register::Register,
     };
-    use crate::repr::ty::Ty;
+    use crate::repr::{Context, ty::Ty};
 
     #[test]
     fn mov_location() -> Result<(), InvalidOperandSize> {
+        let mut ctx = Context::new();
+        let struct_ty = {
+            let ty = ctx.ty_storage.add_ty(Ty::Struct(vec![
+                ctx.ty_storage.i8_ty,
+                ctx.ty_storage.i32_ty,
+            ]));
+
+            ctx.ty_storage
+                .add_ty(Ty::Struct(vec![ctx.ty_storage.i8_ty, ty]))
+        };
+
         let cases = [
             (
                 (
                     &Location::Register(Register::Rdi),
                     &Location::Register(Register::Rsi),
-                    &Ty::I64,
+                    ctx.ty_storage.i64_ty,
                 ),
                 "\tmov rsi, rdi\n",
             ),
@@ -730,7 +770,7 @@ mod tests {
                         },
                         spilled: false,
                     },
-                    &Ty::Struct(vec![Ty::I8, Ty::Struct(vec![Ty::I8, Ty::I32])]),
+                    struct_ty,
                 ),
                 "\tmov rcx, 12\n\tlea rsi, [rbp - 12]\n\tlea rdi, [rbp - 24]\n\trep movsb\n",
             ),
@@ -746,7 +786,7 @@ mod tests {
                         spilled: false,
                     },
                     &Location::Register(Register::Rax),
-                    &Ty::Ptr,
+                    ctx.ty_storage.ptr_ty,
                 ),
                 "\tlea rax, [rbp - 6]\n",
             ),
@@ -762,14 +802,16 @@ mod tests {
                         spilled: true,
                     },
                     &Location::Register(Register::Rax),
-                    &Ty::Ptr,
+                    ctx.ty_storage.ptr_ty,
                 ),
                 "\tmov rax, qword ptr [rbp - 8]\n",
             ),
         ];
 
+        let module_idx = ctx.create_module();
+
         for ((src, dest, ty), expected) in cases {
-            let mut codegen = CodeGen::new();
+            let mut codegen = CodeGen::new(ctx.get_module(module_idx));
             codegen.mov_location(src, dest, ty)?;
             assert_eq!(codegen.text, expected);
         }
@@ -783,7 +825,7 @@ trait LocationStorage {
     fn get_local(&self, idx: LocalIdx) -> Location;
 }
 
-impl LocationStorage for CodeGen {
+impl LocationStorage for CodeGen<'_> {
     fn get_local(&self, idx: LocalIdx) -> Location {
         self.locals[&idx].location.clone()
     }
@@ -793,8 +835,8 @@ impl LocationStorage for CodeGen {
     }
 }
 
-impl LocalStorage for CodeGen {
-    fn get_local_ty(&self, idx: LocalIdx) -> &Ty {
-        &self.locals[&idx].ty
+impl LocalStorage for CodeGen<'_> {
+    fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
+        self.locals[&idx].ty
     }
 }

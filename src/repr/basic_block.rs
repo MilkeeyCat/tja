@@ -1,4 +1,8 @@
-use super::{Instruction, LocalIdx, LocalStorage, Operand, Terminator, op::BinOp, ty::Ty};
+use super::{
+    Instruction, LocalIdx, LocalStorage, Operand, Terminator,
+    op::BinOp,
+    ty::{self, TyIdx},
+};
 
 #[derive(Debug)]
 pub struct BasicBlock {
@@ -7,12 +11,13 @@ pub struct BasicBlock {
     pub terminator: Terminator,
 }
 
-pub struct Builder<'f> {
-    pub fn_locals: &'f mut Vec<Ty>,
-    pub block: &'f mut BasicBlock,
+pub struct Wrapper<'ctx> {
+    pub ty_storage: &'ctx mut ty::Storage,
+    pub fn_locals: &'ctx mut Vec<TyIdx>,
+    pub block: &'ctx mut BasicBlock,
 }
 
-impl<'f> Builder<'f> {
+impl<'ctx> Wrapper<'ctx> {
     pub fn create_bin(&mut self, lhs: Operand, rhs: Operand, kind: BinOp) -> Operand {
         assert!(lhs.ty(self) == rhs.ty(self));
         let idx = self.create_local(lhs.ty(self));
@@ -53,8 +58,8 @@ impl<'f> Builder<'f> {
         Operand::Local(idx)
     }
 
-    pub fn create_alloca(&mut self, ty: Ty) -> Operand {
-        let idx = self.create_local(ty.clone());
+    pub fn create_alloca(&mut self, ty: TyIdx) -> Operand {
+        let idx = self.create_local(ty);
         self.block
             .instructions
             .push(Instruction::Alloca { ty, out: idx });
@@ -68,7 +73,7 @@ impl<'f> Builder<'f> {
             .push(Instruction::Store { ptr, value });
     }
 
-    pub fn create_load(&mut self, ptr: Operand, ty: Ty) -> Operand {
+    pub fn create_load(&mut self, ptr: Operand, ty: TyIdx) -> Operand {
         let idx = self.create_local(ty);
         self.block
             .instructions
@@ -77,8 +82,8 @@ impl<'f> Builder<'f> {
         Operand::Local(idx)
     }
 
-    pub fn create_gep(&mut self, ptr_ty: Ty, ptr: Operand, indices: Vec<Operand>) -> Operand {
-        let idx = self.create_local(Ty::Ptr);
+    pub fn create_gep(&mut self, ptr_ty: TyIdx, ptr: Operand, indices: Vec<Operand>) -> Operand {
+        let idx = self.create_local(self.ty_storage.ptr_ty);
         self.block.instructions.push(Instruction::GetElementPtr {
             ptr_ty,
             ptr,
@@ -89,7 +94,7 @@ impl<'f> Builder<'f> {
         Operand::Local(idx)
     }
 
-    fn create_local(&mut self, ty: Ty) -> LocalIdx {
+    fn create_local(&mut self, ty: TyIdx) -> LocalIdx {
         let idx = self.fn_locals.len();
         self.fn_locals.push(ty);
 
@@ -97,8 +102,8 @@ impl<'f> Builder<'f> {
     }
 }
 
-impl LocalStorage for Builder<'_> {
-    fn get_local_ty(&self, idx: super::LocalIdx) -> &Ty {
-        &self.fn_locals[idx]
+impl LocalStorage for Wrapper<'_> {
+    fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
+        self.fn_locals[idx]
     }
 }

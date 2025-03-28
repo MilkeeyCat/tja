@@ -2,7 +2,7 @@ pub mod codegen;
 pub mod repr;
 
 use codegen::CodeGen;
-use repr::Module;
+use repr::{Module, Wrapper};
 use std::{
     fs::File,
     io::Write,
@@ -20,8 +20,8 @@ pub struct CompileArgs {
     pub shared: bool,
 }
 
-pub fn compile(program: Module, args: CompileArgs) -> std::io::Result<()> {
-    let code = CodeGen::new().compile(program);
+pub fn compile(module: Wrapper<'_, &mut Module>, args: CompileArgs) -> std::io::Result<()> {
+    let code = CodeGen::new(module).compile();
 
     if args.assembly_only {
         let asm_filename = args
