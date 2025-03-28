@@ -5,6 +5,7 @@ pub mod op;
 pub mod ty;
 
 pub use basic_block::{BasicBlock, BlockIdx};
+pub use derive_more::From;
 pub use function::{Function, FunctionIdx};
 pub use module::Module;
 use module::ModuleIdx;
@@ -19,7 +20,7 @@ use ty::TyIdx;
 pub type LocalIdx = usize;
 pub type InstructionIdx = usize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, From, PartialEq, Eq, Hash)]
 pub enum Const {
     I8(i8),
     U8(u8),
@@ -29,6 +30,7 @@ pub enum Const {
     U32(u32),
     I64(i64),
     U64(u64),
+    #[from(ignore)]
     Aggregate(Vec<Self>),
 }
 
@@ -55,6 +57,20 @@ pub enum Operand {
     Const(Const, TyIdx),
 }
 
+macro_rules! int_const_impl {
+    ($([$($ty: ident),+] => $field: ident),+) => {
+        $(
+            $(
+                paste::item! {
+                    pub fn [< const_ $ty >](value: $ty, storage: &ty::Storage) -> Self {
+                        Self::Const(Const::from(value), storage.[< $field _ty >])
+                    }
+                }
+            )+
+        )+
+    };
+}
+
 impl Operand {
     pub fn local_idx(&self) -> Option<LocalIdx> {
         match self {
@@ -69,6 +85,13 @@ impl Operand {
             Self::Local(idx) => storage.get_local_ty(*idx),
             Self::Const(_, ty) => *ty,
         }
+    }
+
+    int_const_impl! {
+        [u8, i8] => i8,
+        [u16, i16] => i16,
+        [u32, i32] => i32,
+        [u64, i64] => i64
     }
 }
 
