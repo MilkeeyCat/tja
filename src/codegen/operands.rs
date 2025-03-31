@@ -1,6 +1,8 @@
 use super::register::Register;
 use crate::repr::Const;
 use derive_more::Display;
+use impl_ops::{impl_op_ex, impl_op_ex_commutative};
+use std::ops;
 
 #[derive(Copy, Clone, Debug, Display, PartialEq, PartialOrd)]
 pub enum OperandSize {
@@ -34,37 +36,10 @@ impl TryFrom<usize> for OperandSize {
 #[derive(Debug, Clone, PartialEq, Default, Copy)]
 pub struct Offset(pub isize);
 
-impl std::ops::Add<isize> for &Offset {
-    type Output = Offset;
-
-    fn add(self, rhs: isize) -> Self::Output {
-        Offset(self.0 + rhs)
-    }
-}
-
-impl std::ops::Sub<isize> for &Offset {
-    type Output = Offset;
-
-    fn sub(self, rhs: isize) -> Self::Output {
-        Offset(self.0 - rhs)
-    }
-}
-
-impl std::ops::Add<&Offset> for &Offset {
-    type Output = Offset;
-
-    fn add(self, rhs: &Offset) -> Self::Output {
-        Offset(self.0 + rhs.0)
-    }
-}
-
-impl std::ops::Sub<&Offset> for &Offset {
-    type Output = Offset;
-
-    fn sub(self, rhs: &Offset) -> Self::Output {
-        Offset(self.0 - rhs.0)
-    }
-}
+impl_op_ex!(+ |lhs: &Offset, rhs: &Offset| -> Offset {Offset(lhs.0 + rhs.0)});
+impl_op_ex!(-|lhs: &Offset, rhs: &Offset| -> Offset { Offset(lhs.0 - rhs.0) });
+impl_op_ex_commutative!(+ |lhs: &Offset, rhs: &isize| -> Offset {Offset(lhs.0 + *rhs)});
+impl_op_ex!(-|lhs: &Offset, rhs: &isize| -> Offset { Offset(lhs.0 - *rhs) });
 
 impl std::fmt::Display for Offset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
