@@ -1,11 +1,16 @@
 use super::register::Register;
 use crate::repr::Const;
+use derive_more::Display;
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Display, PartialEq, PartialOrd)]
 pub enum OperandSize {
+    #[display("byte ptr")]
     Byte = 1,
+    #[display("word ptr")]
     Word = 2,
+    #[display("dword ptr")]
     Dword = 4,
+    #[display("qword ptr")]
     Qword = 8,
 }
 
@@ -23,21 +28,6 @@ impl TryFrom<usize> for OperandSize {
             8 => Self::Qword,
             _ => return Err(InvalidOperandSize),
         })
-    }
-}
-
-impl std::fmt::Display for OperandSize {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Byte => "byte ptr",
-                Self::Word => "word ptr",
-                Self::Dword => "dword ptr",
-                Self::Qword => "qword ptr",
-            }
-        )
     }
 }
 
@@ -88,19 +78,10 @@ impl std::fmt::Display for Offset {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Display, PartialEq)]
 pub enum Base {
     Register(Register),
     Label(String),
-}
-
-impl std::fmt::Display for Base {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Register(r) => r.fmt(f),
-            Self::Label(label) => label.fmt(f),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -194,24 +175,14 @@ impl std::fmt::Display for Memory {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum Immediate {
     Int(i64),
     Uint(u64),
     Label(String),
 }
 
-impl std::fmt::Display for Immediate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Int(int) => int.fmt(f),
-            Self::Uint(uint) => uint.fmt(f),
-            Self::Label(label) => label.fmt(f),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum Source {
     Memory(Memory),
     Register(Register),
@@ -258,16 +229,6 @@ impl From<Const> for Source {
     }
 }
 
-impl std::fmt::Display for Source {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Memory(mem) => mem.fmt(f),
-            Self::Register(r) => r.fmt(f),
-            Self::Immediate(imm) => imm.fmt(f),
-        }
-    }
-}
-
 impl std::fmt::Display for Const {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -292,7 +253,7 @@ impl std::fmt::Display for Const {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Display, PartialEq)]
 pub enum Destination {
     Memory(Memory),
     Register(Register),
@@ -329,15 +290,6 @@ impl From<Destination> for Source {
         match value {
             Destination::Memory(mem) => Self::Memory(mem),
             Destination::Register(r) => Self::Register(r),
-        }
-    }
-}
-
-impl std::fmt::Display for Destination {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Memory(mem) => mem.fmt(f),
-            Self::Register(r) => r.fmt(f),
         }
     }
 }
