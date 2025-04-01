@@ -6,7 +6,7 @@ pub mod ty;
 
 pub use basic_block::{BasicBlock, BlockIdx};
 pub use derive_more::From;
-pub use function::{Function, FunctionIdx};
+pub use function::{Function, FunctionIdx, Patch};
 pub use module::Module;
 use module::ModuleIdx;
 use op::BinOp;

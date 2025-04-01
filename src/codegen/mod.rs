@@ -5,7 +5,7 @@ mod register;
 
 use crate::repr::{
     BlockIdx, Const, FunctionIdx, Global, Instruction, InstructionIdx, LocalIdx, LocalStorage,
-    Module, Operand, Terminator, Wrapper,
+    Module, Operand, Patch, Terminator, Wrapper,
     op::BinOp,
     ty::{Ty, TyIdx},
 };
@@ -74,36 +74,53 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn canonicalize(&mut self) {
         for function in &mut self.module.functions {
-            for block in &mut function.blocks {
-                let mut instructions = Vec::new();
+            let mut patch = Patch::new(function);
 
-                for (i, instruction) in block.instructions.iter_mut().enumerate() {
+            for (block_idx, block) in &mut function.blocks.iter_mut().enumerate() {
+                for (instr_idx, instruction) in block.instructions.iter_mut().enumerate() {
                     match instruction {
                         Instruction::Binary {
-                            kind: BinOp::SDiv | BinOp::UDiv,
+                            kind: kind @ (BinOp::SDiv | BinOp::UDiv),
+                            lhs,
                             rhs,
                             out,
-                            ..
                         } => {
-                            if matches!(rhs, Operand::Const(..)) {
-                                let idx = function.locals.len();
-                                function.locals.push(function.locals[*out].clone());
-                                let mut operand = Operand::Local(idx);
+                            let rhs = if matches!(rhs, Operand::Const(..)) {
+                                let idx = patch.add_local(function.locals[*out]);
 
-                                std::mem::swap(rhs, &mut operand);
-                                instructions.push((i, Instruction::Copy { out: idx, operand }));
-                            }
+                                patch.add_instruction(
+                                    block_idx,
+                                    instr_idx,
+                                    Instruction::Copy {
+                                        out: idx,
+                                        operand: rhs.clone(),
+                                    },
+                                );
 
-                            let mut idx = function.locals.len();
-                            function.locals.push(function.locals[*out].clone());
-                            std::mem::swap(out, &mut idx);
-                            instructions.push((
-                                i + 1,
+                                Operand::Local(idx)
+                            } else {
+                                rhs.clone()
+                            };
+                            let idx = patch.add_local(function.locals[*out]);
+
+                            patch.add_instruction(
+                                block_idx,
+                                instr_idx + 1,
                                 Instruction::Copy {
-                                    out: idx,
-                                    operand: Operand::Local(*out),
+                                    out: *out,
+                                    operand: Operand::Local(idx),
                                 },
-                            ));
+                            );
+                            patch.patch_instruction(
+                                block_idx,
+                                instr_idx,
+                                Instruction::Binary {
+                                    kind: *kind,
+                                    lhs: lhs.clone(),
+                                    rhs,
+                                    out: idx,
+                                },
+                            );
                         }
                         Instruction::Binary { .. }
                         | Instruction::Copy { .. }
@@ -115,14 +132,9 @@ impl<'ctx> CodeGen<'ctx> {
                         | Instruction::GetElementPtr { .. } => (),
                     }
                 }
-
-                instructions
-                    .into_iter()
-                    .enumerate()
-                    .for_each(|(i, (at, instruction))| {
-                        block.instructions.insert(at + i, instruction)
-                    });
             }
+
+            patch.apply(function);
         }
     }
 
