@@ -252,9 +252,11 @@ impl<'ctx> CodeGen<'ctx> {
 
                         match ty_size {
                             OperandSize::Byte => {
+                                let src = &self.locals[out].location;
+
                                 self.sext(
-                                    &dest.clone().into(),
-                                    &dest.clone().resize(OperandSize::Word),
+                                    &src.to_source(OperandSize::Byte),
+                                    &src.to_dest(OperandSize::Word),
                                 );
                             }
                             OperandSize::Word => {
@@ -279,9 +281,11 @@ impl<'ctx> CodeGen<'ctx> {
 
                         match ty_size {
                             OperandSize::Byte => {
+                                let src = &self.locals[out].location;
+
                                 self.zext(
-                                    &dest.clone().into(),
-                                    &dest.clone().resize(OperandSize::Word),
+                                    &src.to_source(OperandSize::Byte),
+                                    &src.to_dest(OperandSize::Word),
                                 );
                             }
                             size => {
