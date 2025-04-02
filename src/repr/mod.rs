@@ -1,4 +1,4 @@
-mod basic_block;
+pub mod basic_block;
 mod function;
 mod module;
 pub mod op;

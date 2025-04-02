@@ -734,6 +734,27 @@ impl<'ctx> CodeGen<'ctx> {
     }
 }
 
+trait LocationStorage {
+    fn get_global(&self, global: &Global) -> Location;
+    fn get_local(&self, idx: LocalIdx) -> Location;
+}
+
+impl LocationStorage for CodeGen<'_> {
+    fn get_local(&self, idx: LocalIdx) -> Location {
+        self.locals[&idx].location.clone()
+    }
+
+    fn get_global(&self, global: &Global) -> Location {
+        self.globals[global].clone()
+    }
+}
+
+impl LocalStorage for CodeGen<'_> {
+    fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
+        self.locals[&idx].ty
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -742,7 +763,32 @@ mod tests {
         operands::{Base, EffectiveAddress, InvalidOperandSize, Offset},
         register::Register,
     };
-    use crate::repr::{Context, ty::Ty};
+    use crate::repr::{Context, Operand, basic_block, op::BinOp, ty::Ty};
+
+    fn assert_generated_basic_block<F: Fn(&mut basic_block::Wrapper)>(f: F, expected: &str) {
+        let mut ctx = Context::new();
+        let void_ty = ctx.ty_storage.void_ty;
+        let module_idx = ctx.create_module("test".into());
+        let mut module = ctx.get_module(module_idx);
+        let fn_idx = module.create_fn("test".into(), vec![], void_ty);
+        let mut func = module.get_fn(fn_idx);
+        let block_idx = func.create_block("entry".into());
+
+        f(&mut func.get_block(block_idx));
+        let output = CodeGen::new(module).compile();
+        let preamble = concat!(
+            ".section .text\n",
+            ".global test\n",
+            "test:\n",
+            ".Lentry:\n"
+        );
+        let postamble = concat!("\tjmp .Ltest_ret\n", ".Ltest_ret:\n", "\tret\n");
+
+        assert_eq!(
+            std::str::from_utf8(&output).unwrap(),
+            format!("{preamble}{expected}{postamble}")
+        );
+    }
 
     #[test]
     fn mov_location() -> Result<(), InvalidOperandSize> {
@@ -834,25 +880,152 @@ mod tests {
 
         Ok(())
     }
-}
 
-trait LocationStorage {
-    fn get_global(&self, global: &Global) -> Location;
-    fn get_local(&self, idx: LocalIdx) -> Location;
-}
+    #[test]
+    fn sdiv() {
+        let cases: &[(fn(&mut basic_block::Wrapper), &'static str)] = &[
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_i8(i8::MIN, &block.ty_storage),
+                        Operand::const_i8(8, &block.ty_storage),
+                        BinOp::SDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15b, 8\n",
+                    "\tmov al, -128\n",
+                    "\tmovsx ax, al\n",
+                    "\tidiv r15b\n",
+                    "\tmov r15b, al\n",
+                ),
+            ),
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_i16(i16::MIN, &block.ty_storage),
+                        Operand::const_i16(16, &block.ty_storage),
+                        BinOp::SDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15w, 16\n",
+                    "\tmov ax, -32768\n",
+                    "\tcwd\n",
+                    "\tidiv r15w\n",
+                    "\tmov r15w, ax\n",
+                ),
+            ),
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_i32(i32::MIN, &block.ty_storage),
+                        Operand::const_i32(32, &block.ty_storage),
+                        BinOp::SDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15d, 32\n",
+                    "\tmov eax, -2147483648\n",
+                    "\tcdq\n",
+                    "\tidiv r15d\n",
+                    "\tmov r15d, eax\n",
+                ),
+            ),
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_i64(i64::MIN, &block.ty_storage),
+                        Operand::const_i64(64, &block.ty_storage),
+                        BinOp::SDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15, 64\n",
+                    "\tmov rax, -9223372036854775808\n",
+                    "\tcqo\n",
+                    "\tidiv r15\n",
+                    "\tmov r15, rax\n",
+                ),
+            ),
+        ];
 
-impl LocationStorage for CodeGen<'_> {
-    fn get_local(&self, idx: LocalIdx) -> Location {
-        self.locals[&idx].location.clone()
+        for (f, expected) in cases {
+            assert_generated_basic_block(f, expected);
+        }
     }
 
-    fn get_global(&self, global: &Global) -> Location {
-        self.globals[global].clone()
-    }
-}
+    #[test]
+    fn udiv() {
+        let cases: &[(fn(&mut basic_block::Wrapper), &'static str)] = &[
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_u8(u8::MAX, &block.ty_storage),
+                        Operand::const_u8(8, &block.ty_storage),
+                        BinOp::UDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15b, 8\n",
+                    "\tmov al, 255\n",
+                    "\tmovzx ax, al\n",
+                    "\tidiv r15b\n",
+                    "\tmov r15b, al\n",
+                ),
+            ),
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_u16(u16::MAX, &block.ty_storage),
+                        Operand::const_u16(16, &block.ty_storage),
+                        BinOp::UDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15w, 16\n",
+                    "\tmov ax, 65535\n",
+                    "\txor dx, dx\n",
+                    "\tidiv r15w\n",
+                    "\tmov r15w, ax\n",
+                ),
+            ),
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_u32(u32::MAX, &block.ty_storage),
+                        Operand::const_u32(32, &block.ty_storage),
+                        BinOp::UDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15d, 32\n",
+                    "\tmov eax, 4294967295\n",
+                    "\txor edx, edx\n",
+                    "\tidiv r15d\n",
+                    "\tmov r15d, eax\n",
+                ),
+            ),
+            (
+                |block: &mut basic_block::Wrapper| {
+                    block.create_bin(
+                        Operand::const_u64(u64::MAX, &block.ty_storage),
+                        Operand::const_u64(64, &block.ty_storage),
+                        BinOp::UDiv,
+                    );
+                },
+                concat!(
+                    "\tmov r15, 64\n",
+                    "\tmov rax, 18446744073709551615\n",
+                    "\txor rdx, rdx\n",
+                    "\tidiv r15\n",
+                    "\tmov r15, rax\n",
+                ),
+            ),
+        ];
 
-impl LocalStorage for CodeGen<'_> {
-    fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
-        self.locals[&idx].ty
+        for (f, expected) in cases {
+            assert_generated_basic_block(f, expected);
+        }
     }
 }
