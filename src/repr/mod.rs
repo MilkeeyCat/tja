@@ -9,7 +9,7 @@ pub use derive_more::From;
 pub use function::{Function, FunctionIdx, Patch};
 pub use module::Module;
 use module::ModuleIdx;
-use op::BinOp;
+use op::{BinOp, CmpOp};
 use std::{
     collections::HashSet,
     ops::{Deref, DerefMut},
@@ -137,6 +137,12 @@ pub enum Instruction {
         indices: Vec<Operand>,
         out: LocalIdx,
     },
+    Icmp {
+        kind: CmpOp,
+        lhs: Operand,
+        rhs: Operand,
+        out: LocalIdx,
+    },
 }
 
 impl Instruction {
@@ -150,6 +156,7 @@ impl Instruction {
             Self::Store { .. } => None,
             Self::Load { out, .. } => Some(*out),
             Self::GetElementPtr { out, .. } => Some(*out),
+            Self::Icmp { out, .. } => Some(*out),
         }
     }
 
@@ -169,6 +176,7 @@ impl Instruction {
 
                 uses
             }
+            Self::Icmp { lhs, rhs, .. } => vec![lhs.local_idx(), rhs.local_idx()],
         }
         .into_iter()
         .flatten()

@@ -1,5 +1,6 @@
 mod abi;
 mod allocator;
+mod condition;
 mod operands;
 mod register;
 
@@ -11,6 +12,7 @@ use crate::repr::{
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
+use condition::Condition;
 use operands::{
     Base, Destination, EffectiveAddress, Immediate, InvalidOperandSize, Offset, OperandSize, Source,
 };
@@ -76,8 +78,8 @@ impl<'ctx> CodeGen<'ctx> {
         for function in &mut self.module.functions {
             let mut patch = Patch::new(function);
 
-            for (block_idx, block) in &mut function.blocks.iter_mut().enumerate() {
-                for (instr_idx, instruction) in block.instructions.iter_mut().enumerate() {
+            for (block_idx, block) in function.blocks.iter().enumerate() {
+                for (instr_idx, instruction) in block.instructions.iter().enumerate() {
                     match instruction {
                         Instruction::Binary {
                             kind: kind @ (BinOp::SDiv | BinOp::UDiv),
@@ -130,6 +132,35 @@ impl<'ctx> CodeGen<'ctx> {
                         | Instruction::Store { .. }
                         | Instruction::Load { .. }
                         | Instruction::GetElementPtr { .. } => (),
+                        Instruction::Icmp {
+                            kind,
+                            lhs: lhs @ Operand::Const(_, ty),
+                            rhs,
+                            out,
+                            ..
+                        } => {
+                            let idx = patch.add_local(*ty);
+
+                            patch.add_instruction(
+                                block_idx,
+                                instr_idx,
+                                Instruction::Copy {
+                                    out: idx,
+                                    operand: lhs.clone(),
+                                },
+                            );
+                            patch.patch_instruction(
+                                block_idx,
+                                instr_idx,
+                                Instruction::Icmp {
+                                    kind: *kind,
+                                    lhs: Operand::Local(idx),
+                                    rhs: rhs.clone(),
+                                    out: *out,
+                                },
+                            )
+                        }
+                        Instruction::Icmp { .. } => (),
                     }
                 }
             }
@@ -194,7 +225,8 @@ impl<'ctx> CodeGen<'ctx> {
                     | Instruction::Zext { .. }
                     | Instruction::Store { .. }
                     | Instruction::Load { .. }
-                    | Instruction::GetElementPtr { .. } => (),
+                    | Instruction::GetElementPtr { .. }
+                    | Instruction::Icmp { .. } => (),
                 }
             }
 
@@ -388,6 +420,20 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 [] => (),
             },
+            Instruction::Icmp {
+                kind,
+                lhs,
+                rhs,
+                out,
+            } => {
+                let size = self.ty_size(lhs.ty(self)).try_into().unwrap();
+
+                self.cmp(&lhs.to_dest(self, size), &rhs.to_source(self, size));
+                self.setcc(
+                    &self.locals[out].location.to_dest(OperandSize::Byte),
+                    kind.into(),
+                );
+            }
         }
     }
 
@@ -716,6 +762,14 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn xor(&mut self, lhs: &Destination, rhs: &Source) {
         self.text.push_str(&format!("\txor {lhs}, {rhs}\n"));
+    }
+
+    fn cmp(&mut self, lhs: &Destination, rhs: &Source) {
+        self.text.push_str(&format!("\tcmp {lhs}, {rhs}\n"));
+    }
+
+    fn setcc(&mut self, dest: &Destination, cond: Condition) {
+        self.text.push_str(&format!("\tset{cond} {dest}\n"));
     }
 
     #[inline]

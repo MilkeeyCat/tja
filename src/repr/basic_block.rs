@@ -1,6 +1,6 @@
 use super::{
     Instruction, LocalIdx, LocalStorage, Operand, Terminator,
-    op::BinOp,
+    op::{BinOp, CmpOp},
     ty::{self, TyIdx},
 };
 
@@ -108,6 +108,19 @@ impl<'ctx> Wrapper<'ctx> {
             ptr_ty,
             ptr,
             indices,
+            out: idx,
+        });
+
+        Operand::Local(idx)
+    }
+
+    pub fn create_icmp(&mut self, lhs: Operand, rhs: Operand, kind: CmpOp) -> Operand {
+        assert!(lhs.ty(self) == rhs.ty(self));
+        let idx = self.create_local(self.ty_storage.i8_ty);
+        self.block.instructions.push(Instruction::Icmp {
+            kind,
+            lhs,
+            rhs,
             out: idx,
         });
 
