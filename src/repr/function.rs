@@ -1,6 +1,6 @@
 use super::{
-    BasicBlock, BlockIdx, Instruction, InstructionIdx, LocalIdx, Terminator, Wrapper, basic_block,
-    ty::TyIdx,
+    BasicBlock, BlockIdx, Branch, Instruction, InstructionIdx, LocalIdx, Terminator, Wrapper,
+    basic_block, ty::TyIdx,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -65,11 +65,21 @@ impl Function {
         }
 
         for (i, block) in self.blocks.iter().enumerate() {
-            match block.terminator {
-                Terminator::Goto(block_id) => {
-                    blocks[basic_block_to_def_use_block[&i]].next =
-                        HashSet::from([basic_block_to_def_use_block[&block_id]]);
-                }
+            match &block.terminator {
+                Terminator::Br(branch) => match branch {
+                    Branch::Conditional {
+                        iftrue, iffalse, ..
+                    } => {
+                        blocks[basic_block_to_def_use_block[&i]].next = HashSet::from([
+                            basic_block_to_def_use_block[&iftrue],
+                            basic_block_to_def_use_block[&iffalse],
+                        ]);
+                    }
+                    Branch::Unconditional { block_idx } => {
+                        blocks[basic_block_to_def_use_block[&i]].next =
+                            HashSet::from([basic_block_to_def_use_block[&block_idx]]);
+                    }
+                },
                 Terminator::Return(_) => (),
             };
         }

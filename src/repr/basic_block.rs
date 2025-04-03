@@ -1,5 +1,5 @@
 use super::{
-    Instruction, LocalIdx, LocalStorage, Operand, Terminator,
+    Branch, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
     op::{BinOp, CmpOp},
     ty::{self, TyIdx},
 };
@@ -30,12 +30,20 @@ pub struct Wrapper<'ctx> {
 }
 
 impl<'ctx> Wrapper<'ctx> {
-    pub fn create_jmp(&mut self, idx: BlockIdx) {
-        self.block.terminator = Terminator::Goto(idx);
-    }
-
     pub fn create_ret(&mut self, value: Option<Operand>) {
         self.block.terminator = Terminator::Return(value);
+    }
+
+    pub fn create_cond_br(&mut self, condition: Operand, iftrue: BlockIdx, iffalse: BlockIdx) {
+        self.block.terminator = Terminator::Br(Branch::Conditional {
+            condition,
+            iftrue,
+            iffalse,
+        });
+    }
+
+    pub fn create_br(&mut self, block_idx: BlockIdx) {
+        self.block.terminator = Terminator::Br(Branch::Unconditional { block_idx });
     }
 
     pub fn create_bin(&mut self, lhs: Operand, rhs: Operand, kind: BinOp) -> Operand {

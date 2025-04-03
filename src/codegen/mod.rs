@@ -5,8 +5,8 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    BlockIdx, Const, FunctionIdx, Global, Instruction, InstructionIdx, LocalIdx, LocalStorage,
-    Module, Operand, Patch, Terminator, Wrapper,
+    BlockIdx, Branch, Const, FunctionIdx, Global, Instruction, InstructionIdx, LocalIdx,
+    LocalStorage, Module, Operand, Patch, Terminator, Wrapper,
     op::BinOp,
     ty::{Ty, TyIdx},
 };
@@ -163,6 +163,35 @@ impl<'ctx> CodeGen<'ctx> {
                         Instruction::Icmp { .. } => (),
                     }
                 }
+
+                match &block.terminator {
+                    Terminator::Return(_) => (),
+                    Terminator::Br(Branch::Conditional {
+                        condition: condition @ Operand::Const(_, ty),
+                        iftrue,
+                        iffalse,
+                    }) => {
+                        let idx = patch.add_local(*ty);
+
+                        patch.add_instruction(
+                            block_idx,
+                            block.instructions.len(),
+                            Instruction::Copy {
+                                out: idx,
+                                operand: condition.clone(),
+                            },
+                        );
+                        patch.patch_terminator(
+                            block_idx,
+                            Terminator::Br(Branch::Conditional {
+                                condition: Operand::Local(idx),
+                                iftrue: *iftrue,
+                                iffalse: *iffalse,
+                            }),
+                        )
+                    }
+                    Terminator::Br(_) => (),
+                }
             }
 
             patch.apply(function);
@@ -236,7 +265,7 @@ impl<'ctx> CodeGen<'ctx> {
                         allocator.precolor(*idx, Register::Rax.into());
                     }
                 }
-                Terminator::Goto(_) => (),
+                Terminator::Br(_) => (),
             };
         }
     }
@@ -438,12 +467,28 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn terminator(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx, ret_label: &str) {
-        match &self.module.functions[fn_idx].blocks[block_idx].terminator {
-            Terminator::Goto(block_idx) => self.text.push_str(&format!(
-                "\tjmp .L{}\n",
-                self.module.functions[fn_idx].blocks[*block_idx].name
-            )),
-            Terminator::Return(_) => self.text.push_str(&format!("\tjmp {ret_label}\n")),
+        match &self.module.functions[fn_idx].blocks[block_idx]
+            .terminator
+            .clone()
+        {
+            Terminator::Return(_) => self.jmp(ret_label),
+            Terminator::Br(branch) => match branch {
+                Branch::Conditional {
+                    condition,
+                    iftrue,
+                    iffalse,
+                } => {
+                    let size = self.ty_size(condition.ty(self)).try_into().unwrap();
+                    let loc = condition.get_location(self).unwrap();
+
+                    self.test(&loc.to_dest(size), &loc.to_source(size));
+                    self.jcc(&self.block_label(fn_idx, *iftrue), Condition::NotEqual);
+                    self.jmp(&self.block_label(fn_idx, *iffalse));
+                }
+                Branch::Unconditional { block_idx } => {
+                    self.jmp(&self.block_label(fn_idx, *block_idx))
+                }
+            },
         }
     }
 
@@ -772,6 +817,18 @@ impl<'ctx> CodeGen<'ctx> {
         self.text.push_str(&format!("\tset{cond} {dest}\n"));
     }
 
+    fn jmp(&mut self, label: &str) {
+        self.text.push_str(&format!("\tjmp {label}\n"));
+    }
+
+    fn jcc(&mut self, label: &str, cond: Condition) {
+        self.text.push_str(&format!("\tj{cond} {label}\n"));
+    }
+
+    fn test(&mut self, lhs: &Destination, rhs: &Source) {
+        self.text.push_str(&format!("\ttest {lhs}, {rhs}\n"))
+    }
+
     #[inline]
     fn field_offset(&self, fields: &[TyIdx], i: usize) -> usize {
         Abi::field_offset(self.module.ty_storage, fields, i)
@@ -785,6 +842,11 @@ impl<'ctx> CodeGen<'ctx> {
     #[inline]
     pub fn alignment(&self, ty: TyIdx) -> usize {
         Abi::alignment(self.module.ty_storage, ty)
+    }
+
+    #[inline]
+    pub fn block_label(&self, fn_idx: FunctionIdx, block_idx: BlockIdx) -> String {
+        format!(".L{}", self.module.functions[fn_idx].blocks[block_idx].name)
     }
 }
 

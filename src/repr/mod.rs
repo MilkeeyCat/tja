@@ -100,6 +100,18 @@ pub trait LocalStorage {
 }
 
 #[derive(Debug, Clone)]
+pub enum Branch {
+    Conditional {
+        condition: Operand,
+        iftrue: BlockIdx,
+        iffalse: BlockIdx,
+    },
+    Unconditional {
+        block_idx: BlockIdx,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Binary {
         kind: BinOp,
@@ -184,17 +196,22 @@ impl Instruction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Terminator {
-    Goto(BlockIdx),
     Return(Option<Operand>),
+    Br(Branch),
 }
 
 impl Terminator {
     pub fn uses(&self) -> HashSet<LocalIdx> {
         match self {
             Self::Return(Some(Operand::Local(idx))) => HashSet::from([*idx]),
-            Self::Return(_) | Self::Goto(_) => HashSet::new(),
+            Self::Return(_) => HashSet::new(),
+            Self::Br(Branch::Conditional {
+                condition: Operand::Local(idx),
+                ..
+            }) => HashSet::from([*idx]),
+            Self::Br(_) => HashSet::new(),
         }
     }
 }
