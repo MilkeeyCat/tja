@@ -535,7 +535,7 @@ impl<'ctx> CodeGen<'ctx> {
             self.mov(&Register::Rsp.into(), &Register::Rbp.into());
             self.sub(
                 &Register::Rsp.into(),
-                &Source::Immediate(Immediate::Uint(stack_frame_size.next_multiple_of(16) as u64)),
+                &Source::Immediate(Immediate::Int(stack_frame_size.next_multiple_of(16) as u64)),
             );
         }
 
@@ -640,7 +640,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn inline_memcpy(&mut self, src: &EffectiveAddress, dest: &EffectiveAddress, size: usize) {
         self.mov(
-            &Source::Immediate(Immediate::Uint(size as u64)),
+            &Source::Immediate(Immediate::Int(size as u64)),
             &Register::Rcx.into(),
         );
         self.lea(&Register::Rsi.into(), src);
@@ -1003,14 +1003,14 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_i8(i8::MIN, &block.ty_storage),
+                        Operand::const_i8(-1i8 as u8, &block.ty_storage),
                         Operand::const_i8(8, &block.ty_storage),
                         BinOp::SDiv,
                     );
                 },
                 concat!(
                     "\tmov r15b, 8\n",
-                    "\tmov al, -128\n",
+                    "\tmov al, 255\n",
                     "\tmovsx ax, al\n",
                     "\tidiv r15b\n",
                     "\tmov r15b, al\n",
@@ -1019,14 +1019,14 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_i16(i16::MIN, &block.ty_storage),
+                        Operand::const_i16(i16::MIN as u16, &block.ty_storage),
                         Operand::const_i16(16, &block.ty_storage),
                         BinOp::SDiv,
                     );
                 },
                 concat!(
                     "\tmov r15w, 16\n",
-                    "\tmov ax, -32768\n",
+                    "\tmov ax, 32768\n",
                     "\tcwd\n",
                     "\tidiv r15w\n",
                     "\tmov r15w, ax\n",
@@ -1035,14 +1035,14 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_i32(i32::MIN, &block.ty_storage),
+                        Operand::const_i32(i32::MIN as u32, &block.ty_storage),
                         Operand::const_i32(32, &block.ty_storage),
                         BinOp::SDiv,
                     );
                 },
                 concat!(
                     "\tmov r15d, 32\n",
-                    "\tmov eax, -2147483648\n",
+                    "\tmov eax, 2147483648\n",
                     "\tcdq\n",
                     "\tidiv r15d\n",
                     "\tmov r15d, eax\n",
@@ -1051,14 +1051,14 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_i64(i64::MIN, &block.ty_storage),
+                        Operand::const_i64(i64::MIN as u64, &block.ty_storage),
                         Operand::const_i64(64, &block.ty_storage),
                         BinOp::SDiv,
                     );
                 },
                 concat!(
                     "\tmov r15, 64\n",
-                    "\tmov rax, -9223372036854775808\n",
+                    "\tmov rax, 9223372036854775808\n",
                     "\tcqo\n",
                     "\tidiv r15\n",
                     "\tmov r15, rax\n",
@@ -1077,8 +1077,8 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_u8(u8::MAX, &block.ty_storage),
-                        Operand::const_u8(8, &block.ty_storage),
+                        Operand::const_i8(u8::MAX, &block.ty_storage),
+                        Operand::const_i8(8, &block.ty_storage),
                         BinOp::UDiv,
                     );
                 },
@@ -1093,8 +1093,8 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_u16(u16::MAX, &block.ty_storage),
-                        Operand::const_u16(16, &block.ty_storage),
+                        Operand::const_i16(u16::MAX, &block.ty_storage),
+                        Operand::const_i16(16, &block.ty_storage),
                         BinOp::UDiv,
                     );
                 },
@@ -1109,8 +1109,8 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_u32(u32::MAX, &block.ty_storage),
-                        Operand::const_u32(32, &block.ty_storage),
+                        Operand::const_i32(u32::MAX, &block.ty_storage),
+                        Operand::const_i32(32, &block.ty_storage),
                         BinOp::UDiv,
                     );
                 },
@@ -1125,8 +1125,8 @@ mod tests {
             (
                 |block: &mut basic_block::Wrapper| {
                     block.create_bin(
-                        Operand::const_u64(u64::MAX, &block.ty_storage),
-                        Operand::const_u64(64, &block.ty_storage),
+                        Operand::const_i64(u64::MAX, &block.ty_storage),
+                        Operand::const_i64(64, &block.ty_storage),
                         BinOp::UDiv,
                     );
                 },

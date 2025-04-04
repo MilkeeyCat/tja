@@ -20,31 +20,16 @@ use ty::TyIdx;
 pub type LocalIdx = usize;
 pub type InstructionIdx = usize;
 
-#[derive(Debug, Clone, From, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Const {
-    I8(i8),
-    U8(u8),
-    I16(i16),
-    U16(u16),
-    I32(i32),
-    U32(u32),
-    I64(i64),
-    U64(u64),
-    #[from(ignore)]
+    Int(u64),
     Aggregate(Vec<Self>),
 }
 
 impl Const {
     pub fn usize_unchecked(&self) -> usize {
         match self {
-            Self::I8(value) => (*value).try_into().unwrap(),
-            Self::U8(value) => (*value).try_into().unwrap(),
-            Self::I16(value) => (*value).try_into().unwrap(),
-            Self::U16(value) => (*value).try_into().unwrap(),
-            Self::I32(value) => (*value).try_into().unwrap(),
-            Self::U32(value) => (*value).try_into().unwrap(),
-            Self::I64(value) => (*value).try_into().unwrap(),
-            Self::U64(value) => (*value).try_into().unwrap(),
+            Self::Int(value) => (*value).try_into().unwrap(),
             Self::Aggregate(_) => unreachable!(),
         }
     }
@@ -58,15 +43,13 @@ pub enum Operand {
 }
 
 macro_rules! int_const_impl {
-    ($([$($ty: ident),+] => $field: ident),+) => {
+    ($($bits: literal),+) => {
         $(
-            $(
-                paste::item! {
-                    pub fn [< const_ $ty >](value: $ty, storage: &ty::Storage) -> Self {
-                        Self::Const(Const::from(value), storage.[< $field _ty >])
-                    }
+            paste::item! {
+                pub fn [< const_i $bits >](value: [< u $bits >], storage: &ty::Storage) -> Self {
+                    Self::Const(Const::Int(value as u64), storage.[< i $bits _ty >])
                 }
-            )+
+            }
         )+
     };
 }
@@ -87,11 +70,10 @@ impl Operand {
         }
     }
 
-    int_const_impl! {
-        [u8, i8] => i8,
-        [u16, i16] => i16,
-        [u32, i32] => i32,
-        [u64, i64] => i64
+    int_const_impl! { 8, 16, 32, 64 }
+
+    pub fn const_int(value: u64, ty: TyIdx) -> Self {
+        Self::Const(Const::Int(value), ty)
     }
 }
 

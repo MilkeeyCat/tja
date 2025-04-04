@@ -152,8 +152,7 @@ impl std::fmt::Display for Memory {
 
 #[derive(Debug, Clone, Display)]
 pub enum Immediate {
-    Int(i64),
-    Uint(u64),
+    Int(u64),
     Label(String),
 }
 
@@ -168,14 +167,7 @@ pub enum Source {
 impl From<Const> for Immediate {
     fn from(value: Const) -> Self {
         match value {
-            Const::I8(num) => Immediate::Int(num as i64),
-            Const::U8(num) => Immediate::Uint(num as u64),
-            Const::I16(num) => Immediate::Int(num as i64),
-            Const::U16(num) => Immediate::Uint(num as u64),
-            Const::I32(num) => Immediate::Int(num as i64),
-            Const::U32(num) => Immediate::Uint(num as u64),
-            Const::I64(num) => Immediate::Int(num),
-            Const::U64(num) => Immediate::Uint(num),
+            Const::Int(num) => Immediate::Int(num),
             Const::Aggregate(_) => unreachable!(),
         }
     }
@@ -201,30 +193,6 @@ impl From<Register> for Source {
 impl From<Const> for Source {
     fn from(value: Const) -> Self {
         Self::Immediate(value.into())
-    }
-}
-
-impl std::fmt::Display for Const {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::I8(num) => num.fmt(f),
-            Self::U8(num) => num.fmt(f),
-            Self::I16(num) => num.fmt(f),
-            Self::U16(num) => num.fmt(f),
-            Self::I32(num) => num.fmt(f),
-            Self::U32(num) => num.fmt(f),
-            Self::I64(num) => num.fmt(f),
-            Self::U64(num) => num.fmt(f),
-            Self::Aggregate(values) => write!(
-                f,
-                "{{{}}}",
-                values
-                    .iter()
-                    .map(|value| value.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        }
     }
 }
 
