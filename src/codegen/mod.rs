@@ -278,11 +278,13 @@ impl<'ctx> CodeGen<'ctx> {
                 rhs,
                 out,
             } => {
-                let ty = &self.locals[out].ty;
-                let ty_size: OperandSize = self.ty_size(*ty).try_into().unwrap();
+                let ty = self.locals[out].ty;
+                let ty_size: OperandSize = self.ty_size(ty).try_into().unwrap();
 
-                self.copy(lhs, &self.locals[out].location.clone(), *ty)
-                    .unwrap();
+                if kind != &BinOp::Sub {
+                    self.copy(lhs, &self.locals[out].location.clone(), ty)
+                        .unwrap();
+                }
 
                 match kind {
                     BinOp::Add => {
@@ -292,10 +294,18 @@ impl<'ctx> CodeGen<'ctx> {
                         );
                     }
                     BinOp::Sub => {
-                        self.sub(
-                            &self.locals[out].location.to_dest(ty_size),
-                            &rhs.to_source(self, ty_size),
-                        );
+                        if let Operand::Const(Const::Int(0), _) = lhs {
+                            self.copy(rhs, &self.locals[out].location.clone(), ty)
+                                .unwrap();
+                            self.neg(&self.locals[out].location.to_dest(ty_size));
+                        } else {
+                            self.copy(lhs, &self.locals[out].location.clone(), ty)
+                                .unwrap();
+                            self.sub(
+                                &self.locals[out].location.to_dest(ty_size),
+                                &rhs.to_source(self, ty_size),
+                            );
+                        }
                     }
                     BinOp::Mul => {
                         self.mul(
@@ -827,6 +837,10 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn test(&mut self, lhs: &Destination, rhs: &Source) {
         self.text.push_str(&format!("\ttest {lhs}, {rhs}\n"))
+    }
+
+    fn neg(&mut self, op: &Destination) {
+        self.text.push_str(&format!("\tneg {op}\n"));
     }
 
     #[inline]
