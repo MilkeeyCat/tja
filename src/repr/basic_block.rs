@@ -1,5 +1,5 @@
 use super::{
-    Branch, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
+    Branch, Function, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
     op::{BinOp, CmpOp},
     ty::{self, TyIdx},
 };
@@ -30,6 +30,14 @@ pub struct Wrapper<'ctx> {
 }
 
 impl<'ctx> Wrapper<'ctx> {
+    pub fn new(ty_storage: &'ctx mut ty::Storage, func: &'ctx mut Function, idx: BlockIdx) -> Self {
+        Self {
+            ty_storage,
+            fn_locals: &mut func.locals,
+            block: &mut func.blocks[idx],
+        }
+    }
+
     pub fn create_ret(&mut self, value: Option<Operand>) {
         self.block.terminator = Terminator::Return(value);
     }

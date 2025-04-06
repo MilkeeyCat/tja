@@ -144,6 +144,10 @@ impl Function {
 
         edges
     }
+
+    pub fn get_block_mut(&mut self, idx: BlockIdx) -> &mut BasicBlock {
+        &mut self.blocks[idx]
+    }
 }
 
 impl Wrapper<'_, &mut Function> {

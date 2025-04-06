@@ -31,6 +31,10 @@ impl Module {
 
         idx
     }
+
+    pub fn get_fn_mut(&mut self, idx: FunctionIdx) -> &mut Function {
+        &mut self.functions[idx]
+    }
 }
 
 impl Wrapper<'_, &mut Module> {

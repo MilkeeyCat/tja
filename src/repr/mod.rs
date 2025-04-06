@@ -237,7 +237,7 @@ impl Context {
 /// to [`Context::ty_storage`]
 pub struct Wrapper<'ctx, T> {
     pub ty_storage: &'ctx mut ty::Storage,
-    inner: T,
+    pub inner: T,
 }
 
 impl<T> Deref for Wrapper<'_, T> {
