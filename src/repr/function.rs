@@ -28,9 +28,10 @@ impl Function {
         self.locals[idx]
     }
 
-    pub fn create_block(&mut self, name: String) -> BlockIdx {
+    pub fn create_block(&mut self, name: Option<String>) -> BlockIdx {
         let idx = self.blocks.len();
-        self.blocks.push(BasicBlock::new(name));
+        self.blocks
+            .push(BasicBlock::new(name.unwrap_or_else(|| idx.to_string())));
 
         idx
     }

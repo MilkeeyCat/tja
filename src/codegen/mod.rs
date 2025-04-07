@@ -476,12 +476,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn terminator(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx, ret_label: &str) {
+    fn terminator(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx) {
         match &self.module.functions[fn_idx].blocks[block_idx]
             .terminator
             .clone()
         {
-            Terminator::Return(_) => self.jmp(ret_label),
+            Terminator::Return(_) => {
+                self.jmp(&format!(".L{}_ret", &self.module.functions[fn_idx].name));
+            }
             Terminator::Br(branch) => match branch {
                 Branch::Conditional {
                     condition,
@@ -525,7 +527,6 @@ impl<'ctx> CodeGen<'ctx> {
         );
         self.precolor(&mut allocator, idx);
 
-        let ret_label = format!(".L{}_ret", &self.module.functions[idx].name);
         let (locations, mut stack_frame_size) = allocator.allocate(self.module.ty_storage);
         stack_frame_size = stack_frame_size.next_multiple_of(16);
         self.locals.extend(
@@ -551,16 +552,18 @@ impl<'ctx> CodeGen<'ctx> {
 
         for block_idx in 0..self.module.functions[idx].blocks.len() {
             let block = &self.module.functions[idx].blocks[block_idx];
-            self.text.push_str(&format!(".L{}:\n", &block.name));
+            self.text
+                .push_str(&format!("{}:\n", self.block_label(idx, block_idx)));
 
             for instr_idx in 0..block.instructions.len() {
                 self.instruction(idx, block_idx, instr_idx);
             }
 
-            self.terminator(idx, block_idx, &ret_label);
+            self.terminator(idx, block_idx);
         }
 
-        self.text.push_str(&format!("{ret_label}:\n"));
+        self.text
+            .push_str(&format!(".L{}_ret:\n", &self.module.functions[idx].name));
         if stack_frame_size > 0 {
             self.text.push_str("\tleave\n");
         }
@@ -860,7 +863,10 @@ impl<'ctx> CodeGen<'ctx> {
 
     #[inline]
     pub fn block_label(&self, fn_idx: FunctionIdx, block_idx: BlockIdx) -> String {
-        format!(".L{}", self.module.functions[fn_idx].blocks[block_idx].name)
+        format!(
+            ".L_{fn_idx}_{}",
+            self.module.functions[fn_idx].blocks[block_idx].name
+        )
     }
 }
 
@@ -902,16 +908,11 @@ mod tests {
         let mut module = ctx.get_module(module_idx);
         let fn_idx = module.create_fn("test".into(), vec![], void_ty);
         let mut func = module.get_fn(fn_idx);
-        let block_idx = func.create_block("entry".into());
+        let block_idx = func.create_block(None);
 
         f(&mut func.get_block(block_idx));
         let output = CodeGen::new(module).compile();
-        let preamble = concat!(
-            ".section .text\n",
-            ".global test\n",
-            "test:\n",
-            ".Lentry:\n"
-        );
+        let preamble = concat!(".section .text\n", ".global test\n", "test:\n", ".L_0_0:\n");
         let postamble = concat!("\tjmp .Ltest_ret\n", ".Ltest_ret:\n", "\tret\n");
 
         assert_eq!(
