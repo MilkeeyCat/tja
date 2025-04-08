@@ -165,6 +165,22 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 match &block.terminator {
+                    Terminator::Return(Some(operand @ Operand::Const(_, ty))) => {
+                        let idx = patch.add_local(*ty);
+
+                        patch.add_instruction(
+                            block_idx,
+                            block.instructions.len(),
+                            Instruction::Copy {
+                                out: idx,
+                                operand: operand.clone(),
+                            },
+                        );
+                        patch.patch_terminator(
+                            block_idx,
+                            Terminator::Return(Some(Operand::Local(idx))),
+                        );
+                    }
                     Terminator::Return(_) => (),
                     Terminator::Br(Branch::Conditional {
                         condition: condition @ Operand::Const(_, ty),
@@ -188,7 +204,7 @@ impl<'ctx> CodeGen<'ctx> {
                                 iftrue: *iftrue,
                                 iffalse: *iffalse,
                             }),
-                        )
+                        );
                     }
                     Terminator::Br(_) => (),
                 }
