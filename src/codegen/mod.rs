@@ -32,7 +32,7 @@ impl Operand {
         match self {
             Self::Global(global) => storage.get_global(&global).to_source(size),
             Self::Local(idx) => storage.get_local(*idx).to_source(size),
-            Self::Const(c, _) => c.clone().into(),
+            Self::Const(c, _) => c.clone().try_into().unwrap(),
         }
     }
 
@@ -729,7 +729,7 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => unreachable!(),
             },
             c => self.mov(
-                &c.clone().into(),
+                &c.clone().try_into().unwrap(),
                 &dest.to_dest(self.ty_size(ty).try_into()?),
             ),
         };

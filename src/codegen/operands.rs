@@ -163,12 +163,13 @@ pub enum Source {
     Immediate(Immediate),
 }
 
-// FIXME: implement TryFrom instead
-impl From<Const> for Immediate {
-    fn from(value: Const) -> Self {
+impl TryFrom<Const> for Immediate {
+    type Error = ();
+
+    fn try_from(value: Const) -> Result<Self, Self::Error> {
         match value {
-            Const::Int(num) => Immediate::Int(num),
-            Const::Aggregate(_) => unreachable!(),
+            Const::Int(num) => Ok(Immediate::Int(num)),
+            Const::Aggregate(_) => Err(()),
         }
     }
 }
@@ -189,10 +190,11 @@ impl From<Register> for Source {
     }
 }
 
-// FIXME: implement TryFrom instead
-impl From<Const> for Source {
-    fn from(value: Const) -> Self {
-        Self::Immediate(value.into())
+impl TryFrom<Const> for Source {
+    type Error = ();
+
+    fn try_from(value: Const) -> Result<Self, Self::Error> {
+        Ok(Self::Immediate(value.try_into()?))
     }
 }
 
