@@ -7,8 +7,7 @@ pub mod ty;
 pub use basic_block::{BasicBlock, BlockIdx};
 pub use derive_more::From;
 pub use function::{Function, FunctionIdx, Patch};
-pub use module::Module;
-use module::ModuleIdx;
+pub use module::{Module, ModuleIdx};
 use op::{BinOp, CmpOp};
 use std::{
     collections::HashSet,
@@ -202,7 +201,7 @@ impl Terminator {
 pub struct Global {
     pub name: String,
     pub ty: TyIdx,
-    pub value: Const,
+    pub value: Option<Const>,
 }
 
 pub struct Context {
