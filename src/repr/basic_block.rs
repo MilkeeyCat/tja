@@ -95,7 +95,7 @@ impl<'ctx> Wrapper<'ctx> {
     }
 
     pub fn create_alloca(&mut self, ty: TyIdx) -> Operand {
-        let idx = self.create_local(ty);
+        let idx = self.create_local(self.ty_storage.ptr_ty);
         self.block
             .instructions
             .push(Instruction::Alloca { ty, out: idx });
