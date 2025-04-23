@@ -413,8 +413,15 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::Alloca { .. } => (),
             Instruction::Store { ptr, value } => {
-                self.copy(value, &ptr.get_location(self).unwrap(), value.ty(self))
-                    .unwrap();
+                let loc = match ptr.get_location(self).unwrap() {
+                    Location::Register(r) => Location::Address {
+                        effective_address: r.into(),
+                        spilled: false,
+                    },
+                    loc => loc,
+                };
+
+                self.copy(value, &loc, value.ty(self)).unwrap();
             }
             Instruction::Load { ptr, out } => {
                 let src = match ptr.get_location(self).unwrap() {
