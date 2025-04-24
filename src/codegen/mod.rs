@@ -468,7 +468,7 @@ impl<'ctx> CodeGen<'ctx> {
                         Location::Address {
                             effective_address, ..
                         } => effective_address,
-                        Location::Register(_) => unreachable!(),
+                        Location::Register(r) => r.into(),
                     };
                     let index = match operand {
                         Operand::Const(c, _) => c.usize_unchecked(),
