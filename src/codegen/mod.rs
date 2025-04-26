@@ -1,5 +1,6 @@
-mod abi;
+pub mod abi;
 mod allocator;
+pub mod calling_convention;
 mod condition;
 mod operands;
 mod register;
@@ -51,26 +52,36 @@ struct Variable {
     location: Location,
 }
 
-pub struct CodeGen<'ctx> {
+#[derive(Debug)]
+struct Argument {
+    ty: TyIdx,
+    locations: Vec<Location>,
+}
+
+pub struct CodeGen<'a, 'ctx> {
     module: Wrapper<'ctx, &'ctx mut Module>,
     locals: HashMap<LocalIdx, Variable>,
+    arguments: HashMap<LocalIdx, Argument>,
     globals: HashMap<Rc<Global>, Location>,
     spill_register: Register,
     bss: String,
     data: String,
     text: String,
+    abi: &'a dyn Abi,
 }
 
-impl<'ctx> CodeGen<'ctx> {
-    pub fn new(module: Wrapper<'ctx, &'ctx mut Module>) -> Self {
+impl<'a, 'ctx> CodeGen<'a, 'ctx> {
+    pub fn new(module: Wrapper<'ctx, &'ctx mut Module>, abi: &'a dyn Abi) -> Self {
         Self {
             module,
             locals: HashMap::new(),
+            arguments: HashMap::new(),
             globals: HashMap::new(),
             spill_register: Register::R8,
             bss: String::new(),
             data: String::new(),
             text: String::new(),
+            abi,
         }
     }
 
@@ -548,9 +559,22 @@ impl<'ctx> CodeGen<'ctx> {
             ],
             false,
         );
+        self.arguments = self
+            .abi
+            .calling_convention()
+            .compute(
+                self,
+                &mut allocator,
+                &self.module.functions[idx].locals[self.module.functions[idx].params_count..],
+            )
+            .into_iter()
+            .zip(&self.module.functions[idx].locals)
+            .enumerate()
+            .map(|(idx, (locations, ty))| (idx, Argument { ty: *ty, locations }))
+            .collect();
         self.precolor(&mut allocator, idx);
 
-        let (locations, mut stack_frame_size) = allocator.allocate(self.module.ty_storage);
+        let (locations, mut stack_frame_size) = allocator.allocate(self);
         stack_frame_size = stack_frame_size.next_multiple_of(16);
         self.locals.extend(
             locations
@@ -691,6 +715,9 @@ impl<'ctx> CodeGen<'ctx> {
         ty: TyIdx,
     ) -> Result<(), InvalidOperandSize> {
         match src {
+            Operand::Local(idx) if *idx < self.arguments.len() => {
+                unimplemented!("argument copy");
+            }
             Operand::Global(_) | Operand::Local(_) => {
                 self.mov_location(&src.get_location(self).unwrap(), dest, ty)?
             }
@@ -871,17 +898,17 @@ impl<'ctx> CodeGen<'ctx> {
 
     #[inline]
     fn field_offset(&self, fields: &[TyIdx], i: usize) -> usize {
-        Abi::field_offset(self.module.ty_storage, fields, i)
+        self.abi.field_offset(self.module.ty_storage, fields, i)
     }
 
     #[inline]
     fn ty_size(&self, ty: TyIdx) -> usize {
-        Abi::ty_size(self.module.ty_storage, ty)
+        self.abi.ty_size(self.module.ty_storage, ty)
     }
 
     #[inline]
     pub fn alignment(&self, ty: TyIdx) -> usize {
-        Abi::alignment(self.module.ty_storage, ty)
+        self.abi.alignment(self.module.ty_storage, ty)
     }
 
     #[inline]
@@ -898,7 +925,7 @@ trait LocationStorage {
     fn get_local(&self, idx: LocalIdx) -> Location;
 }
 
-impl LocationStorage for CodeGen<'_> {
+impl LocationStorage for CodeGen<'_, '_> {
     fn get_local(&self, idx: LocalIdx) -> Location {
         self.locals[&idx].location.clone()
     }
@@ -908,7 +935,7 @@ impl LocationStorage for CodeGen<'_> {
     }
 }
 
-impl LocalStorage for CodeGen<'_> {
+impl LocalStorage for CodeGen<'_, '_> {
     fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
         self.locals[&idx].ty
     }
@@ -922,7 +949,10 @@ mod tests {
         operands::{Base, EffectiveAddress, InvalidOperandSize, Offset},
         register::Register,
     };
-    use crate::repr::{Context, Operand, basic_block, op::BinOp, ty::Ty};
+    use crate::{
+        codegen::abi::sysv_amd64,
+        repr::{Context, Operand, basic_block, op::BinOp, ty::Ty},
+    };
 
     fn assert_generated_basic_block<F: Fn(&mut basic_block::Wrapper)>(f: F, expected: &str) {
         let mut ctx = Context::new();
@@ -934,7 +964,8 @@ mod tests {
         let block_idx = func.create_block(None);
 
         f(&mut func.get_block(block_idx));
-        let output = CodeGen::new(module).compile();
+        let abi = sysv_amd64::SysVAmd64::new();
+        let output = CodeGen::new(module, &abi).compile();
         let preamble = concat!(".section .text\n", ".global test\n", "test:\n", ".L_0_0:\n");
         let postamble = concat!("\tjmp .Ltest_ret\n", ".Ltest_ret:\n", "\tret\n");
 
@@ -1027,7 +1058,8 @@ mod tests {
         let module_idx = ctx.create_module("test".into());
 
         for ((src, dest, ty), expected) in cases {
-            let mut codegen = CodeGen::new(ctx.get_module(module_idx));
+            let abi = sysv_amd64::SysVAmd64::new();
+            let mut codegen = CodeGen::new(ctx.get_module(module_idx), &abi);
             codegen.mov_location(src, dest, ty)?;
             assert_eq!(codegen.text, expected);
         }

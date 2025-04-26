@@ -1,11 +1,11 @@
 use super::{
-    abi::Abi,
+    CodeGen,
     operands::{Base, Destination, EffectiveAddress, Memory, Offset, OperandSize, Source},
     register::Register,
 };
 use crate::repr::{
     LocalIdx,
-    ty::{self, Ty, TyIdx},
+    ty::{Ty, TyIdx},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -168,7 +168,7 @@ impl Allocator {
         node
     }
 
-    pub fn allocate(mut self, storage: &ty::Storage) -> (Vec<Location>, usize) {
+    pub fn allocate(mut self, codegen: &CodeGen) -> (Vec<Location>, usize) {
         let locations = self.locations.clone();
         let nodes = self.nodes.clone();
         let edges = self.edges.clone();
@@ -188,8 +188,8 @@ impl Allocator {
         }
 
         for (node, ty, edges) in stack.into_iter().rev() {
-            let ty_size = Abi::ty_size(storage, ty);
-            let force_stack = matches!(storage.get_ty(ty), Ty::Struct(..));
+            let ty_size = codegen.ty_size(ty);
+            let force_stack = matches!(codegen.module.ty_storage.get_ty(ty), Ty::Struct(..));
             self.add_node(node, ty, edges);
 
             if self.unique_register(&self.neighbors(&node)).is_some() && !force_stack {
@@ -225,7 +225,7 @@ impl Allocator {
             self.nodes = nodes;
             self.edges = edges;
 
-            self.allocate(storage)
+            self.allocate(codegen)
         } else {
             let mut operands: Vec<_> = self.locations.into_iter().collect();
             operands.sort_by(|(a, _), (b, _)| a.cmp(&b));

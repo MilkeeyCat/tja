@@ -4,7 +4,7 @@ extern crate impl_ops;
 pub mod codegen;
 pub mod repr;
 
-use codegen::CodeGen;
+use codegen::{CodeGen, abi::Abi};
 use repr::{Module, Wrapper};
 use std::{
     fs::File,
@@ -21,9 +21,13 @@ pub struct CompileArgs {
     pub shared: bool,
 }
 
-pub fn compile(module: Wrapper<'_, &mut Module>, args: CompileArgs) -> std::io::Result<()> {
+pub fn compile(
+    module: Wrapper<'_, &mut Module>,
+    abi: &dyn Abi,
+    args: CompileArgs,
+) -> std::io::Result<()> {
     let name = module.name.clone();
-    let code = CodeGen::new(module).compile();
+    let code = CodeGen::new(module, abi).compile();
 
     if args.assembly_only {
         let asm_filename = PathBuf::from(&name).with_extension("s");
