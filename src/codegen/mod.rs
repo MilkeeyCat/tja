@@ -718,9 +718,18 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Operand::Local(idx) if *idx < self.arguments.len() => {
                 unimplemented!("argument copy");
             }
-            Operand::Global(_) | Operand::Local(_) => {
-                self.mov_location(&src.get_location(self).unwrap(), dest, ty)?
-            }
+            Operand::Global(_) | Operand::Local(_) => match &src.get_location(self).unwrap() {
+                Location::Address {
+                    effective_address,
+                    spilled: false,
+                } if ty == self.module.ty_storage.ptr_ty => {
+                    self.lea(
+                        &dest.to_dest(OperandSize::Qword),
+                        &effective_address.clone(),
+                    );
+                }
+                location => self.mov_location(location, dest, self.ty_size(ty))?,
+            },
             Operand::Const(c, _) => self.mov_const(dest, c, ty)?,
         };
 
@@ -775,21 +784,26 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         &mut self,
         src: &Location,
         dest: &Location,
-        ty: TyIdx,
+        size: usize,
     ) -> Result<(), InvalidOperandSize> {
-        match (src, dest) {
-            (
-                Location::Address {
-                    effective_address,
-                    spilled: false,
-                },
-                dest,
-            ) if ty == self.module.ty_storage.ptr_ty => {
-                self.lea(
-                    &dest.to_dest(OperandSize::Qword),
-                    &effective_address.clone(),
-                );
+        let reg_resize_iter = |mut size: usize| {
+            let mut chunks = Vec::new();
+
+            while size > 0 {
+                let chunk = if size.is_power_of_two() {
+                    size
+                } else {
+                    size.next_power_of_two() >> 1
+                };
+
+                chunks.push(chunk);
+                size -= chunk;
             }
+
+            chunks.into_iter().peekable()
+        };
+
+        match (src, dest) {
             (
                 Location::Address {
                     effective_address: src,
@@ -800,12 +814,68 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     ..
                 },
             ) => {
-                self.inline_memcpy(&src.clone(), &dest.clone(), self.ty_size(ty));
+                self.inline_memcpy(&src.clone(), &dest.clone(), size);
             }
-            (lhs, rhs) => {
-                let size = self.ty_size(ty).try_into()?;
+            (
+                Location::Address {
+                    effective_address, ..
+                },
+                Location::Register(dest),
+            ) => {
+                let mut iter = reg_resize_iter(size);
+                let mut offset = 0;
 
-                self.mov(&lhs.to_source(size), &rhs.to_dest(size));
+                while let Some(size) = iter.next() {
+                    self.mov(
+                        &(effective_address.clone() + Offset(offset as isize))
+                            .src(size.try_into()?),
+                        &dest.resize(size.try_into()?).into(),
+                    );
+                    if iter.peek().is_some() {
+                        self.shl(
+                            &(*dest).into(),
+                            &Source::Immediate(
+                                Immediate::Int((size as u32 * u8::BITS) as u64).into(),
+                            ),
+                        );
+                    }
+
+                    offset += size;
+                }
+            }
+            (
+                Location::Register(src),
+                Location::Address {
+                    effective_address, ..
+                },
+            ) => {
+                let mut iter = reg_resize_iter(size);
+                let mut offset = 0;
+
+                while let Some(size) = iter.next() {
+                    self.mov(
+                        &src.resize(size.try_into()?).into(),
+                        &(effective_address.clone() + Offset(offset as isize))
+                            .dest(size.try_into()?),
+                    );
+                    if iter.peek().is_some() {
+                        self.shr(
+                            &(*src).into(),
+                            &Source::Immediate(
+                                Immediate::Int((size as u32 * u8::BITS) as u64).into(),
+                            ),
+                        );
+                    }
+
+                    offset += size;
+                }
+            }
+            (Location::Register(src), Location::Register(dest)) => {
+                let size = size.next_power_of_two();
+                assert!(size <= 8);
+                let size = OperandSize::try_from(size)?;
+
+                self.mov(&src.resize(size).into(), &dest.resize(size).into());
             }
         };
 
@@ -894,6 +964,24 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
     fn neg(&mut self, op: &Destination) {
         self.text.push_str(&format!("\tneg {op}\n"));
+    }
+
+    fn shl(&mut self, lhs: &Destination, rhs: &Source) {
+        assert!(
+            rhs == &Source::Register(Register::Cl)
+                || matches!(rhs, Source::Immediate(Immediate::Int(..)))
+        );
+
+        self.text.push_str(&format!("\tshl {lhs}, {rhs}\n"));
+    }
+
+    fn shr(&mut self, lhs: &Destination, rhs: &Source) {
+        assert!(
+            rhs == &Source::Register(Register::Cl)
+                || matches!(rhs, Source::Immediate(Immediate::Int(..)))
+        );
+
+        self.text.push_str(&format!("\tshr {lhs}, {rhs}\n"));
     }
 
     #[inline]
@@ -1028,22 +1116,6 @@ mod tests {
                             base: Base::Register(Register::Rbp),
                             index: None,
                             scale: None,
-                            displacement: Some(Offset(-6)),
-                        },
-                        spilled: false,
-                    },
-                    &Location::Register(Register::Rax),
-                    ctx.ty_storage.ptr_ty,
-                ),
-                "\tlea rax, [rbp - 6]\n",
-            ),
-            (
-                (
-                    &Location::Address {
-                        effective_address: EffectiveAddress {
-                            base: Base::Register(Register::Rbp),
-                            index: None,
-                            scale: None,
                             displacement: Some(Offset(-8)),
                         },
                         spilled: true,
@@ -1060,7 +1132,7 @@ mod tests {
         for ((src, dest, ty), expected) in cases {
             let abi = sysv_amd64::SysVAmd64::new();
             let mut codegen = CodeGen::new(ctx.get_module(module_idx), &abi);
-            codegen.mov_location(src, dest, ty)?;
+            codegen.mov_location(src, dest, codegen.ty_size(ty))?;
             assert_eq!(codegen.text, expected);
         }
 

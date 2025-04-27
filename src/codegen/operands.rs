@@ -150,13 +150,13 @@ impl std::fmt::Display for Memory {
     }
 }
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone, PartialEq, Display)]
 pub enum Immediate {
     Int(u64),
     Label(String),
 }
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone, Display, PartialEq)]
 pub enum Source {
     Memory(Memory),
     Register(Register),
