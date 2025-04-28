@@ -102,7 +102,7 @@ impl Allocator {
         self.edges.extend(edges.into_iter());
     }
 
-    fn neighbors(&self, node: &LocalIdx) -> Vec<&LocalIdx> {
+    pub fn neighbors(&self, node: &LocalIdx) -> Vec<&LocalIdx> {
         self.edges
             .iter()
             .filter(|(lhs, rhs)| lhs == node || rhs == node)
@@ -153,6 +153,10 @@ impl Allocator {
 
     pub fn precolor(&mut self, node: LocalIdx, location: Location) {
         self.locations.insert(node, location);
+    }
+
+    pub fn is_precolored(&mut self, node: &LocalIdx) -> bool {
+        self.locations.contains_key(node)
     }
 
     pub fn add_edge(&mut self, edge: (LocalIdx, LocalIdx)) {

@@ -565,9 +565,33 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .compute(
                 self,
                 &mut allocator,
-                &self.module.functions[idx].locals[self.module.functions[idx].params_count..],
+                &self.module.functions[idx].locals[..self.module.functions[idx].params_count],
             )
             .into_iter()
+            .map(|locations| {
+                locations
+                    .into_iter()
+                    .map(|location| {
+                        match location {
+                            Location::Address {
+                                mut effective_address,
+                                spilled,
+                            } => {
+                                let displacement = effective_address.displacement.as_mut().unwrap();
+
+                                // stack contains a return address and rbp's value
+                                *displacement = *displacement + Offset(8 + 8);
+
+                                Location::Address {
+                                    effective_address,
+                                    spilled,
+                                }
+                            }
+                            other => other,
+                        }
+                    })
+                    .collect()
+            })
             .zip(&self.module.functions[idx].locals)
             .enumerate()
             .map(|(idx, (locations, ty))| (idx, Argument { ty: *ty, locations }))
@@ -716,7 +740,33 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
     ) -> Result<(), InvalidOperandSize> {
         match src {
             Operand::Local(idx) if *idx < self.arguments.len() => {
-                unimplemented!("argument copy");
+                match self.arguments[idx].locations.clone().as_slice() {
+                    [location] => self.mov_location(location, dest, self.ty_size(ty))?,
+                    locations => {
+                        let dest = match dest {
+                            Location::Address {
+                                effective_address, ..
+                            } => effective_address,
+                            Location::Register(_) => unreachable!(),
+                        };
+                        let mut offset = 0;
+
+                        for location in locations {
+                            let size = (self.ty_size(ty) - offset).min(8);
+
+                            self.mov_location(
+                                location,
+                                &Location::Address {
+                                    effective_address: dest.clone() + Offset(offset as isize),
+                                    spilled: false,
+                                },
+                                size,
+                            )?;
+
+                            offset += size;
+                        }
+                    }
+                }
             }
             Operand::Global(_) | Operand::Local(_) => match &src.get_location(self).unwrap() {
                 Location::Address {
