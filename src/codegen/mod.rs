@@ -9,7 +9,7 @@ use crate::repr::{
     BlockIdx, Branch, Const, FunctionIdx, Global, Instruction, InstructionIdx, LocalIdx,
     LocalStorage, Module, Operand, Patch, Terminator, Wrapper,
     op::BinOp,
-    ty::{Ty, TyIdx},
+    ty::{Storage, Ty, TyIdx},
 };
 use abi::Abi;
 use allocator::{Allocator, Location};
@@ -171,7 +171,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                                 },
                             )
                         }
-                        Instruction::Icmp { .. } => (),
+                        Instruction::Icmp { .. } | Instruction::Call { .. } => (),
                     }
                 }
 
@@ -283,6 +283,34 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     | Instruction::Load { .. }
                     | Instruction::GetElementPtr { .. }
                     | Instruction::Icmp { .. } => (),
+                    Instruction::Call { arguments, .. } => {
+                        // TODO: move this somewhere else, codegen shouldn't know about this
+                        let registers: Vec<_> = vec![
+                            Register::Rdi,
+                            Register::Rsi,
+                            Register::Rdx,
+                            Register::Rcx,
+                            Register::R8,
+                            Register::R9,
+                        ]
+                        .into_iter()
+                        .map(|r| {
+                            let idx = allocator.create_node(self.module.ty_storage.void_ty);
+
+                            allocator.precolor(idx, r.into());
+
+                            idx
+                        })
+                        .collect();
+
+                        for operand in arguments {
+                            if let Some(local_idx) = operand.local_idx() {
+                                for &r in &registers {
+                                    allocator.add_edge((r, local_idx));
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -507,6 +535,33 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     kind.into(),
                 );
             }
+            Instruction::Call {
+                fn_idx,
+                arguments,
+                out,
+            } => {
+                assert_eq!(
+                    out.is_some(),
+                    self.module
+                        .ty_storage
+                        .get_ty(self.module.functions[*fn_idx].ret_ty)
+                        != &Ty::Void,
+                    "only non-void functions can have out local"
+                );
+
+                let locations = self.abi.calling_convention().arguments(
+                    self,
+                    &self.module.functions[*fn_idx].locals
+                        [..self.module.functions[*fn_idx].params_count],
+                );
+
+                for (argument, locations) in arguments.iter().zip(locations) {
+                    self.explode_operand(argument.clone(), &locations).unwrap();
+                }
+
+                self.text
+                    .push_str(&format!("\tcall {}\n", self.module.functions[*fn_idx].name));
+            }
         }
     }
 
@@ -562,36 +617,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.arguments = self
             .abi
             .calling_convention()
-            .compute(
+            .parameters(
                 self,
                 &mut allocator,
                 &self.module.functions[idx].locals[..self.module.functions[idx].params_count],
             )
             .into_iter()
-            .map(|locations| {
-                locations
-                    .into_iter()
-                    .map(|location| {
-                        match location {
-                            Location::Address {
-                                mut effective_address,
-                                spilled,
-                            } => {
-                                let displacement = effective_address.displacement.as_mut().unwrap();
-
-                                // stack contains a return address and rbp's value
-                                *displacement = *displacement + Offset(8 + 8);
-
-                                Location::Address {
-                                    effective_address,
-                                    spilled,
-                                }
-                            }
-                            other => other,
-                        }
-                    })
-                    .collect()
-            })
             .zip(&self.module.functions[idx].locals)
             .enumerate()
             .map(|(idx, (locations, ty))| (idx, Argument { ty: *ty, locations }))
@@ -939,6 +970,93 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     offset += size;
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    fn explode_operand(
+        &mut self,
+        operand: Operand,
+        locations: &[Location],
+    ) -> Result<(), InvalidOperandSize> {
+        match operand {
+            Operand::Const(c, ty) => {
+                fn flatten(
+                    storage: &Storage,
+                    abi: &dyn Abi,
+                    consts: &mut Vec<(Const, usize, TyIdx)>,
+                    c: Const,
+                    ty: TyIdx,
+                    offset: usize,
+                ) {
+                    match c {
+                        Const::Int(_) => consts.push((c, offset, ty)),
+                        Const::Aggregate(c) => {
+                            let fields = match storage.get_ty(ty) {
+                                Ty::Struct(fields) => fields,
+                                _ => unreachable!(),
+                            };
+
+                            for (i, (ty, c)) in
+                                fields.into_iter().cloned().zip(c.into_iter()).enumerate()
+                            {
+                                flatten(
+                                    storage,
+                                    abi,
+                                    consts,
+                                    c,
+                                    ty,
+                                    offset + abi.field_offset(storage, fields, i),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                let mut consts = Vec::new();
+                flatten(&self.module.ty_storage, self.abi, &mut consts, c, ty, 0);
+                let mut splits: Vec<Vec<(Const, usize, TyIdx)>> = vec![Vec::new(); locations.len()];
+                for (i, location) in locations.iter().enumerate() {
+                    let split = &mut splits[i];
+
+                    match location {
+                        Location::Address { .. } => {
+                            split.extend(consts.iter().cloned());
+                        }
+                        Location::Register(_) => {
+                            let start_offset = consts[0].1;
+                            while let Some((_, offset, _)) = consts.get(0) {
+                                if (offset - start_offset) < 8 {
+                                    split.push(consts.remove(0));
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (consts, location) in splits.into_iter().zip(locations.iter()) {
+                    let mut result: u64 = 0;
+
+                    for (c, offset, _) in consts.into_iter().rev() {
+                        match c {
+                            Const::Int(value) => {
+                                result |= value;
+                                result <<= offset * u8::BITS as usize;
+                            }
+                            Const::Aggregate(_) => unreachable!(),
+                        }
+                    }
+
+                    self.mov(
+                        &Source::Immediate(Immediate::Int(result)),
+                        &location.to_dest(OperandSize::Qword),
+                    )
+                }
+            }
+            operand => unimplemented!(),
         }
 
         Ok(())

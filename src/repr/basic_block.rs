@@ -1,7 +1,7 @@
 use super::{
-    Branch, Function, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
+    Branch, Function, FunctionIdx, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
     op::{BinOp, CmpOp},
-    ty::{self, TyIdx},
+    ty::{self, Ty, TyIdx},
 };
 
 pub type BlockIdx = usize;
@@ -141,6 +141,28 @@ impl<'ctx> Wrapper<'ctx> {
         });
 
         Operand::Local(idx)
+    }
+
+    pub fn create_call(
+        &mut self,
+        fn_idx: FunctionIdx,
+        // it's not possible to get a function by `FunctionIdx` from here :(
+        ret_ty: TyIdx,
+        arguments: Vec<Operand>,
+    ) -> Option<Operand> {
+        let idx = if self.ty_storage.get_ty(ret_ty) == &Ty::Void {
+            None
+        } else {
+            Some(self.create_local(ret_ty))
+        };
+
+        self.block.instructions.push(Instruction::Call {
+            fn_idx,
+            arguments,
+            out: idx,
+        });
+
+        idx.map(|idx| Operand::Local(idx))
     }
 
     fn create_local(&mut self, ty: TyIdx) -> LocalIdx {

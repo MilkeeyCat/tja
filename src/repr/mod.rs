@@ -136,6 +136,11 @@ pub enum Instruction {
         rhs: Operand,
         out: LocalIdx,
     },
+    Call {
+        fn_idx: FunctionIdx,
+        arguments: Vec<Operand>,
+        out: Option<LocalIdx>,
+    },
 }
 
 impl Instruction {
@@ -150,6 +155,7 @@ impl Instruction {
             Self::Load { out, .. } => Some(*out),
             Self::GetElementPtr { out, .. } => Some(*out),
             Self::Icmp { out, .. } => Some(*out),
+            Self::Call { out, .. } => out.clone(),
         }
     }
 
@@ -170,6 +176,10 @@ impl Instruction {
                 uses
             }
             Self::Icmp { lhs, rhs, .. } => vec![lhs.local_idx(), rhs.local_idx()],
+            Self::Call { arguments, .. } => arguments
+                .iter()
+                .map(|operand| operand.local_idx())
+                .collect(),
         }
         .into_iter()
         .flatten()

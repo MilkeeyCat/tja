@@ -7,10 +7,11 @@ use super::{
 use crate::repr::ty::TyIdx;
 
 pub trait CallingConvention {
-    fn compute(
+    fn parameters(
         &self,
         codegen: &CodeGen,
         allocator: &mut Allocator,
         tys: &[TyIdx],
     ) -> Vec<Vec<Location>>;
+    fn arguments(&self, codegen: &CodeGen, tys: &[TyIdx]) -> Vec<Vec<Location>>;
 }

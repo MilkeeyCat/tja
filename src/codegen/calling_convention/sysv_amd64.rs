@@ -91,12 +91,69 @@ impl SysVAmd64 {
 }
 
 impl CallingConvention for SysVAmd64 {
-    fn compute(
+    fn parameters(
         &self,
         codegen: &CodeGen,
         allocator: &mut Allocator,
         tys: &[TyIdx],
     ) -> Vec<Vec<Location>> {
+        let mut locations: Vec<_> = self
+            .arguments(codegen, tys)
+            .into_iter()
+            .map(|locations| {
+                locations
+                    .into_iter()
+                    .map(|location| {
+                        match location {
+                            Location::Address {
+                                mut effective_address,
+                                spilled,
+                            } => {
+                                let displacement = effective_address.displacement.as_mut().unwrap();
+
+                                // stack contains a return address and rbp's value
+                                *displacement = *displacement + Offset(8 + 8);
+
+                                Location::Address {
+                                    effective_address,
+                                    spilled,
+                                }
+                            }
+                            other => other,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        for (local_idx, locations) in locations.iter_mut().enumerate() {
+            for location in locations {
+                // it's not possible to assign multiple locations to one local,
+                // so to let allocator know that other location is also taken,
+                // a new node has to be created with the same neighbors as
+                // current local
+                if allocator.is_precolored(&local_idx) {
+                    let node = allocator.create_node(tys[local_idx]);
+
+                    for neighbor in allocator
+                        .neighbors(&local_idx)
+                        .into_iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                    {
+                        allocator.add_edge((node, neighbor));
+                    }
+                } else {
+                    allocator.precolor(local_idx, location.clone());
+                }
+            }
+        }
+
+        locations
+    }
+
+    fn arguments(&self, codegen: &CodeGen, tys: &[TyIdx]) -> Vec<Vec<Location>> {
         let mut locations = Vec::new();
         let mut registers = vec![
             Register::Rdi,
@@ -161,28 +218,6 @@ impl CallingConvention for SysVAmd64 {
                 }
 
                 in_progress = true;
-            }
-
-            for location in locations {
-                // it's not possible to assign multiple locations to one local,
-                // so to let allocator know that other location is also taken,
-                // a new node has to be created with the same neighbors as
-                // current local
-                if allocator.is_precolored(&local_idx) {
-                    let node = allocator.create_node(tys[local_idx]);
-
-                    for neighbor in allocator
-                        .neighbors(&local_idx)
-                        .into_iter()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                    {
-                        allocator.add_edge((node, neighbor));
-                    }
-                } else {
-                    allocator.precolor(local_idx, location.clone());
-                }
             }
         }
 
