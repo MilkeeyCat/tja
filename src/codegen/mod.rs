@@ -325,7 +325,12 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         }
     }
 
-    fn instruction(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx, instr_idx: InstructionIdx) {
+    fn instruction(
+        &mut self,
+        fn_idx: FunctionIdx,
+        block_idx: BlockIdx,
+        instr_idx: InstructionIdx,
+    ) -> Result<(), InvalidOperandSize> {
         match &self.module.functions[fn_idx].blocks[block_idx].instructions[instr_idx].clone() {
             Instruction::Binary {
                 kind,
@@ -334,11 +339,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 out,
             } => {
                 let ty = self.locals[out].ty;
-                let ty_size: OperandSize = self.ty_size(ty).try_into().unwrap();
+                let ty_size: OperandSize = self.ty_size(ty).try_into()?;
 
                 if kind != &BinOp::Sub {
-                    self.copy(lhs, &self.locals[out].location.clone(), ty)
-                        .unwrap();
+                    self.copy(lhs, &self.locals[out].location.clone(), ty)?;
                 }
 
                 match kind {
@@ -350,12 +354,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     }
                     BinOp::Sub => {
                         if let Operand::Const(Const::Int(0), _) = lhs {
-                            self.copy(rhs, &self.locals[out].location.clone(), ty)
-                                .unwrap();
+                            self.copy(rhs, &self.locals[out].location.clone(), ty)?;
                             self.neg(&self.locals[out].location.to_dest(ty_size));
                         } else {
-                            self.copy(lhs, &self.locals[out].location.clone(), ty)
-                                .unwrap();
+                            self.copy(lhs, &self.locals[out].location.clone(), ty)?;
                             self.sub(
                                 &self.locals[out].location.to_dest(ty_size),
                                 &rhs.to_source(self, ty_size),
@@ -429,25 +431,22 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     operand,
                     &self.locals[out].location.clone(),
                     self.locals[out].ty,
-                )
-                .unwrap();
+                )?;
             }
             Instruction::Sext { operand, out } => {
                 let out = &self.locals[out];
 
                 self.sext(
-                    &operand.to_source(self, self.ty_size(operand.ty(self)).try_into().unwrap()),
-                    &out.location
-                        .to_dest(self.ty_size(out.ty).try_into().unwrap()),
+                    &operand.to_source(self, self.ty_size(operand.ty(self)).try_into()?),
+                    &out.location.to_dest(self.ty_size(out.ty).try_into()?),
                 );
             }
             Instruction::Zext { operand, out } => {
                 let out = &self.locals[out];
 
                 self.zext(
-                    &operand.to_source(self, self.ty_size(operand.ty(self)).try_into().unwrap()),
-                    &out.location
-                        .to_dest(self.ty_size(out.ty).try_into().unwrap()),
+                    &operand.to_source(self, self.ty_size(operand.ty(self)).try_into()?),
+                    &out.location.to_dest(self.ty_size(out.ty).try_into()?),
                 );
             }
             Instruction::Alloca { .. } => (),
@@ -460,7 +459,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     loc => loc,
                 };
 
-                self.copy(value, &loc, value.ty(self)).unwrap();
+                self.copy(value, &loc, value.ty(self))?;
             }
             Instruction::Load { ptr, out } => {
                 let src = match ptr.get_location(self).unwrap() {
@@ -485,7 +484,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 match Operand::Local(*out).get_location(self).unwrap() {
                     Location::Register(r) => {
-                        let operand_size = size.try_into().unwrap();
+                        let operand_size = size.try_into()?;
 
                         self.mov(&src.src(operand_size), &r.resize(operand_size).into());
                     }
@@ -527,7 +526,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 rhs,
                 out,
             } => {
-                let size = self.ty_size(lhs.ty(self)).try_into().unwrap();
+                let size = self.ty_size(lhs.ty(self)).try_into()?;
 
                 self.cmp(&lhs.to_dest(self, size), &rhs.to_source(self, size));
                 self.setcc(
@@ -556,16 +555,22 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 );
 
                 for (argument, locations) in arguments.iter().zip(locations) {
-                    self.explode_operand(argument.clone(), &locations).unwrap();
+                    self.explode_operand(argument.clone(), &locations)?;
                 }
 
                 self.text
                     .push_str(&format!("\tcall {}\n", self.module.functions[*fn_idx].name));
             }
-        }
+        };
+
+        Ok(())
     }
 
-    fn terminator(&mut self, fn_idx: FunctionIdx, block_idx: BlockIdx) {
+    fn terminator(
+        &mut self,
+        fn_idx: FunctionIdx,
+        block_idx: BlockIdx,
+    ) -> Result<(), InvalidOperandSize> {
         match &self.module.functions[fn_idx].blocks[block_idx]
             .terminator
             .clone()
@@ -579,7 +584,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     iftrue,
                     iffalse,
                 } => {
-                    let size = self.ty_size(condition.ty(self)).try_into().unwrap();
+                    let size = self.ty_size(condition.ty(self)).try_into()?;
                     let loc = condition.get_location(self).unwrap();
 
                     self.test(&loc.to_dest(size), &loc.to_source(size));
@@ -590,7 +595,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     self.jmp(&self.block_label(fn_idx, *block_idx))
                 }
             },
-        }
+        };
+
+        Ok(())
     }
 
     fn function(&mut self, idx: FunctionIdx) {
@@ -658,10 +665,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 .push_str(&format!("{}:\n", self.block_label(idx, block_idx)));
 
             for instr_idx in 0..block.instructions.len() {
-                self.instruction(idx, block_idx, instr_idx);
+                self.instruction(idx, block_idx, instr_idx).unwrap();
             }
 
-            self.terminator(idx, block_idx);
+            self.terminator(idx, block_idx).unwrap();
         }
 
         self.text
