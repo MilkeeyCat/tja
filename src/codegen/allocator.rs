@@ -7,7 +7,7 @@ use crate::repr::{
     LocalIdx,
     ty::{Ty, TyIdx},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 type Edges = HashSet<(LocalIdx, LocalIdx)>;
 
@@ -54,7 +54,7 @@ impl From<Register> for Location {
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {
-    nodes: HashMap<LocalIdx, TyIdx>,
+    nodes: BTreeMap<LocalIdx, TyIdx>,
     edges: Edges,
     registers: Vec<Register>,
     locations: HashMap<LocalIdx, Location>,
@@ -70,11 +70,7 @@ impl Allocator {
         spill_mode: bool,
     ) -> Self {
         Self {
-            nodes: types
-                .into_iter()
-                .enumerate()
-                .map(|(i, ty)| (i, ty))
-                .collect(),
+            nodes: types.into_iter().enumerate().collect(),
             edges,
             registers,
             locations: HashMap::new(),
@@ -92,7 +88,10 @@ impl Allocator {
             .collect();
 
         let ty = self.nodes.remove(&node).unwrap();
-        edges.iter().for_each(|edge| _ = self.edges.remove(edge));
+
+        for edge in &edges {
+            self.edges.remove(edge);
+        }
 
         (ty, edges)
     }
