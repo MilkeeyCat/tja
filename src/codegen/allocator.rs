@@ -1,6 +1,6 @@
 use super::{
-    CodeGen,
-    operands::{Base, Destination, EffectiveAddress, Memory, Offset, OperandSize, Source},
+    CodeGen, Location,
+    operands::{Base, EffectiveAddress, Offset},
     register::Register,
 };
 use crate::repr::{
@@ -10,47 +10,6 @@ use crate::repr::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 type Edges = HashSet<(LocalIdx, LocalIdx)>;
-
-#[derive(Debug, Clone)]
-pub enum Location {
-    Register(Register),
-    Address {
-        effective_address: EffectiveAddress,
-        spilled: bool,
-    },
-}
-
-impl Location {
-    pub fn to_source(&self, size: OperandSize) -> Source {
-        match self {
-            Self::Register(r) => r.resize(size).into(),
-            Self::Address {
-                effective_address, ..
-            } => Source::Memory(Memory {
-                effective_address: effective_address.clone(),
-                size,
-            }),
-        }
-    }
-
-    pub fn to_dest(&self, size: OperandSize) -> Destination {
-        match self {
-            Self::Register(r) => r.resize(size).into(),
-            Self::Address {
-                effective_address, ..
-            } => Destination::Memory(Memory {
-                effective_address: effective_address.clone(),
-                size,
-            }),
-        }
-    }
-}
-
-impl From<Register> for Location {
-    fn from(value: Register) -> Self {
-        Self::Register(value)
-    }
-}
 
 /// A weird looking graph coloring by simplification register allocator
 pub struct Allocator {

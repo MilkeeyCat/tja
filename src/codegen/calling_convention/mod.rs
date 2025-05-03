@@ -1,9 +1,6 @@
 pub mod sysv_amd64;
 
-use super::{
-    CodeGen,
-    allocator::{Allocator, Location},
-};
+use super::{CodeGen, Location, allocator::Allocator};
 use crate::repr::ty::TyIdx;
 
 pub trait CallingConvention {

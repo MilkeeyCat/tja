@@ -1,8 +1,8 @@
 use super::CallingConvention;
 use crate::{
     codegen::{
-        CodeGen,
-        allocator::{Allocator, Location},
+        CodeGen, Location,
+        allocator::Allocator,
         operands::{Base, EffectiveAddress, Offset},
         register::Register,
     },

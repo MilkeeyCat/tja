@@ -12,13 +12,55 @@ use crate::repr::{
     ty::{Storage, Ty, TyIdx},
 };
 use abi::Abi;
-use allocator::{Allocator, Location};
+use allocator::Allocator;
 use condition::Condition;
 use operands::{
-    Base, Destination, EffectiveAddress, Immediate, InvalidOperandSize, Offset, OperandSize, Source,
+    Base, Destination, EffectiveAddress, Immediate, InvalidOperandSize, Memory, Offset,
+    OperandSize, Source,
 };
 use register::Register;
 use std::{collections::HashMap, rc::Rc};
+
+#[derive(Debug, Clone)]
+pub enum Location {
+    Register(Register),
+    Address {
+        effective_address: EffectiveAddress,
+        spilled: bool,
+    },
+}
+
+impl Location {
+    pub fn to_source(&self, size: OperandSize) -> Source {
+        match self {
+            Self::Register(r) => r.resize(size).into(),
+            Self::Address {
+                effective_address, ..
+            } => Source::Memory(Memory {
+                effective_address: effective_address.clone(),
+                size,
+            }),
+        }
+    }
+
+    pub fn to_dest(&self, size: OperandSize) -> Destination {
+        match self {
+            Self::Register(r) => r.resize(size).into(),
+            Self::Address {
+                effective_address, ..
+            } => Destination::Memory(Memory {
+                effective_address: effective_address.clone(),
+                size,
+            }),
+        }
+    }
+}
+
+impl From<Register> for Location {
+    fn from(value: Register) -> Self {
+        Self::Register(value)
+    }
+}
 
 impl Operand {
     fn get_location<T: LocationStorage>(&self, storage: &T) -> Option<Location> {
@@ -1219,8 +1261,7 @@ impl LocalStorage for CodeGen<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CodeGen,
-        allocator::Location,
+        CodeGen, Location,
         operands::{Base, EffectiveAddress, InvalidOperandSize, Offset},
         register::Register,
     };
