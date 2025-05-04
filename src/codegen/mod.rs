@@ -21,7 +21,7 @@ use operands::{
 use register::Register;
 use std::{collections::HashMap, rc::Rc};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Location {
     Register(Register),
     Address {
@@ -63,11 +63,12 @@ impl From<Register> for Location {
 }
 
 impl Operand {
-    fn get_location<T: LocationStorage>(&self, storage: &T) -> Option<Location> {
+    /// panics if a local has multiple locations
+    fn get_location<T: LocationStorage>(&self, storage: &T) -> Location {
         match self {
-            Self::Global(global) => Some(storage.get_global(global)),
-            Self::Local(idx) => Some(storage.get_local(*idx)),
-            Self::Const(_, _) => None,
+            Self::Global(global) => storage.get_global(global),
+            Self::Local(idx) => storage.get_local(*idx),
+            Self::Const(_, _) => unreachable!(),
         }
     }
 
@@ -88,22 +89,29 @@ impl Operand {
     }
 }
 
+pub type LocalLocation = Vec<Location>;
+
 #[derive(Debug)]
 struct Variable {
     ty: TyIdx,
-    location: Location,
+    location: LocalLocation,
 }
 
-#[derive(Debug)]
-struct Argument {
-    ty: TyIdx,
-    locations: Vec<Location>,
+impl Variable {
+    fn get_single_location(&self) -> &Location {
+        assert!(
+            self.location.len() == 1,
+            "expected the variable to have one location, got {}",
+            self.location.len()
+        );
+
+        &self.location[0]
+    }
 }
 
 pub struct CodeGen<'a, 'ctx> {
     module: Wrapper<'ctx, &'ctx mut Module>,
     locals: HashMap<LocalIdx, Variable>,
-    arguments: HashMap<LocalIdx, Argument>,
     globals: HashMap<Rc<Global>, Location>,
     spill_register: Register,
     bss: String,
@@ -117,7 +125,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         Self {
             module,
             locals: HashMap::new(),
-            arguments: HashMap::new(),
             globals: HashMap::new(),
             spill_register: Register::R8,
             bss: String::new(),
@@ -277,7 +284,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         rhs,
                         out,
                     } => {
-                        allocator.precolor(*out, Register::Rax.into());
+                        allocator.precolor(*out, vec![Register::Rax.into()]);
 
                         let indices: Vec<_> = vec![lhs.local_idx(), rhs.local_idx(), Some(*out)]
                             .into_iter()
@@ -287,7 +294,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         if !indices.is_empty() {
                             let ty = self.module.functions[idx].locals[*out];
                             let rdx = allocator.create_node(ty);
-                            allocator.precolor(rdx, Register::Rdx.into());
+                            allocator.precolor(rdx, vec![Register::Rdx.into()]);
 
                             for idx in indices {
                                 allocator.add_edge((rdx, idx));
@@ -304,7 +311,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         allocator.stack_frame_size += self.ty_size(*ty);
                         allocator.precolor(
                             *out,
-                            Location::Address {
+                            vec![Location::Address {
                                 effective_address: EffectiveAddress {
                                     base: Base::Register(Register::Rbp),
                                     index: None,
@@ -314,7 +321,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                                     )),
                                 },
                                 spilled: false,
-                            },
+                            }],
                         );
                     }
                     Instruction::Binary { .. }
@@ -339,7 +346,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                         .map(|r| {
                             let idx = allocator.create_node(self.module.ty_storage.void_ty);
 
-                            allocator.precolor(idx, r.into());
+                            allocator.precolor(idx, vec![r.into()]);
 
                             idx
                         })
@@ -359,7 +366,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             match &block.terminator {
                 Terminator::Return(operand) => {
                     if let Some(Operand::Local(idx)) = operand {
-                        allocator.precolor(*idx, Register::Rax.into());
+                        allocator.precolor(*idx, vec![Register::Rax.into()]);
                     }
                 }
                 Terminator::Br(_) => (),
@@ -384,31 +391,31 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 let ty_size: OperandSize = self.ty_size(ty).try_into()?;
 
                 if kind != &BinOp::Sub {
-                    self.copy(lhs, &self.locals[out].location.clone(), ty)?;
+                    self.copy(lhs, &self.locals[out].get_single_location().clone(), ty)?;
                 }
 
                 match kind {
                     BinOp::Add => {
                         self.add(
-                            &self.locals[out].location.to_dest(ty_size),
+                            &self.locals[out].get_single_location().to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
                     BinOp::Sub => {
                         if let Operand::Const(Const::Int(0), _) = lhs {
-                            self.copy(rhs, &self.locals[out].location.clone(), ty)?;
-                            self.neg(&self.locals[out].location.to_dest(ty_size));
+                            self.copy(rhs, &self.locals[out].get_single_location().clone(), ty)?;
+                            self.neg(&self.locals[out].get_single_location().to_dest(ty_size));
                         } else {
-                            self.copy(lhs, &self.locals[out].location.clone(), ty)?;
+                            self.copy(lhs, &self.locals[out].get_single_location().clone(), ty)?;
                             self.sub(
-                                &self.locals[out].location.to_dest(ty_size),
+                                &self.locals[out].get_single_location().to_dest(ty_size),
                                 &rhs.to_source(self, ty_size),
                             );
                         }
                     }
                     BinOp::Mul => {
                         self.mul(
-                            &self.locals[out].location.to_dest(ty_size),
+                            &self.locals[out].get_single_location().to_dest(ty_size),
                             &rhs.to_source(self, ty_size),
                         );
                     }
@@ -422,7 +429,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                         match ty_size {
                             OperandSize::Byte => {
-                                let src = &self.locals[out].location;
+                                let src = self.locals[out].get_single_location();
 
                                 self.sext(
                                     &src.to_source(OperandSize::Byte),
@@ -451,7 +458,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                         match ty_size {
                             OperandSize::Byte => {
-                                let src = &self.locals[out].location;
+                                let src = self.locals[out].get_single_location();
 
                                 self.zext(
                                     &src.to_source(OperandSize::Byte),
@@ -471,7 +478,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Instruction::Copy { out, operand } => {
                 self.copy(
                     operand,
-                    &self.locals[out].location.clone(),
+                    &self.locals[out].get_single_location().clone(),
                     self.locals[out].ty,
                 )?;
             }
@@ -480,7 +487,8 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 self.sext(
                     &operand.to_source(self, self.ty_size(operand.ty(self)).try_into()?),
-                    &out.location.to_dest(self.ty_size(out.ty).try_into()?),
+                    &out.get_single_location()
+                        .to_dest(self.ty_size(out.ty).try_into()?),
                 );
             }
             Instruction::Zext { operand, out } => {
@@ -488,12 +496,13 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 self.zext(
                     &operand.to_source(self, self.ty_size(operand.ty(self)).try_into()?),
-                    &out.location.to_dest(self.ty_size(out.ty).try_into()?),
+                    &out.get_single_location()
+                        .to_dest(self.ty_size(out.ty).try_into()?),
                 );
             }
             Instruction::Alloca { .. } => (),
             Instruction::Store { ptr, value } => {
-                let loc = match ptr.get_location(self).unwrap() {
+                let loc = match ptr.get_location(self) {
                     Location::Register(r) => Location::Address {
                         effective_address: r.into(),
                         spilled: false,
@@ -504,7 +513,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 self.copy(value, &loc, value.ty(self))?;
             }
             Instruction::Load { ptr, out } => {
-                let src = match ptr.get_location(self).unwrap() {
+                let src = match ptr.get_location(self) {
                     Location::Address {
                         spilled: true,
                         effective_address,
@@ -524,7 +533,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 let size = self.ty_size(self.locals[out].ty);
 
-                match Operand::Local(*out).get_location(self).unwrap() {
+                match Operand::Local(*out).get_location(self) {
                     Location::Register(r) => {
                         let operand_size = size.try_into()?;
 
@@ -544,7 +553,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 out,
             } => match indices.as_slice() {
                 [operand, rest @ ..] => {
-                    let mut ptr = match ptr.get_location(self).unwrap() {
+                    let mut ptr = match ptr.get_location(self) {
                         Location::Address {
                             effective_address, ..
                         } => effective_address,
@@ -572,7 +581,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 self.cmp(&lhs.to_dest(self, size), &rhs.to_source(self, size));
                 self.setcc(
-                    &self.locals[out].location.to_dest(OperandSize::Byte),
+                    &self.locals[out]
+                        .get_single_location()
+                        .to_dest(OperandSize::Byte),
                     kind.into(),
                 );
             }
@@ -627,7 +638,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     iffalse,
                 } => {
                     let size = self.ty_size(condition.ty(self)).try_into()?;
-                    let loc = condition.get_location(self).unwrap();
+                    let loc = condition.get_location(self);
 
                     self.test(&loc.to_dest(size), &loc.to_source(size));
                     self.jcc(&self.block_label(fn_idx, *iftrue), Condition::NotEqual);
@@ -663,30 +674,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ],
             false,
         );
-        self.arguments = self
-            .abi
-            .calling_convention()
-            .parameters(
-                self,
-                &mut allocator,
-                &self.module.functions[idx].locals[..self.module.functions[idx].params_count],
-            )
-            .into_iter()
-            .zip(&self.module.functions[idx].locals)
-            .enumerate()
-            .map(|(idx, (locations, ty))| (idx, Argument { ty: *ty, locations }))
-            .collect();
+        self.abi.calling_convention().precolor_parameters(
+            self,
+            &mut allocator,
+            &self.module.functions[idx].locals[..self.module.functions[idx].params_count],
+        );
         self.precolor(&mut allocator, idx);
 
         let (locations, mut stack_frame_size) = allocator.allocate(self);
         stack_frame_size = stack_frame_size.next_multiple_of(16);
-        self.locals.extend(
-            locations
-                .into_iter()
-                .zip(&self.module.functions[idx].locals)
-                .enumerate()
-                .map(|(i, (location, ty))| (i, Variable { ty: *ty, location })),
-        );
+        self.locals = locations
+            .into_iter()
+            .zip(&self.module.functions[idx].locals)
+            .enumerate()
+            .map(|(i, (location, ty))| (i, Variable { ty: *ty, location }))
+            .collect();
         self.text.push_str(&format!(
             ".global {0}\n{0}:\n",
             &self.module.functions[idx].name
@@ -719,8 +721,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             self.text.push_str("\tleave\n");
         }
         self.text.push_str("\tret\n");
-        self.locals
-            .retain(|_, variable| matches!(variable.location, Location::Address { .. }));
+        self.locals.clear();
     }
 
     fn get_element_ptr(
@@ -733,7 +734,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         match indices {
             [] => {
                 self.lea(
-                    &self.locals[&out].location.to_dest(OperandSize::Qword),
+                    &self.locals[&out]
+                        .get_single_location()
+                        .to_dest(OperandSize::Qword),
                     base,
                 );
             }
@@ -819,20 +822,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         ty: TyIdx,
     ) -> Result<(), InvalidOperandSize> {
         match src {
-            Operand::Local(idx) if *idx < self.arguments.len() => {
-                self.implode_operand(&self.arguments[idx].locations.clone(), dest, ty)?
-            }
-            Operand::Global(_) | Operand::Local(_) => match &src.get_location(self).unwrap() {
-                Location::Address {
-                    effective_address,
-                    spilled: false,
-                } if ty == self.module.ty_storage.ptr_ty => {
-                    self.lea(
-                        &dest.to_dest(OperandSize::Qword),
-                        &effective_address.clone(),
-                    );
-                }
-                location => self.mov_location(location, dest, self.ty_size(ty))?,
+            Operand::Global(_) => unimplemented!(),
+            Operand::Local(idx) => match self.locals[idx].location.as_slice() {
+                [location] => match location {
+                    Location::Address {
+                        effective_address,
+                        spilled: false,
+                    } if ty == self.module.ty_storage.ptr_ty => {
+                        self.lea(
+                            &dest.to_dest(OperandSize::Qword),
+                            &effective_address.clone(),
+                        );
+                    }
+                    location => self.mov_location(&location.clone(), dest, self.ty_size(ty))?,
+                },
+                location => self.implode_operand(&location.to_vec(), dest, self.ty_size(ty))?,
             },
             Operand::Const(c, _) => self.mov_const(dest, c, ty)?,
         };
@@ -988,11 +992,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
     fn implode_operand(
         &mut self,
-        locations: &[Location],
+        location: &LocalLocation,
         dest: &Location,
         ty: TyIdx,
     ) -> Result<(), InvalidOperandSize> {
-        match locations {
+        match location.as_slice() {
             [location] => self.mov_location(location, dest, self.ty_size(ty))?,
             locations => {
                 let dest = match dest {
@@ -1244,7 +1248,7 @@ trait LocationStorage {
 
 impl LocationStorage for CodeGen<'_, '_> {
     fn get_local(&self, idx: LocalIdx) -> Location {
-        self.locals[&idx].location.clone()
+        self.locals[&idx].get_single_location().clone()
     }
 
     fn get_global(&self, global: &Global) -> Location {

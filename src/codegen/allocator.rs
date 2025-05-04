@@ -1,5 +1,5 @@
 use super::{
-    CodeGen, Location,
+    CodeGen, LocalLocation, Location,
     operands::{Base, EffectiveAddress, Offset},
     register::Register,
 };
@@ -16,7 +16,7 @@ pub struct Allocator {
     nodes: BTreeMap<LocalIdx, TyIdx>,
     edges: Edges,
     registers: Vec<Register>,
-    locations: HashMap<LocalIdx, Location>,
+    locations: HashMap<LocalIdx, LocalLocation>,
     pub stack_frame_size: usize,
     spill_mode: bool,
 }
@@ -89,27 +89,30 @@ impl Allocator {
     }
 
     fn unique_register(&self, neighbors: &[&LocalIdx]) -> Option<Register> {
-        for reg in &self.registers {
+        for r in &self.registers {
             let mut found = true;
             for neighbor in neighbors {
-                if let Location::Register(r) = &self.locations[neighbor] {
-                    if reg == r {
-                        found = false;
+                if self
+                    .locations
+                    .get(&neighbor)
+                    .unwrap()
+                    .contains(&Location::Register(*r))
+                {
+                    found = false;
 
-                        break;
-                    }
+                    break;
                 }
             }
 
             if found {
-                return Some(*reg);
+                return Some(*r);
             }
         }
 
         None
     }
 
-    pub fn precolor(&mut self, node: LocalIdx, location: Location) {
+    pub fn precolor(&mut self, node: LocalIdx, location: LocalLocation) {
         self.locations.insert(node, location);
     }
 
@@ -130,7 +133,7 @@ impl Allocator {
         node
     }
 
-    pub fn allocate(mut self, codegen: &CodeGen) -> (Vec<Location>, usize) {
+    pub fn allocate(mut self, codegen: &CodeGen) -> (Vec<LocalLocation>, usize) {
         let locations = self.locations.clone();
         let nodes = self.nodes.clone();
         let edges = self.edges.clone();
@@ -157,14 +160,14 @@ impl Allocator {
             if self.unique_register(&self.neighbors(&node)).is_some() && !force_stack {
                 self.locations.insert(
                     node,
-                    self.unique_register(&self.neighbors(&node)).unwrap().into(),
+                    vec![self.unique_register(&self.neighbors(&node)).unwrap().into()],
                 );
             } else {
                 if self.spill_mode {
                     self.stack_frame_size += ty_size;
                     self.locations.insert(
                         node,
-                        Location::Address {
+                        vec![Location::Address {
                             effective_address: EffectiveAddress {
                                 base: Base::Register(Register::Rbp),
                                 index: None,
@@ -172,7 +175,7 @@ impl Allocator {
                                 displacement: Some(Offset(-(self.stack_frame_size as isize))),
                             },
                             spilled: true,
-                        },
+                        }],
                     );
                 } else {
                     self.spill_mode = true;

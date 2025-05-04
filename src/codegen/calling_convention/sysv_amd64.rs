@@ -1,7 +1,7 @@
 use super::CallingConvention;
 use crate::{
     codegen::{
-        CodeGen, Location,
+        CodeGen, LocalLocation, Location,
         allocator::Allocator,
         operands::{Base, EffectiveAddress, Offset},
         register::Register,
@@ -91,13 +91,8 @@ impl SysVAmd64 {
 }
 
 impl CallingConvention for SysVAmd64 {
-    fn parameters(
-        &self,
-        codegen: &CodeGen,
-        allocator: &mut Allocator,
-        tys: &[TyIdx],
-    ) -> Vec<Vec<Location>> {
-        let mut locations: Vec<_> = self
+    fn precolor_parameters(&self, codegen: &CodeGen, allocator: &mut Allocator, tys: &[TyIdx]) {
+        let locations: Vec<_> = self
             .arguments(codegen, tys)
             .into_iter()
             .map(|locations| {
@@ -126,34 +121,12 @@ impl CallingConvention for SysVAmd64 {
             })
             .collect();
 
-        for (local_idx, locations) in locations.iter_mut().enumerate() {
-            for location in locations {
-                // it's not possible to assign multiple locations to one local,
-                // so to let allocator know that other location is also taken,
-                // a new node has to be created with the same neighbors as
-                // current local
-                if allocator.is_precolored(&local_idx) {
-                    let node = allocator.create_node(tys[local_idx]);
-
-                    for neighbor in allocator
-                        .neighbors(&local_idx)
-                        .into_iter()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                    {
-                        allocator.add_edge((node, neighbor));
-                    }
-                } else {
-                    allocator.precolor(local_idx, location.clone());
-                }
-            }
+        for (local_idx, locations) in locations.into_iter().enumerate() {
+            allocator.precolor(local_idx, locations);
         }
-
-        locations
     }
 
-    fn arguments(&self, codegen: &CodeGen, tys: &[TyIdx]) -> Vec<Vec<Location>> {
+    fn arguments(&self, codegen: &CodeGen, tys: &[TyIdx]) -> Vec<LocalLocation> {
         let mut locations = Vec::new();
         let mut registers = vec![
             Register::Rdi,
