@@ -8,6 +8,7 @@ use crate::{
     },
     repr::ty::{Ty, TyIdx},
 };
+use std::collections::VecDeque;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum ClassKind {
@@ -91,9 +92,15 @@ impl SysVAmd64 {
 }
 
 impl CallingConvention for SysVAmd64 {
-    fn precolor_parameters(&self, codegen: &CodeGen, allocator: &mut Allocator, tys: &[TyIdx]) {
+    fn precolor_parameters(
+        &self,
+        codegen: &CodeGen,
+        allocator: &mut Allocator,
+        ret_ty: TyIdx,
+        tys: &[TyIdx],
+    ) {
         let locations: Vec<_> = self
-            .arguments(codegen, tys)
+            .arguments(codegen, ret_ty, tys)
             .into_iter()
             .map(|locations| {
                 locations
@@ -126,7 +133,7 @@ impl CallingConvention for SysVAmd64 {
         }
     }
 
-    fn arguments(&self, codegen: &CodeGen, tys: &[TyIdx]) -> Vec<LocalLocation> {
+    fn arguments(&self, codegen: &CodeGen, ret_ty: TyIdx, tys: &[TyIdx]) -> Vec<LocalLocation> {
         let mut locations = Vec::new();
         let mut registers = vec![
             Register::Rdi,
@@ -135,8 +142,11 @@ impl CallingConvention for SysVAmd64 {
             Register::Rcx,
             Register::R8,
             Register::R9,
-        ]
-        .into_iter();
+        ];
+        if self.ty_class(codegen, ret_ty).len() > 1 {
+            registers.remove(2);
+        }
+        let mut registers = registers.into_iter();
         let mut stack_offset = 0;
         let mut alloc = |size: usize| -> Location {
             let location = Location::Address {
@@ -195,5 +205,21 @@ impl CallingConvention for SysVAmd64 {
         }
 
         locations
+    }
+
+    fn returned_value_location(&self, codegen: &CodeGen, ty: TyIdx) -> LocalLocation {
+        let mut registers = VecDeque::from([Register::Rax, Register::Rdx]);
+
+        self.ty_class(codegen, ty)
+            .into_iter()
+            .map(|class| match class {
+                ClassKind::Memory => Location::Address {
+                    effective_address: Register::Rdi.into(),
+                    spilled: false,
+                },
+                ClassKind::Integer => Location::Register(registers.pop_front().unwrap()),
+                _ => unimplemented!(),
+            })
+            .collect()
     }
 }

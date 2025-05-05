@@ -365,8 +365,14 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
             match &block.terminator {
                 Terminator::Return(operand) => {
-                    if let Some(Operand::Local(idx)) = operand {
-                        allocator.precolor(*idx, vec![Register::Rax.into()]);
+                    if let Some(Operand::Local(local_idx)) = operand {
+                        allocator.precolor(
+                            *local_idx,
+                            self.abi.calling_convention().returned_value_location(
+                                self,
+                                self.module.functions[idx].locals[*local_idx],
+                            ),
+                        );
                     }
                 }
                 Terminator::Br(_) => (),
@@ -476,11 +482,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 };
             }
             Instruction::Copy { out, operand } => {
-                self.copy(
-                    operand,
-                    &self.locals[out].get_single_location().clone(),
-                    self.locals[out].ty,
-                )?;
+                self.explode_operand(operand.clone(), &self.locals[out].location.clone())?;
             }
             Instruction::Sext { operand, out } => {
                 let out = &self.locals[out];
@@ -603,6 +605,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 let locations = self.abi.calling_convention().arguments(
                     self,
+                    self.module.functions[*fn_idx].ret_ty,
                     &self.module.functions[*fn_idx].locals
                         [..self.module.functions[*fn_idx].params_count],
                 );
@@ -677,6 +680,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         self.abi.calling_convention().precolor_parameters(
             self,
             &mut allocator,
+            self.module.functions[idx].ret_ty,
             &self.module.functions[idx].locals[..self.module.functions[idx].params_count],
         );
         self.precolor(&mut allocator, idx);
@@ -1081,7 +1085,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                             let start_offset = consts[0].1;
                             while let Some((_, offset, _)) = consts.get(0) {
                                 if (offset - start_offset) < 8 {
-                                    split.push(consts.remove(0));
+                                    let (c, offset, ty) = consts.remove(0);
+
+                                    split.push((c, offset - i * 8, ty));
                                 } else {
                                     break;
                                 }
