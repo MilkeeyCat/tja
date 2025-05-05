@@ -28,7 +28,7 @@ impl SysVAmd64 {
 
     fn classify(&self, codegen: &CodeGen, ty: TyIdx, offset: usize, eightbytes: &mut [ClassKind]) {
         match codegen.module.ty_storage.get_ty(ty) {
-            Ty::Void => unimplemented!(),
+            Ty::Void => (),
             Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64 | Ty::Ptr => {
                 let idx = offset / 8;
 

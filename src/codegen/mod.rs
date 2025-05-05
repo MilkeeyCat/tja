@@ -1098,24 +1098,94 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                 for (consts, location) in splits.into_iter().zip(locations.iter()) {
                     let mut result: u64 = 0;
+                    let mut size = 0;
 
-                    for (c, offset, _) in consts.into_iter().rev() {
+                    for (c, offset, ty) in consts.into_iter().rev() {
                         match c {
                             Const::Int(value) => {
                                 result |= value;
                                 result <<= offset * u8::BITS as usize;
                             }
                             Const::Aggregate(_) => unreachable!(),
-                        }
+                        };
+
+                        size += self.ty_size(ty);
                     }
 
                     self.mov(
                         &Source::Immediate(Immediate::Int(result)),
-                        &location.to_dest(OperandSize::Qword),
+                        &location.to_dest(size.try_into()?),
                     )
                 }
             }
-            operand => unimplemented!(),
+            Operand::Local(idx) => {
+                let src = self.locals[&idx].location.clone();
+
+                match (src.as_slice(), locations) {
+                    (src, dest) if src.len() == dest.len() => {
+                        let mut offset = 0;
+
+                        for (src, dest) in src.iter().zip(dest.iter()) {
+                            let size = (self.ty_size(self.locals[&idx].ty) - offset).min(8);
+
+                            self.mov_location(src, dest, size)?;
+                            offset += size;
+                        }
+                    }
+                    (
+                        [
+                            Location::Address {
+                                effective_address, ..
+                            },
+                        ],
+                        dest,
+                    ) => {
+                        let mut offset = 0;
+
+                        for location in dest {
+                            let size = (self.ty_size(self.locals[&idx].ty) - offset).min(8);
+
+                            self.mov_location(
+                                &Location::Address {
+                                    effective_address: effective_address.clone()
+                                        + Offset(offset as isize),
+                                    spilled: false,
+                                },
+                                location,
+                                size,
+                            )?;
+                            offset += size;
+                        }
+                    }
+                    (
+                        src,
+                        [
+                            Location::Address {
+                                effective_address, ..
+                            },
+                        ],
+                    ) => {
+                        let mut offset = 0;
+
+                        for location in src {
+                            let size = (self.ty_size(self.locals[&idx].ty) - offset).min(8);
+
+                            self.mov_location(
+                                location,
+                                &Location::Address {
+                                    effective_address: effective_address.clone()
+                                        + Offset(offset as isize),
+                                    spilled: false,
+                                },
+                                size,
+                            )?;
+                            offset += size;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            Operand::Global(_) => unimplemented!(),
         }
 
         Ok(())
