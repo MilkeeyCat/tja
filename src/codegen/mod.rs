@@ -6,7 +6,7 @@ mod operands;
 mod register;
 
 use crate::repr::{
-    BlockIdx, Branch, Const, FunctionIdx, Global, Instruction, InstructionIdx, LocalIdx,
+    BlockIdx, Branch, Const, FunctionIdx, GlobalIdx, Instruction, InstructionIdx, LocalIdx,
     LocalStorage, Module, Operand, Patch, Terminator, Wrapper,
     op::BinOp,
     ty::{Storage, Ty, TyIdx},
@@ -19,7 +19,24 @@ use operands::{
     OperandSize, Source,
 };
 use register::Register;
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
+
+impl Const {
+    fn to_imm(&self, codegen: &CodeGen) -> Immediate {
+        match self {
+            Self::Global(idx) => Immediate::Label(codegen.module.globals[*idx].name.clone()),
+            Self::Int(value) => Immediate::Int(*value),
+            Self::Aggregate(_) => unreachable!(),
+        }
+    }
+
+    fn to_location(&self, codegen: &CodeGen) -> Location {
+        match self {
+            Self::Global(idx) => codegen.globals[idx].clone(),
+            Self::Int(_) | Self::Aggregate(_) => unreachable!(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Location {
@@ -64,26 +81,23 @@ impl From<Register> for Location {
 
 impl Operand {
     /// panics if a local has multiple locations
-    fn get_location<T: LocationStorage>(&self, storage: &T) -> Location {
+    fn get_location(&self, codegen: &CodeGen) -> Location {
         match self {
-            Self::Global(global) => storage.get_global(global),
-            Self::Local(idx) => storage.get_local(*idx),
-            Self::Const(_, _) => unreachable!(),
+            Self::Local(idx) => codegen.locals[idx].get_single_location().clone(),
+            Self::Const(c, _) => c.to_location(codegen),
         }
     }
 
-    fn to_source<T: LocationStorage>(&self, storage: &T, size: OperandSize) -> Source {
+    fn to_source(&self, codegen: &CodeGen, size: OperandSize) -> Source {
         match self {
-            Self::Global(global) => storage.get_global(&global).to_source(size),
-            Self::Local(idx) => storage.get_local(*idx).to_source(size),
-            Self::Const(c, _) => c.clone().try_into().unwrap(),
+            Self::Local(idx) => codegen.locals[idx].get_single_location().to_source(size),
+            Self::Const(c, _) => c.to_imm(codegen).into(),
         }
     }
 
-    fn to_dest<T: LocationStorage>(&self, storage: &T, size: OperandSize) -> Destination {
+    fn to_dest(&self, codegen: &CodeGen, size: OperandSize) -> Destination {
         match self {
-            Self::Global(global) => storage.get_global(&global).to_dest(size),
-            Self::Local(idx) => storage.get_local(*idx).to_dest(size),
+            Self::Local(idx) => codegen.locals[idx].get_single_location().to_dest(size),
             Self::Const(_, _) => unreachable!("can't turn const into Destination"),
         }
     }
@@ -112,7 +126,7 @@ impl Variable {
 pub struct CodeGen<'a, 'ctx> {
     module: Wrapper<'ctx, &'ctx mut Module>,
     locals: HashMap<LocalIdx, Variable>,
-    globals: HashMap<Rc<Global>, Location>,
+    globals: HashMap<GlobalIdx, Location>,
     spill_register: Register,
     bss: String,
     data: String,
@@ -564,7 +578,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     let index = match operand {
                         Operand::Const(c, _) => c.usize_unchecked(),
                         Operand::Local(_) => unreachable!(),
-                        Operand::Global(_) => unreachable!(),
                     };
 
                     ptr = ptr + Offset((self.ty_size(*ptr_ty) * index) as isize);
@@ -749,7 +762,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     Ty::Struct(fields) => {
                         let index = match operand {
                             Operand::Const(c, _) => c.usize_unchecked(),
-                            Operand::Global(_) => unreachable!(),
                             Operand::Local(_) => unreachable!(),
                         };
                         let base = base.clone() + Offset(self.field_offset(fields, index) as isize);
@@ -771,9 +783,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             .module
             .globals
             .iter()
-            .map(|global| {
+            .enumerate()
+            .map(|(idx, global)| {
                 (
-                    Rc::clone(global),
+                    idx,
                     Location::Address {
                         effective_address: EffectiveAddress {
                             base: Base::Label(global.name.clone()),
@@ -826,7 +839,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         ty: TyIdx,
     ) -> Result<(), InvalidOperandSize> {
         match src {
-            Operand::Global(_) => unimplemented!(),
             Operand::Local(idx) => match self.locals[idx].location.as_slice() {
                 [location] => match location {
                     Location::Address {
@@ -884,7 +896,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 _ => unreachable!(),
             },
             c => self.mov(
-                &c.clone().try_into().unwrap(),
+                &c.to_imm(self).into(),
                 &dest.to_dest(self.ty_size(ty).try_into()?),
             ),
         };
@@ -1048,6 +1060,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     offset: usize,
                 ) {
                     match c {
+                        Const::Global(idx) => unimplemented!(),
                         Const::Int(_) => consts.push((c, offset, ty)),
                         Const::Aggregate(c) => {
                             let fields = match storage.get_ty(ty) {
@@ -1102,6 +1115,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                     for (c, offset, ty) in consts.into_iter().rev() {
                         match c {
+                            Const::Global(idx) => unimplemented!(),
                             Const::Int(value) => {
                                 result |= value;
                                 result <<= offset * u8::BITS as usize;
@@ -1185,7 +1199,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     _ => (),
                 }
             }
-            Operand::Global(_) => unimplemented!(),
         }
 
         Ok(())
@@ -1314,21 +1327,6 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             ".L_{fn_idx}_{}",
             self.module.functions[fn_idx].blocks[block_idx].name
         )
-    }
-}
-
-trait LocationStorage {
-    fn get_global(&self, global: &Global) -> Location;
-    fn get_local(&self, idx: LocalIdx) -> Location;
-}
-
-impl LocationStorage for CodeGen<'_, '_> {
-    fn get_local(&self, idx: LocalIdx) -> Location {
-        self.locals[&idx].get_single_location().clone()
-    }
-
-    fn get_global(&self, global: &Global) -> Location {
-        self.globals[global].clone()
     }
 }
 

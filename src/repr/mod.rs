@@ -12,15 +12,16 @@ use op::{BinOp, CmpOp};
 use std::{
     collections::HashSet,
     ops::{Deref, DerefMut},
-    rc::Rc,
 };
 use ty::TyIdx;
 
 pub type LocalIdx = usize;
+pub type GlobalIdx = usize;
 pub type InstructionIdx = usize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Const {
+    Global(GlobalIdx),
     Int(u64),
     Aggregate(Vec<Self>),
 }
@@ -29,14 +30,13 @@ impl Const {
     pub fn usize_unchecked(&self) -> usize {
         match self {
             Self::Int(value) => (*value).try_into().unwrap(),
-            Self::Aggregate(_) => unreachable!(),
+            Self::Global(_) | Self::Aggregate(_) => unreachable!(),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Operand {
-    Global(Rc<Global>),
     Local(LocalIdx),
     Const(Const, TyIdx),
 }
@@ -57,13 +57,12 @@ impl Operand {
     pub fn local_idx(&self) -> Option<LocalIdx> {
         match self {
             Self::Local(local_idx) => Some(*local_idx),
-            Self::Global(_) | Self::Const(_, _) => None,
+            Self::Const(_, _) => None,
         }
     }
 
     pub fn ty<T: LocalStorage>(&self, storage: &T) -> TyIdx {
         match self {
-            Self::Global(global) => global.ty,
             Self::Local(idx) => storage.get_local_ty(*idx),
             Self::Const(_, ty) => *ty,
         }
@@ -207,7 +206,7 @@ impl Terminator {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Global {
     pub name: String,
     pub ty: TyIdx,

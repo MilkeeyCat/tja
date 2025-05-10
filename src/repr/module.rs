@@ -1,12 +1,11 @@
 use super::{Function, Global, Wrapper, function::FunctionIdx, ty::TyIdx};
-use std::rc::Rc;
 
 pub type ModuleIdx = usize;
 
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub globals: Vec<Rc<Global>>,
+    pub globals: Vec<Global>,
     pub functions: Vec<Function>,
 }
 

@@ -1,6 +1,5 @@
 use super::register::Register;
-use crate::repr::Const;
-use derive_more::Display;
+use derive_more::{Display, From};
 use impl_ops::{impl_op_ex, impl_op_ex_commutative};
 use std::ops;
 
@@ -156,22 +155,11 @@ pub enum Immediate {
     Label(String),
 }
 
-#[derive(Debug, Clone, Display, PartialEq)]
+#[derive(Debug, Clone, Display, PartialEq, From)]
 pub enum Source {
     Memory(Memory),
     Register(Register),
     Immediate(Immediate),
-}
-
-impl TryFrom<Const> for Immediate {
-    type Error = ();
-
-    fn try_from(value: Const) -> Result<Self, Self::Error> {
-        match value {
-            Const::Int(num) => Ok(Immediate::Int(num)),
-            Const::Aggregate(_) => Err(()),
-        }
-    }
 }
 
 impl Source {
@@ -181,20 +169,6 @@ impl Source {
             Self::Register(r) => Some(r.size()),
             Self::Immediate(_) => None,
         }
-    }
-}
-
-impl From<Register> for Source {
-    fn from(value: Register) -> Self {
-        Self::Register(value)
-    }
-}
-
-impl TryFrom<Const> for Source {
-    type Error = ();
-
-    fn try_from(value: Const) -> Result<Self, Self::Error> {
-        Ok(Self::Immediate(value.try_into()?))
     }
 }
 
