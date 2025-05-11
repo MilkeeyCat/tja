@@ -1,4 +1,4 @@
-use super::{Function, Global, Wrapper, function::FunctionIdx, ty::TyIdx};
+use super::{Const, Function, Global, GlobalIdx, Wrapper, function::FunctionIdx, ty::TyIdx};
 
 pub type ModuleIdx = usize;
 
@@ -16,6 +16,13 @@ impl Module {
             globals: Vec::new(),
             functions: Vec::new(),
         }
+    }
+
+    pub fn create_global(&mut self, name: String, ty: TyIdx, value: Option<Const>) -> GlobalIdx {
+        let idx = self.globals.len();
+        self.globals.push(Global { name, ty, value });
+
+        idx
     }
 
     pub fn create_fn(&mut self, name: String, params: Vec<TyIdx>, ret_ty: TyIdx) -> FunctionIdx {

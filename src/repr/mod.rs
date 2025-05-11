@@ -73,6 +73,10 @@ impl Operand {
     pub fn const_int(value: u64, ty: TyIdx) -> Self {
         Self::Const(Const::Int(value), ty)
     }
+
+    pub fn const_global(idx: GlobalIdx, strorage: &ty::Storage) -> Self {
+        Self::Const(Const::Global(idx), strorage.ptr_ty)
+    }
 }
 
 pub trait LocalStorage {

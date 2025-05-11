@@ -96,10 +96,7 @@ impl Operand {
     }
 
     fn to_dest(&self, codegen: &CodeGen, size: OperandSize) -> Destination {
-        match self {
-            Self::Local(idx) => codegen.locals[idx].get_single_location().to_dest(size),
-            Self::Const(_, _) => unreachable!("can't turn const into Destination"),
-        }
+        self.get_location(codegen).to_dest(size)
     }
 }
 
@@ -669,6 +666,21 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         Ok(())
     }
 
+    fn global(&mut self, idx: GlobalIdx) {
+        let global = &self.module.globals[idx];
+
+        if let Some(value) = &global.value {
+            self.data.push_str(&format!(".global {}\n", global.name));
+            self.data.push_str(&format!("{}:\n", global.name));
+            self.emit_const(value.clone(), global.ty);
+        } else {
+            self.bss.push_str(&format!(".global {}\n", global.name));
+            self.bss.push_str(&format!("{}:\n", global.name));
+            self.bss
+                .push_str(&format!("\t.zero {}\n", self.ty_size(global.ty)));
+        }
+    }
+
     fn function(&mut self, idx: FunctionIdx) {
         let mut allocator = Allocator::new(
             self.module.functions[idx].locals.clone(),
@@ -800,6 +812,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             })
             .collect();
 
+        for idx in 0..self.module.globals.len() {
+            self.global(idx);
+        }
+
         for idx in 0..self.module.functions.len() {
             self.function(idx);
         }
@@ -807,11 +823,11 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         let mut result = String::new();
 
         if !self.bss.is_empty() {
-            result.push_str(".section .bss\n");
+            result.push_str(".bss\n");
             result.push_str(&self.bss);
         }
         if !self.data.is_empty() {
-            result.push_str(".section .data\n");
+            result.push_str(".data\n");
             result.push_str(&self.data);
         }
         if !self.text.is_empty() {
@@ -820,6 +836,48 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         }
 
         result.into_bytes()
+    }
+
+    fn emit_const(&mut self, c: Const, ty: TyIdx) {
+        match c {
+            Const::Global(idx) => self
+                .data
+                .push_str(&format!("\t.quad {}\n", self.module.globals[idx].name)),
+            Const::Int(value) => {
+                let prefix = match self.module.ty_storage.get_ty(ty) {
+                    Ty::I8 => ".byte",
+                    Ty::I16 => ".short",
+                    Ty::I32 => ".long",
+                    Ty::I64 => ".quad",
+                    _ => unreachable!(),
+                };
+
+                self.data.push_str(&format!("\t{prefix} {value}\n"));
+            }
+            Const::Aggregate(consts) => {
+                let fields = match self.module.ty_storage.get_ty(ty) {
+                    Ty::Struct(fields) => fields,
+                    _ => unreachable!(),
+                }
+                .clone();
+
+                let mut last_offset_plus_size = 0;
+
+                for (i, (c, ty)) in consts.into_iter().zip(fields.iter().cloned()).enumerate() {
+                    let field_offset = self.field_offset(&fields, i);
+
+                    if field_offset > last_offset_plus_size {
+                        self.data.push_str(&format!(
+                            "\t.zero {}\n",
+                            field_offset - last_offset_plus_size
+                        ));
+                    }
+
+                    self.emit_const(c, ty);
+                    last_offset_plus_size = field_offset + self.ty_size(ty);
+                }
+            }
+        }
     }
 
     fn inline_memcpy(&mut self, src: &EffectiveAddress, dest: &EffectiveAddress, size: usize) {
