@@ -22,6 +22,7 @@ pub type InstructionIdx = usize;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Const {
     Global(GlobalIdx),
+    Function(FunctionIdx),
     Int(u64),
     Aggregate(Vec<Self>),
 }
@@ -30,7 +31,7 @@ impl Const {
     pub fn usize_unchecked(&self) -> usize {
         match self {
             Self::Int(value) => (*value).try_into().unwrap(),
-            Self::Global(_) | Self::Aggregate(_) => unreachable!(),
+            Self::Global(_) | Self::Function(_) | Self::Aggregate(_) => unreachable!(),
         }
     }
 }
@@ -140,7 +141,7 @@ pub enum Instruction {
         out: LocalIdx,
     },
     Call {
-        fn_idx: FunctionIdx,
+        operand: Operand,
         arguments: Vec<Operand>,
         out: Option<LocalIdx>,
     },

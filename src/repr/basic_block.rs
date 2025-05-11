@@ -1,5 +1,5 @@
 use super::{
-    Branch, Function, FunctionIdx, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
+    Branch, Function, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
     op::{BinOp, CmpOp},
     ty::{self, Ty, TyIdx},
 };
@@ -145,7 +145,7 @@ impl<'ctx> Wrapper<'ctx> {
 
     pub fn create_call(
         &mut self,
-        fn_idx: FunctionIdx,
+        operand: Operand,
         // it's not possible to get a function by `FunctionIdx` from here :(
         ret_ty: TyIdx,
         arguments: Vec<Operand>,
@@ -157,7 +157,7 @@ impl<'ctx> Wrapper<'ctx> {
         };
 
         self.block.instructions.push(Instruction::Call {
-            fn_idx,
+            operand,
             arguments,
             out: idx,
         });

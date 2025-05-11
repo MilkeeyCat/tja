@@ -25,6 +25,7 @@ impl Const {
     fn to_imm(&self, codegen: &CodeGen) -> Immediate {
         match self {
             Self::Global(idx) => Immediate::Label(codegen.module.globals[*idx].name.clone()),
+            Self::Function(idx) => Immediate::Label(codegen.module.functions[*idx].name.clone()),
             Self::Int(value) => Immediate::Int(*value),
             Self::Aggregate(_) => unreachable!(),
         }
@@ -33,7 +34,7 @@ impl Const {
     fn to_location(&self, codegen: &CodeGen) -> Location {
         match self {
             Self::Global(idx) => codegen.globals[idx].clone(),
-            Self::Int(_) | Self::Aggregate(_) => unreachable!(),
+            Self::Function(_) | Self::Int(_) | Self::Aggregate(_) => unreachable!(),
         }
     }
 }
@@ -600,32 +601,25 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                 );
             }
             Instruction::Call {
-                fn_idx,
+                operand,
                 arguments,
                 out,
             } => {
-                assert_eq!(
-                    out.is_some(),
-                    self.module
-                        .ty_storage
-                        .get_ty(self.module.functions[*fn_idx].ret_ty)
-                        != &Ty::Void,
-                    "only non-void functions can have out local"
-                );
-
                 let locations = self.abi.calling_convention().arguments(
                     self,
-                    self.module.functions[*fn_idx].ret_ty,
-                    &self.module.functions[*fn_idx].locals
-                        [..self.module.functions[*fn_idx].params_count],
+                    out.map(|idx| self.locals[&idx].ty)
+                        .unwrap_or_else(|| self.module.ty_storage.void_ty),
+                    &arguments
+                        .iter()
+                        .map(|operand| operand.ty(self))
+                        .collect::<Vec<_>>(),
                 );
 
                 for (argument, locations) in arguments.iter().zip(locations) {
                     self.explode_operand(argument.clone(), &locations)?;
                 }
 
-                self.text
-                    .push_str(&format!("\tcall {}\n", self.module.functions[*fn_idx].name));
+                self.call(&operand.to_source(self, OperandSize::Qword));
             }
         };
 
@@ -843,6 +837,9 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
             Const::Global(idx) => self
                 .data
                 .push_str(&format!("\t.quad {}\n", self.module.globals[idx].name)),
+            Const::Function(idx) => self
+                .data
+                .push_str(&format!("\t.quad {}\n", self.module.functions[idx].name)),
             Const::Int(value) => {
                 let prefix = match self.module.ty_storage.get_ty(ty) {
                     Ty::I8 => ".byte",
@@ -1118,7 +1115,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     offset: usize,
                 ) {
                     match c {
-                        Const::Global(idx) => unimplemented!(),
+                        Const::Global(idx) | Const::Function(idx) => unimplemented!(),
                         Const::Int(_) => consts.push((c, offset, ty)),
                         Const::Aggregate(c) => {
                             let fields = match storage.get_ty(ty) {
@@ -1173,7 +1170,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                     for (c, offset, ty) in consts.into_iter().rev() {
                         match c {
-                            Const::Global(idx) => unimplemented!(),
+                            Const::Global(idx) | Const::Function(idx) => unimplemented!(),
                             Const::Int(value) => {
                                 result |= value;
                                 result <<= offset * u8::BITS as usize;
@@ -1362,6 +1359,10 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
         );
 
         self.text.push_str(&format!("\tshr {lhs}, {rhs}\n"));
+    }
+
+    fn call(&mut self, target: &Source) {
+        self.text.push_str(&format!("\tcall {target}\n"));
     }
 
     #[inline]
