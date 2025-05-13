@@ -41,6 +41,8 @@ impl Function {
         let mut blocks = Vec::new();
 
         for (i, block) in self.blocks.iter().enumerate() {
+            let last_blocks_len = blocks.len();
+
             for instruction in &block.instructions {
                 blocks.push(DefUseBlock {
                     defs: HashSet::from(instruction.def().map(|def| [def]).unwrap_or_default()),
@@ -54,6 +56,14 @@ impl Function {
                 blocks.push(DefUseBlock {
                     defs: HashSet::new(),
                     uses,
+                    next: HashSet::new(),
+                });
+            }
+
+            if last_blocks_len == blocks.len() {
+                blocks.push(DefUseBlock {
+                    defs: HashSet::new(),
+                    uses: HashSet::new(),
                     next: HashSet::new(),
                 });
             }
