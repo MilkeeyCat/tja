@@ -1147,7 +1147,7 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
 
                     match location {
                         Location::Address { .. } => {
-                            split.extend(consts.iter().cloned());
+                            split.extend(std::mem::take(&mut consts));
                         }
                         Location::Register(_) => {
                             let start_offset = consts[0].1;
@@ -1164,27 +1164,49 @@ impl<'a, 'ctx> CodeGen<'a, 'ctx> {
                     }
                 }
 
+                assert!(consts.is_empty());
+
                 for (consts, location) in splits.into_iter().zip(locations.iter()) {
-                    let mut result: u64 = 0;
-                    let mut size = 0;
-
-                    for (c, offset, ty) in consts.into_iter().rev() {
-                        match c {
-                            Const::Global(idx) | Const::Function(idx) => unimplemented!(),
-                            Const::Int(value) => {
-                                result |= value;
-                                result <<= offset * u8::BITS as usize;
+                    match location {
+                        Location::Address {
+                            effective_address,
+                            spilled,
+                        } => {
+                            for (c, offset, ty) in consts.into_iter() {
+                                self.mov_const(
+                                    &Location::Address {
+                                        effective_address: effective_address.clone()
+                                            + Offset(offset as isize),
+                                        spilled: *spilled,
+                                    },
+                                    &c,
+                                    ty,
+                                )?;
                             }
-                            Const::Aggregate(_) => unreachable!(),
-                        };
+                        }
+                        Location::Register(_) => {
+                            let mut result: u64 = 0;
+                            let mut size = 0;
 
-                        size += self.ty_size(ty);
+                            for (c, offset, ty) in consts.into_iter().rev() {
+                                match c {
+                                    Const::Global(idx) | Const::Function(idx) => unimplemented!(),
+                                    Const::Int(value) => {
+                                        result |= value;
+                                        result <<= offset * u8::BITS as usize;
+                                    }
+                                    Const::Aggregate(_) => unreachable!(),
+                                };
+
+                                size += self.ty_size(ty);
+                            }
+
+                            self.mov(
+                                &Source::Immediate(Immediate::Int(result)),
+                                &location.to_dest(size.try_into()?),
+                            )
+                        }
                     }
-
-                    self.mov(
-                        &Source::Immediate(Immediate::Int(result)),
-                        &location.to_dest(size.try_into()?),
-                    )
                 }
             }
             Operand::Local(idx) => {
