@@ -2,10 +2,10 @@
 extern crate impl_ops;
 
 pub mod codegen;
-pub mod repr;
+pub mod hir;
 
 use codegen::{CodeGen, abi::Abi};
-use repr::{Module, Wrapper};
+use hir::{Module, Wrapper};
 use std::{
     fs::File,
     io::Write,

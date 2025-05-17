@@ -1,4 +1,4 @@
-use crate::repr::op::CmpOp;
+use crate::hir::op::CmpOp;
 use derive_more::Display;
 
 // The terms "above" and "below" are associated with the CF flag and refer to

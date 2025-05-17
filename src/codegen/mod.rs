@@ -5,7 +5,7 @@ mod condition;
 mod operands;
 mod register;
 
-use crate::repr::{
+use crate::hir::{
     BlockIdx, Branch, Const, FunctionIdx, GlobalIdx, Instruction, InstructionIdx, LocalIdx,
     LocalStorage, Module, Operand, Patch, Terminator, Wrapper,
     op::BinOp,
@@ -1426,7 +1426,7 @@ mod tests {
     };
     use crate::{
         codegen::abi::sysv_amd64,
-        repr::{Context, Operand, basic_block, op::BinOp, ty::Ty},
+        hir::{Context, Operand, basic_block, op::BinOp, ty::Ty},
     };
 
     fn assert_generated_basic_block<F: Fn(&mut basic_block::Wrapper)>(f: F, expected: &str) {

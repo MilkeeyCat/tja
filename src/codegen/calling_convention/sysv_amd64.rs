@@ -6,7 +6,7 @@ use crate::{
         operands::{Base, EffectiveAddress, Offset},
         register::Register,
     },
-    repr::ty::{Ty, TyIdx},
+    hir::ty::{Ty, TyIdx},
 };
 use std::collections::VecDeque;
 

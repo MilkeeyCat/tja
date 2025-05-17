@@ -1,7 +1,7 @@
 use super::Abi;
 use crate::{
     codegen::calling_convention::{self as cc, CallingConvention},
-    repr::ty::{self, Ty, TyIdx},
+    hir::ty::{self, Ty, TyIdx},
 };
 
 pub struct SysVAmd64 {

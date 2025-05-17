@@ -1,7 +1,7 @@
 pub mod sysv_amd64;
 
 use super::calling_convention::CallingConvention;
-use crate::repr::ty::{Storage, TyIdx};
+use crate::hir::ty::{Storage, TyIdx};
 
 pub trait Abi {
     fn field_offset(&self, storage: &Storage, fields: &[TyIdx], i: usize) -> usize;

@@ -3,7 +3,7 @@ use super::{
     operands::{Base, EffectiveAddress, Offset},
     register::Register,
 };
-use crate::repr::{
+use crate::hir::{
     LocalIdx,
     ty::{Ty, TyIdx},
 };

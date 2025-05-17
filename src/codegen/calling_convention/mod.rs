@@ -1,7 +1,7 @@
 pub mod sysv_amd64;
 
 use super::{CodeGen, LocalLocation, allocator::Allocator};
-use crate::repr::ty::TyIdx;
+use crate::hir::ty::TyIdx;
 
 pub trait CallingConvention {
     fn precolor_parameters(
