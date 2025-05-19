@@ -1426,14 +1426,14 @@ mod tests {
     };
     use crate::{
         codegen::abi::sysv_amd64,
-        hir::{Context, Operand, basic_block, op::BinOp, ty::Ty},
+        hir::{Hir, Operand, basic_block, op::BinOp, ty::Ty},
     };
 
     fn assert_generated_basic_block<F: Fn(&mut basic_block::Wrapper)>(f: F, expected: &str) {
-        let mut ctx = Context::new();
-        let void_ty = ctx.ty_storage.void_ty;
-        let module_idx = ctx.create_module("test".into());
-        let mut module = ctx.get_module(module_idx);
+        let mut hir = Hir::new();
+        let void_ty = hir.ty_storage.void_ty;
+        let module_idx = hir.create_module("test".into());
+        let mut module = hir.get_module(module_idx);
         let fn_idx = module.create_fn("test".into(), vec![], void_ty);
         let mut func = module.get_fn(fn_idx);
         let block_idx = func.create_block(None);
@@ -1452,15 +1452,15 @@ mod tests {
 
     #[test]
     fn mov_location() -> Result<(), InvalidOperandSize> {
-        let mut ctx = Context::new();
+        let mut hir = Hir::new();
         let struct_ty = {
-            let ty = ctx.ty_storage.add_ty(Ty::Struct(vec![
-                ctx.ty_storage.i8_ty,
-                ctx.ty_storage.i32_ty,
+            let ty = hir.ty_storage.add_ty(Ty::Struct(vec![
+                hir.ty_storage.i8_ty,
+                hir.ty_storage.i32_ty,
             ]));
 
-            ctx.ty_storage
-                .add_ty(Ty::Struct(vec![ctx.ty_storage.i8_ty, ty]))
+            hir.ty_storage
+                .add_ty(Ty::Struct(vec![hir.ty_storage.i8_ty, ty]))
         };
 
         let cases = [
@@ -1468,7 +1468,7 @@ mod tests {
                 (
                     &Location::Register(Register::Rdi),
                     &Location::Register(Register::Rsi),
-                    ctx.ty_storage.i64_ty,
+                    hir.ty_storage.i64_ty,
                 ),
                 "\tmov rsi, rdi\n",
             ),
@@ -1508,17 +1508,17 @@ mod tests {
                         spilled: true,
                     },
                     &Location::Register(Register::Rax),
-                    ctx.ty_storage.ptr_ty,
+                    hir.ty_storage.ptr_ty,
                 ),
                 "\tmov rax, qword ptr [rbp - 8]\n",
             ),
         ];
 
-        let module_idx = ctx.create_module("test".into());
+        let module_idx = hir.create_module("test".into());
 
         for ((src, dest, ty), expected) in cases {
             let abi = sysv_amd64::SysVAmd64::new();
-            let mut codegen = CodeGen::new(ctx.get_module(module_idx), &abi);
+            let mut codegen = CodeGen::new(hir.get_module(module_idx), &abi);
             codegen.mov_location(src, dest, codegen.ty_size(ty))?;
             assert_eq!(codegen.text, expected);
         }

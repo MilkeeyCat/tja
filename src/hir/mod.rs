@@ -218,12 +218,12 @@ pub struct Global {
     pub value: Option<Const>,
 }
 
-pub struct Context {
+pub struct Hir {
     pub ty_storage: ty::Storage,
-    modules: Vec<Module>,
+    pub modules: Vec<Module>,
 }
 
-impl Context {
+impl Hir {
     pub fn new() -> Self {
         Self {
             ty_storage: ty::Storage::new(),

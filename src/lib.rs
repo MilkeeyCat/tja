@@ -3,6 +3,9 @@ extern crate impl_ops;
 
 pub mod codegen;
 pub mod hir;
+pub mod lowering;
+mod mir;
+mod targets;
 
 use codegen::{CodeGen, abi::Abi};
 use hir::{Module, Wrapper};
