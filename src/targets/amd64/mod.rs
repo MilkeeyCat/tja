@@ -1,4 +1,9 @@
+mod register;
+
+use crate::mir;
 use derive_more::Display;
+use register::Register;
+use std::collections::HashMap;
 
 pub enum Opcode {
     Add,
@@ -41,9 +46,24 @@ pub enum Condition {
     LessEqual,
 }
 
+#[repr(usize)]
 pub enum RegisterClass {
     Gpr64,
     Gpr32,
     Gpr16,
     Gpr8,
+}
+
+struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::Register>>);
+
+impl super::RegisterInfo for RegisterInfo {
+    fn get_registers_by_class(&self, class: &mir::RegisterClass) -> &[mir::Register] {
+        &self.0[class]
+    }
+
+    fn get_name(r: &mir::Register) -> &'static str {
+        let r: Register = (*r).into();
+
+        r.name()
+    }
 }

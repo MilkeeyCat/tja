@@ -1,4 +1,4 @@
-use super::{BasicBlock, Register, RegisterClass, VregIdx};
+use super::{BasicBlock, Register, RegisterClass, StackFrameIdx, VregIdx};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -12,6 +12,7 @@ struct DefUseBlock {
 pub struct Function<'hir> {
     pub name: &'hir str,
     pub vregs: HashMap<VregIdx, RegisterClass>,
+    pub stack_slots: HashMap<StackFrameIdx, usize>,
     pub precolored_vregs: HashMap<VregIdx, Register>,
     pub blocks: Vec<BasicBlock<'hir>>,
 }

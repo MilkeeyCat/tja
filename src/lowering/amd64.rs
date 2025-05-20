@@ -17,6 +17,7 @@ impl<'hir> FnLowering<'hir> {
             function: mir::Function {
                 name,
                 vregs: HashMap::new(),
+                stack_slots: HashMap::new(),
                 precolored_vregs: HashMap::new(),
                 blocks: Vec::new(),
             },

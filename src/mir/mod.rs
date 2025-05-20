@@ -5,6 +5,7 @@ pub use function::Function;
 use std::collections::HashSet;
 
 pub type VregIdx = usize;
+pub type StackFrameIdx = usize;
 pub type RegisterClass = usize;
 pub type Register = usize;
 pub type Opcode = usize;
@@ -35,6 +36,8 @@ pub enum VregRole {
 #[derive(Debug, Clone)]
 pub enum Operand {
     Vreg(VregIdx, VregRole),
+    Reg(Register),
+    Frame(StackFrameIdx),
     Global(hir::GlobalIdx),
     Function(FunctionIdx),
     Block(BlockIdx),
