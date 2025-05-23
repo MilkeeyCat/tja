@@ -1,4 +1,7 @@
-use super::{BasicBlock, Register, RegisterClass, StackFrameIdx, VregIdx};
+use super::{
+    BasicBlock, Register, RegisterClass, StackFrameIdx, VregIdx,
+    interference_graph::InterferenceGraph,
+};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -11,7 +14,9 @@ struct DefUseBlock {
 #[derive(Debug)]
 pub struct Function<'hir> {
     pub name: &'hir str,
+    pub next_vreg_idx: VregIdx,
     pub vregs: HashMap<VregIdx, RegisterClass>,
+    pub next_stack_frame_idx: StackFrameIdx,
     pub stack_slots: HashMap<StackFrameIdx, usize>,
     pub precolored_vregs: HashMap<VregIdx, Register>,
     pub blocks: Vec<BasicBlock<'hir>>,
@@ -105,20 +110,22 @@ impl Function<'_> {
         liveness
     }
 
-    pub fn interference(&self) -> HashSet<(VregIdx, VregIdx)> {
-        let mut edges = HashSet::new();
+    pub fn interference(&self) -> InterferenceGraph<VregIdx> {
+        let mut graph = InterferenceGraph::new();
         let liveness = self.liveness();
+
+        for &vreg in self.vregs.keys() {
+            graph.add_node(vreg);
+        }
 
         for (i, block) in self.defs_uses().into_iter().enumerate() {
             for def in block.defs {
-                for out in &liveness[i].1 {
-                    if !edges.contains(&(*out, def)) && *out != def {
-                        edges.insert((def, *out));
-                    }
+                for &out in &liveness[i].1 {
+                    graph.add_edge(out, def);
                 }
             }
         }
 
-        edges
+        graph
     }
 }

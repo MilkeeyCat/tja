@@ -1,4 +1,5 @@
 mod function;
+pub mod interference_graph;
 
 use crate::hir::{self, FunctionIdx};
 pub use function::Function;

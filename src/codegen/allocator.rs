@@ -1,106 +1,56 @@
-use super::{
-    CodeGen, LocalLocation, Location,
-    operands::{Base, EffectiveAddress, Offset},
-    register::Register,
+use crate::{
+    mir::{self, StackFrameIdx, VregIdx, interference_graph::InterferenceGraph},
+    targets::RegisterInfo,
 };
-use crate::hir::{
-    LocalIdx,
-    ty::{Ty, TyIdx},
-};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
-type Edges = HashSet<(LocalIdx, LocalIdx)>;
-
-/// A weird looking graph coloring by simplification register allocator
-pub struct Allocator {
-    nodes: BTreeMap<LocalIdx, TyIdx>,
-    edges: Edges,
-    registers: Vec<Register>,
-    locations: HashMap<LocalIdx, LocalLocation>,
-    pub stack_frame_size: usize,
-    spill_mode: bool,
+#[derive(Debug, Clone, PartialEq)]
+pub enum Location {
+    Register(mir::Register),
+    Spill(StackFrameIdx),
 }
 
-impl Allocator {
+/// A weird looking graph coloring by simplification register allocator
+pub struct Allocator<'a, 'mir, 'hir> {
+    register_info: &'a dyn RegisterInfo,
+    locations: HashMap<VregIdx, Location>,
+    spill_mode: bool,
+    function: &'mir mut mir::Function<'hir>,
+}
+
+impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
     pub fn new(
-        types: Vec<TyIdx>,
-        edges: Edges,
-        registers: Vec<Register>,
+        register_info: &'a dyn RegisterInfo,
+        precolored: HashMap<VregIdx, Location>,
         spill_mode: bool,
+        function: &'mir mut mir::Function<'hir>,
     ) -> Self {
         Self {
-            nodes: types.into_iter().enumerate().collect(),
-            edges,
-            registers,
-            locations: HashMap::new(),
-            stack_frame_size: 0,
+            register_info,
+            locations: precolored,
             spill_mode,
+            function,
         }
     }
 
-    fn remove_node(&mut self, node: &LocalIdx) -> (TyIdx, Edges) {
-        let edges: HashSet<_> = self
-            .edges
-            .iter()
-            .filter(|(lhs, rhs)| lhs == node || rhs == node)
-            .cloned()
-            .collect();
-
-        let ty = self.nodes.remove(&node).unwrap();
-
-        for edge in &edges {
-            self.edges.remove(edge);
-        }
-
-        (ty, edges)
-    }
-
-    fn add_node(&mut self, node: LocalIdx, ty: TyIdx, edges: Edges) {
-        self.nodes.insert(node, ty);
-        self.edges.extend(edges.into_iter());
-    }
-
-    pub fn neighbors(&self, node: &LocalIdx) -> Vec<&LocalIdx> {
-        self.edges
-            .iter()
-            .filter(|(lhs, rhs)| lhs == node || rhs == node)
-            .map(|(lhs, rhs)| if lhs == node { rhs } else { lhs })
-            .collect()
-    }
-
-    fn min(&self) -> Option<LocalIdx> {
-        self.nodes
-            .iter()
-            // ignore precolored nodes
-            .filter(|(node, _)| !self.locations.contains_key(node))
-            .map(|(node, _)| (*node, self.neighbors(node).len()))
-            .min_by(|(_, a), (_, b)| a.cmp(b))
-            .map(|(node, _)| node)
-    }
-
-    fn max(&self) -> Option<LocalIdx> {
-        self.nodes
-            .iter()
-            // ignore precolored nodes
-            .filter(|(node, _)| !self.locations.contains_key(node))
-            .map(|(node, _)| (*node, self.neighbors(node).len()))
-            .max_by(|(_, a), (_, b)| a.cmp(b))
-            .map(|(node, _)| node)
-    }
-
-    fn unique_register(&self, neighbors: &[&LocalIdx]) -> Option<Register> {
-        for r in &self.registers {
+    fn unique_register(
+        &self,
+        node: VregIdx,
+        neighbors: &HashSet<VregIdx>,
+    ) -> Option<mir::Register> {
+        for r in self
+            .register_info
+            .get_registers_by_class(&self.function.vregs[&node])
+        {
             let mut found = true;
-            for neighbor in neighbors {
-                if self
-                    .locations
-                    .get(&neighbor)
-                    .unwrap()
-                    .contains(&Location::Register(*r))
-                {
-                    found = false;
 
-                    break;
+            for neighbor in neighbors {
+                if let Location::Register(neighbor_r) = self.locations.get(&neighbor).unwrap() {
+                    if self.register_info.overlaps(r, neighbor_r) {
+                        found = false;
+
+                        break;
+                    }
                 }
             }
 
@@ -112,71 +62,53 @@ impl Allocator {
         None
     }
 
-    pub fn precolor(&mut self, node: LocalIdx, location: LocalLocation) {
-        self.locations.insert(node, location);
-    }
-
-    pub fn is_precolored(&mut self, node: &LocalIdx) -> bool {
-        self.locations.contains_key(node)
-    }
-
-    pub fn add_edge(&mut self, edge: (LocalIdx, LocalIdx)) {
-        if !(self.edges.contains(&edge) || self.edges.contains(&(edge.1, edge.0))) {
-            self.edges.insert(edge);
-        }
-    }
-
-    pub fn create_node(&mut self, ty: TyIdx) -> LocalIdx {
-        let node = self.nodes.len();
-        self.nodes.insert(node, ty);
-
-        node
-    }
-
-    pub fn allocate(mut self, codegen: &CodeGen) -> (Vec<LocalLocation>, usize) {
+    pub fn allocate(mut self) -> Vec<Location> {
         let locations = self.locations.clone();
-        let nodes = self.nodes.clone();
-        let edges = self.edges.clone();
-        let mut stack: Vec<(LocalIdx, TyIdx, Edges)> = Vec::new();
+        let mut nodes = self
+            .function
+            .vregs
+            .keys()
+            .cloned()
+            .collect::<Vec<VregIdx>>();
+        nodes.sort();
+        let mut graph = self.function.interference();
+        let mut stack: Vec<(VregIdx, HashSet<VregIdx>)> = Vec::new();
         let mut redo = false;
 
-        while self.min().is_some() {
-            let node = if self.min().unwrap() < self.registers.len() {
-                self.min()
+        while let Some((node, neighbors_count)) = min(&graph, &self.locations, &nodes) {
+            let (node, _) = if neighbors_count
+                < self
+                    .register_info
+                    .get_registers_by_class(&self.function.vregs[&node])
+                    .len()
+            {
+                min(&graph, &self.locations, &nodes)
             } else {
-                self.max()
+                max(&graph, &self.locations, &nodes)
             }
             .unwrap();
-            let (ty, edges) = self.remove_node(&node);
+            let neighbors = graph.neighbors(&node).clone();
+            let pos = nodes.iter().position(|idx| idx == &node).unwrap();
 
-            stack.push((node, ty, edges));
+            nodes.remove(pos);
+            graph.remove_node(&node);
+            stack.push((node, neighbors));
         }
 
-        for (node, ty, edges) in stack.into_iter().rev() {
-            let ty_size = codegen.ty_size(ty);
-            let force_stack = matches!(codegen.module.ty_storage.get_ty(ty), Ty::Struct(..));
-            self.add_node(node, ty, edges);
+        for (node, neighbors) in stack.into_iter().rev() {
+            graph.add_node(node);
+            for neighbor in neighbors {
+                graph.add_edge(node, neighbor);
+            }
 
-            if self.unique_register(&self.neighbors(&node)).is_some() && !force_stack {
-                self.locations.insert(
-                    node,
-                    vec![self.unique_register(&self.neighbors(&node)).unwrap().into()],
-                );
+            if let Some(r) = self.unique_register(node, graph.neighbors(&node)) {
+                self.locations.insert(node, Location::Register(r));
             } else {
                 if self.spill_mode {
-                    self.stack_frame_size += ty_size;
-                    self.locations.insert(
-                        node,
-                        vec![Location::Address {
-                            effective_address: EffectiveAddress {
-                                base: Base::Register(Register::Rbp),
-                                index: None,
-                                scale: None,
-                                displacement: Some(Offset(-(self.stack_frame_size as isize))),
-                            },
-                            spilled: true,
-                        }],
-                    );
+                    let idx = self.function.next_stack_frame_idx;
+                    self.function.next_stack_frame_idx += 1;
+
+                    self.locations.insert(node, Location::Spill(idx));
                 } else {
                     self.spill_mode = true;
                     redo = true;
@@ -187,18 +119,39 @@ impl Allocator {
 
         if redo {
             self.locations = locations;
-            self.nodes = nodes;
-            self.edges = edges;
 
-            self.allocate(codegen)
+            self.allocate()
         } else {
             let mut operands: Vec<_> = self.locations.into_iter().collect();
-            operands.sort_by(|(a, _), (b, _)| a.cmp(&b));
+            operands.sort_by_key(|(idx, _)| *idx);
 
-            (
-                operands.into_iter().map(|(_, operand)| operand).collect(),
-                self.stack_frame_size,
-            )
+            operands.into_iter().map(|(_, operand)| operand).collect()
         }
     }
+}
+
+fn min<T: Copy + Eq + std::hash::Hash>(
+    graph: &InterferenceGraph<T>,
+    locations: &HashMap<T, Location>,
+    nodes: &[T],
+) -> Option<(T, usize)> {
+    nodes
+        .iter()
+        // ignore precolored nodes
+        .filter(|node| !locations.contains_key(node))
+        .map(|node| (*node, graph.neighbors(node).len()))
+        .min_by_key(|(_, len)| *len)
+}
+
+fn max<T: Copy + Eq + std::hash::Hash>(
+    graph: &InterferenceGraph<T>,
+    locations: &HashMap<T, Location>,
+    nodes: &[T],
+) -> Option<(T, usize)> {
+    nodes
+        .iter()
+        // ignore precolored nodes
+        .filter(|node| !locations.contains_key(node))
+        .map(|node| (*node, graph.neighbors(node).len()))
+        .max_by_key(|(_, len)| *len)
 }

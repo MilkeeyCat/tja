@@ -7,7 +7,6 @@ use std::collections::HashMap;
 
 struct FnLowering<'hir> {
     function: mir::Function<'hir>,
-    next_vreg_idx: mir::VregIdx,
     local_to_vreg: HashMap<hir::LocalIdx, mir::VregIdx>,
 }
 
@@ -16,12 +15,13 @@ impl<'hir> FnLowering<'hir> {
         Self {
             function: mir::Function {
                 name,
+                next_vreg_idx: 0,
                 vregs: HashMap::new(),
+                next_stack_frame_idx: 0,
                 stack_slots: HashMap::new(),
                 precolored_vregs: HashMap::new(),
                 blocks: Vec::new(),
             },
-            next_vreg_idx: 0,
             local_to_vreg: HashMap::new(),
         }
     }
@@ -131,10 +131,10 @@ impl<'hir> FnLowering<'hir> {
     }
 
     fn create_vreg(&mut self, class: mir::RegisterClass) -> mir::VregIdx {
-        let idx = self.next_vreg_idx;
+        let idx = self.function.next_vreg_idx;
 
         self.function.vregs.insert(idx, class);
-        self.next_vreg_idx += 1;
+        self.function.next_vreg_idx += 1;
 
         idx
     }

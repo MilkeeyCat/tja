@@ -4,6 +4,7 @@ pub enum Register {
     Rax,
     Eax,
     Ax,
+    Ah,
     Al,
 
     Rbp,
@@ -85,6 +86,7 @@ impl Register {
             Self::Rax => "rax",
             Self::Eax => "eax",
             Self::Ax => "ax",
+            Self::Ah => "ah",
             Self::Al => "al",
 
             Self::Rbp => "rbp",
@@ -159,6 +161,95 @@ impl Register {
 
             Self::Num => unreachable!(),
         }
+    }
+}
+
+impl Register {
+    fn subregs(&self) -> &[Self] {
+        match self {
+            Self::Rax => &[Self::Eax],
+            Self::Eax => &[Self::Ax],
+            Self::Ax => &[Self::Ah, Self::Al],
+            Self::Ah | Self::Al => &[],
+
+            Self::Rbp => &[Self::Ebp],
+            Self::Ebp => &[Self::Bpl],
+            Self::Bpl => &[Self::Bp],
+            Self::Bp => &[],
+
+            Self::Rcx => &[Self::Ecx],
+            Self::Ecx => &[Self::Cx],
+            Self::Cx => &[Self::Cl],
+            Self::Cl => &[],
+
+            Self::Rdx => &[Self::Edx],
+            Self::Edx => &[Self::Dx],
+            Self::Dx => &[Self::Dl],
+            Self::Dl => &[],
+
+            Self::Rsi => &[Self::Esi],
+            Self::Esi => &[Self::Si],
+            Self::Si => &[Self::Sil],
+            Self::Sil => &[],
+
+            Self::Rdi => &[Self::Edi],
+            Self::Edi => &[Self::Di],
+            Self::Di => &[Self::Dil],
+            Self::Dil => &[],
+
+            Self::Rsp => &[Self::Esp],
+            Self::Esp => &[Self::Sp],
+            Self::Sp => &[Self::Spl],
+            Self::Spl => &[],
+
+            Self::R15 => &[Self::R15d],
+            Self::R15d => &[Self::R15w],
+            Self::R15w => &[Self::R15b],
+            Self::R15b => &[],
+
+            Self::R14 => &[Self::R14d],
+            Self::R14d => &[Self::R14w],
+            Self::R14w => &[Self::R14b],
+            Self::R14b => &[],
+
+            Self::R13 => &[Self::R13d],
+            Self::R13d => &[Self::R13w],
+            Self::R13w => &[Self::R13b],
+            Self::R13b => &[],
+
+            Self::R12 => &[Self::R12d],
+            Self::R12d => &[Self::R12w],
+            Self::R12w => &[Self::R12b],
+            Self::R12b => &[],
+
+            Self::R11 => &[Self::R11d],
+            Self::R11d => &[Self::R11w],
+            Self::R11w => &[Self::R11b],
+            Self::R11b => &[],
+
+            Self::R10 => &[Self::R10d],
+            Self::R10d => &[Self::R10w],
+            Self::R10w => &[Self::R10b],
+            Self::R10b => &[],
+
+            Self::R9 => &[Self::R9d],
+            Self::R9d => &[Self::R9w],
+            Self::R9w => &[Self::R9b],
+            Self::R9b => &[],
+
+            Self::R8 => &[Self::R8d],
+            Self::R8d => &[Self::R8w],
+            Self::R8w => &[Self::R8b],
+            Self::R8b => &[],
+
+            Self::Num => unreachable!(),
+        }
+    }
+
+    pub fn contains(&self, r: Register) -> bool {
+        self.subregs()
+            .iter()
+            .any(|other| other == &r || other.contains(r))
     }
 }
 
