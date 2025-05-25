@@ -1,6 +1,8 @@
+mod abi;
 mod register;
 
 use crate::mir;
+use abi::SysVAmd64;
 use derive_more::Display;
 use register::Register;
 use std::collections::HashMap;
@@ -157,12 +159,14 @@ impl super::RegisterInfo for RegisterInfo {
 
 pub struct Target {
     register_info: RegisterInfo,
+    abi: SysVAmd64,
 }
 
 impl Target {
     pub fn new() -> Self {
         Self {
             register_info: RegisterInfo::new(),
+            abi: SysVAmd64::new(),
         }
     }
 }
@@ -170,5 +174,9 @@ impl Target {
 impl super::Target for Target {
     fn register_info(&self) -> &dyn super::RegisterInfo {
         &self.register_info
+    }
+
+    fn abi(&self) -> &dyn super::Abi {
+        &self.abi
     }
 }

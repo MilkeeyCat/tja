@@ -1,17 +1,19 @@
 use crate::{
-    hir::{self, Hir, op::BinOp},
+    hir::{self, Hir, op::BinOp, ty},
     mir::{self, Mir},
-    targets::amd64,
+    targets::{Target, amd64},
 };
 use std::collections::HashMap;
 
-struct FnLowering<'hir> {
+struct FnLowering<'hir, 'a> {
     function: mir::Function<'hir>,
-    local_to_vreg: HashMap<hir::LocalIdx, mir::VregIdx>,
+    ty_storage: &'a ty::Storage,
+    target: &'a dyn Target,
+    local_to_operand: HashMap<hir::LocalIdx, mir::Operand>,
 }
 
-impl<'hir> FnLowering<'hir> {
-    fn new(name: &'hir str) -> Self {
+impl<'hir, 'a> FnLowering<'hir, 'a> {
+    fn new(name: &'hir str, ty_storage: &'a ty::Storage, target: &'a dyn Target) -> Self {
         Self {
             function: mir::Function {
                 name,
@@ -22,7 +24,9 @@ impl<'hir> FnLowering<'hir> {
                 precolored_vregs: HashMap::new(),
                 blocks: Vec::new(),
             },
-            local_to_vreg: HashMap::new(),
+            ty_storage,
+            target,
+            local_to_operand: HashMap::new(),
         }
     }
 
@@ -46,9 +50,7 @@ impl<'hir> FnLowering<'hir> {
         operand: &hir::Operand,
     ) -> mir::Operand {
         match operand {
-            hir::Operand::Local(idx) => {
-                mir::Operand::Vreg(self.local_to_vreg[idx], mir::VregRole::Use)
-            }
+            hir::Operand::Local(idx) => self.local_to_operand[idx].clone(),
             hir::Operand::Const(c, _) => match c {
                 hir::Const::Global(idx) => mir::Operand::Global(*idx),
                 hir::Const::Function(idx) => mir::Operand::Function(*idx),
@@ -85,6 +87,15 @@ impl<'hir> FnLowering<'hir> {
                 }
                 _ => unimplemented!(),
             },
+            hir::Instruction::Alloca { ty, out } => {
+                let idx = self.function.next_stack_frame_idx;
+                self.function.next_stack_frame_idx += 1;
+
+                self.function
+                    .stack_slots
+                    .insert(idx, self.target.abi().ty_size(self.ty_storage, *ty));
+                self.local_to_operand.insert(*out, mir::Operand::Frame(idx));
+            }
             _ => unimplemented!(),
         }
     }
@@ -146,13 +157,14 @@ impl<'hir> FnLowering<'hir> {
     ) -> mir::VregIdx {
         let idx = self.create_vreg(class);
 
-        self.local_to_vreg.insert(local_idx, idx);
+        self.local_to_operand
+            .insert(local_idx, mir::Operand::Vreg(idx, mir::VregRole::Use));
 
         idx
     }
 }
 
-pub fn lower<'hir>(hir: &'hir Hir) -> Mir<'hir> {
+pub fn lower<'hir>(hir: &'hir Hir, target: &dyn Target) -> Mir<'hir> {
     Mir(hir
         .modules
         .iter()
@@ -163,7 +175,7 @@ pub fn lower<'hir>(hir: &'hir Hir) -> Mir<'hir> {
                 .functions
                 .iter()
                 .map(|func| {
-                    let mut lowering = FnLowering::new(&func.name);
+                    let mut lowering = FnLowering::new(&func.name, &hir.ty_storage, target);
 
                     for bb in &func.blocks {
                         lowering.lower_basic_block(bb);

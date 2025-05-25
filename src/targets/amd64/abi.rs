@@ -1,17 +1,17 @@
-use super::Abi;
 use crate::{
-    codegen::calling_convention::{self as cc, CallingConvention},
+    //codegen::calling_convention::{self as cc, CallingConvention},
     hir::ty::{self, Ty, TyIdx},
+    targets::Abi,
 };
 
 pub struct SysVAmd64 {
-    default_cc: cc::sysv_amd64::SysVAmd64,
+    //default_cc: cc::sysv_amd64::SysVAmd64,
 }
 
 impl SysVAmd64 {
     pub fn new() -> Self {
         Self {
-            default_cc: cc::sysv_amd64::SysVAmd64::new(),
+            //default_cc: cc::sysv_amd64::SysVAmd64::new(),
         }
     }
 }
@@ -54,7 +54,7 @@ impl Abi for SysVAmd64 {
         }
     }
 
-    fn calling_convention(&self) -> &dyn CallingConvention {
-        &self.default_cc
-    }
+    //fn calling_convention(&self) -> &dyn CallingConvention {
+    //    &self.default_cc
+    //}
 }
