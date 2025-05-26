@@ -1,12 +1,13 @@
 mod abi;
-mod register;
+pub mod register;
 
 use crate::mir;
 use abi::SysVAmd64;
 use derive_more::Display;
-use register::Register;
+pub use register::Register;
 use std::collections::HashMap;
 
+#[repr(usize)]
 pub enum Opcode {
     Add,
     Sub,
@@ -17,6 +18,16 @@ pub enum Opcode {
     Jmp,
     Test,
     Jcc,
+
+    Num,
+}
+
+impl From<usize> for Opcode {
+    fn from(value: usize) -> Self {
+        assert!(value < Self::Num as usize);
+
+        unsafe { std::mem::transmute::<_, Self>(value) }
+    }
 }
 
 // The terms "above" and "below" are associated with the CF flag and refer to

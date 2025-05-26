@@ -62,7 +62,7 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
         None
     }
 
-    pub fn allocate(mut self) -> Vec<Location> {
+    pub fn allocate(mut self) -> HashMap<VregIdx, Location> {
         let locations = self.locations.clone();
         let mut nodes = self
             .function
@@ -122,10 +122,11 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
 
             self.allocate()
         } else {
-            let mut operands: Vec<_> = self.locations.into_iter().collect();
-            operands.sort_by_key(|(idx, _)| *idx);
-
-            operands.into_iter().map(|(_, operand)| operand).collect()
+            self.function
+                .vregs
+                .iter()
+                .map(|(vreg, _)| (*vreg, self.locations[vreg].clone()))
+                .collect()
         }
     }
 }
