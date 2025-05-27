@@ -7,14 +7,15 @@ pub mod lowering;
 mod mir;
 pub mod targets;
 
-//use codegen::{CodeGen, abi::Abi};
-use hir::{Module, Wrapper};
+use codegen::generate;
+use mir::Module;
 use std::{
     fs::File,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use targets::Target;
 
 pub struct CompileArgs {
     /// Produce assembly output
@@ -24,36 +25,36 @@ pub struct CompileArgs {
     pub shared: bool,
 }
 
-//pub fn compile(
-//    module: Wrapper<'_, &mut Module>,
-//    abi: &dyn Abi,
-//    args: CompileArgs,
-//) -> std::io::Result<()> {
-//    let name = module.name.clone();
-//    let code = CodeGen::new(module, abi).compile();
-//
-//    if args.assembly_only {
-//        let asm_filename = PathBuf::from(&name).with_extension("s");
-//        let mut file = File::create(&asm_filename)?;
-//
-//        file.write_all(&code)?;
-//
-//        return Ok(());
-//    }
-//
-//    let obj_filename = PathBuf::from(&name).with_extension("o");
-//
-//    assemble(&code, &obj_filename)?;
-//
-//    if args.object_only {
-//        return Ok(());
-//    }
-//
-//    link(&obj_filename, Path::new(&name), args.shared)?;
-//    std::fs::remove_file(&obj_filename)?;
-//
-//    Ok(())
-//}
+pub fn compile(
+    module: &mut Module,
+    target: &dyn Target,
+    args: CompileArgs,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let code = generate(module, target)?;
+    let name = module.name;
+
+    if args.assembly_only {
+        let asm_filename = PathBuf::from(&name).with_extension("s");
+        let mut file = File::create(&asm_filename)?;
+
+        file.write_all(&code)?;
+
+        return Ok(());
+    }
+
+    let obj_filename = PathBuf::from(&name).with_extension("o");
+
+    assemble(&code, &obj_filename)?;
+
+    if args.object_only {
+        return Ok(());
+    }
+
+    link(&obj_filename, Path::new(&name), args.shared)?;
+    std::fs::remove_file(&obj_filename)?;
+
+    Ok(())
+}
 
 fn assemble(source: &[u8], output: &Path) -> std::io::Result<()> {
     let source = Command::new("echo")

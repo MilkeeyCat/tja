@@ -9,11 +9,57 @@ use std::collections::HashMap;
 
 #[repr(usize)]
 pub enum Opcode {
-    Add,
+    Mov8rr,
+    Mov8rm,
+    Mov8mr,
+    Mov8mi,
+    Mov8ri,
+
+    Mov16rr,
+    Mov16rm,
+    Mov16mr,
+    Mov16mi,
+    Mov16ri,
+
+    Mov32rr,
+    Mov32rm,
+    Mov32mr,
+    Mov32mi,
+    Mov32ri,
+
+    Mov64rr,
+    Mov64rm,
+    Mov64mr,
+    Mov64mi,
+    Mov64ri,
+
+    Add8rr,
+    Add8rm,
+    Add8mr,
+    Add8mi,
+    Add8ri,
+
+    Add16rr,
+    Add16rm,
+    Add16mr,
+    Add16mi,
+    Add16ri,
+
+    Add32rr,
+    Add32rm,
+    Add32mr,
+    Add32mi,
+    Add32ri,
+
+    Add64rr,
+    Add64rm,
+    Add64mr,
+    Add64mi,
+    Add64ri,
+
     Sub,
     Imul,
     Idiv,
-    Mov,
     Lea,
     Jmp,
     Test,
