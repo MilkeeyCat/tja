@@ -155,27 +155,27 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
                 } => {
                     let operand = self.lower_operand(bb, condition);
 
-                    bb.instructions.push(mir::Instruction {
-                        opcode: amd64::Opcode::Test as usize,
-                        operands: vec![operand],
-                    });
-                    bb.instructions.push(mir::Instruction {
-                        opcode: amd64::Opcode::Jcc as usize,
-                        operands: vec![
-                            mir::Operand::Block(*iftrue),
-                            mir::Operand::Immediate(amd64::Condition::NotEqual as u64),
-                        ],
-                    });
-                    bb.instructions.push(mir::Instruction {
-                        opcode: amd64::Opcode::Jmp as usize,
-                        operands: vec![mir::Operand::Block(*iffalse)],
-                    });
+                    //bb.instructions.push(mir::Instruction {
+                    //    opcode: amd64::Opcode::Test as usize,
+                    //    operands: vec![operand],
+                    //});
+                    //bb.instructions.push(mir::Instruction {
+                    //    opcode: amd64::Opcode::Jcc as usize,
+                    //    operands: vec![
+                    //        mir::Operand::Block(*iftrue),
+                    //        mir::Operand::Immediate(amd64::Condition::NotEqual as u64),
+                    //    ],
+                    //});
+                    //bb.instructions.push(mir::Instruction {
+                    //    opcode: amd64::Opcode::Jmp as usize,
+                    //    operands: vec![mir::Operand::Block(*iffalse)],
+                    //});
                 }
                 hir::Branch::Unconditional { block_idx } => {
-                    bb.instructions.push(mir::Instruction {
-                        opcode: amd64::Opcode::Jmp as usize,
-                        operands: vec![mir::Operand::Block(*block_idx)],
-                    });
+                    //bb.instructions.push(mir::Instruction {
+                    //    opcode: amd64::Opcode::Jmp as usize,
+                    //    operands: vec![mir::Operand::Block(*block_idx)],
+                    //});
                 }
             },
         }

@@ -105,249 +105,96 @@ impl<'a> ModuleCodeGen<'a> {
     }
 }
 
-struct FunctionCodeGen<'a> {
+pub struct FunctionCodeGen<'a> {
     vregs: HashMap<VregIdx, allocator::Location>,
     stack_slots: HashMap<StackFrameIdx, Vec<Operand>>,
     globals: &'a [hir::Global],
     target: &'a dyn Target,
-    text: &'a mut String,
+    pub text: &'a mut String,
 }
 
 impl<'a> FunctionCodeGen<'a> {
     fn emit_instruction(&mut self, instr: &Instruction) -> Result<(), std::fmt::Error> {
-        match Opcode::from(instr.opcode) {
-            opcode @ (Opcode::Add8rr
-            | Opcode::Add8rm
-            | Opcode::Add8mr
-            | Opcode::Add8mi
-            | Opcode::Add8ri
-            | Opcode::Add16rr
-            | Opcode::Add16rm
-            | Opcode::Add16mr
-            | Opcode::Add16mi
-            | Opcode::Add16ri
-            | Opcode::Add32rr
-            | Opcode::Add32rm
-            | Opcode::Add32mr
-            | Opcode::Add32mi
-            | Opcode::Add32ri
-            | Opcode::Add64rr
-            | Opcode::Add64rm
-            | Opcode::Add64mr
-            | Opcode::Add64mi
-            | Opcode::Add64ri) => {
-                write!(self.text, "\tadd ")?;
+        write!(self.text, "\t")?;
 
-                let (src, dest) = match opcode {
-                    Opcode::Add8rr
-                    | Opcode::Add8rm
-                    | Opcode::Add8ri
-                    | Opcode::Add16rr
-                    | Opcode::Add16rm
-                    | Opcode::Add16ri
-                    | Opcode::Add32rr
-                    | Opcode::Add32rm
-                    | Opcode::Add32ri
-                    | Opcode::Add64rr
-                    | Opcode::Add64rm
-                    | Opcode::Add64ri => instr.operands.split_at(1),
-                    Opcode::Add8mr
-                    | Opcode::Add8mi
-                    | Opcode::Add16mr
-                    | Opcode::Add16mi
-                    | Opcode::Add32mr
-                    | Opcode::Add32mi
-                    | Opcode::Add64mr
-                    | Opcode::Add64mi => instr.operands.split_at(instr.operands.len() - 1),
-                    _ => unreachable!(),
-                };
-                let size = match opcode {
-                    Opcode::Add8rr
-                    | Opcode::Add8rm
-                    | Opcode::Add8mr
-                    | Opcode::Add8mi
-                    | Opcode::Add8ri => OperandSize::Byte,
-                    Opcode::Add16rr
-                    | Opcode::Add16rm
-                    | Opcode::Add16mr
-                    | Opcode::Add16mi
-                    | Opcode::Add16ri => OperandSize::Word,
-                    Opcode::Add32rr
-                    | Opcode::Add32rm
-                    | Opcode::Add32mr
-                    | Opcode::Add32mi
-                    | Opcode::Add32ri => OperandSize::Dword,
-                    Opcode::Add64rr
-                    | Opcode::Add64rm
-                    | Opcode::Add64mr
-                    | Opcode::Add64mi
-                    | Opcode::Add64ri => OperandSize::Qword,
-                    _ => unreachable!(),
-                };
+        amd64::Opcode::from(instr.opcode).write_instruction(self, &instr.operands)?;
 
-                self.write_operand(src, size)?;
-                write!(self.text, ", ")?;
-                self.write_operand(dest, size)?;
-                write!(self.text, "\n")
-            }
-            Opcode::Sub => unimplemented!(),
-            Opcode::Imul => unimplemented!(),
-            Opcode::Idiv => unimplemented!(),
-            opcode @ (Opcode::Mov8rr
-            | Opcode::Mov8rm
-            | Opcode::Mov8mr
-            | Opcode::Mov8mi
-            | Opcode::Mov8ri
-            | Opcode::Mov16rr
-            | Opcode::Mov16rm
-            | Opcode::Mov16mr
-            | Opcode::Mov16mi
-            | Opcode::Mov16ri
-            | Opcode::Mov32rr
-            | Opcode::Mov32rm
-            | Opcode::Mov32mr
-            | Opcode::Mov32mi
-            | Opcode::Mov32ri
-            | Opcode::Mov64rr
-            | Opcode::Mov64rm
-            | Opcode::Mov64mr
-            | Opcode::Mov64mi
-            | Opcode::Mov64ri) => {
-                write!(self.text, "\tmov ")?;
-
-                let (src, dest) = match opcode {
-                    Opcode::Mov8rr
-                    | Opcode::Mov8rm
-                    | Opcode::Mov8ri
-                    | Opcode::Mov16rr
-                    | Opcode::Mov16rm
-                    | Opcode::Mov16ri
-                    | Opcode::Mov32rr
-                    | Opcode::Mov32rm
-                    | Opcode::Mov32ri
-                    | Opcode::Mov64rr
-                    | Opcode::Mov64rm
-                    | Opcode::Mov64ri => instr.operands.split_at(1),
-                    Opcode::Mov8mr
-                    | Opcode::Mov8mi
-                    | Opcode::Mov16mr
-                    | Opcode::Mov16mi
-                    | Opcode::Mov32mr
-                    | Opcode::Mov32mi
-                    | Opcode::Mov64mr
-                    | Opcode::Mov64mi => instr.operands.split_at(instr.operands.len() - 1),
-                    _ => unreachable!(),
-                };
-                let size = match opcode {
-                    Opcode::Mov8rr
-                    | Opcode::Mov8rm
-                    | Opcode::Mov8mr
-                    | Opcode::Mov8mi
-                    | Opcode::Mov8ri => OperandSize::Byte,
-                    Opcode::Mov16rr
-                    | Opcode::Mov16rm
-                    | Opcode::Mov16mr
-                    | Opcode::Mov16mi
-                    | Opcode::Mov16ri => OperandSize::Word,
-                    Opcode::Mov32rr
-                    | Opcode::Mov32rm
-                    | Opcode::Mov32mr
-                    | Opcode::Mov32mi
-                    | Opcode::Mov32ri => OperandSize::Dword,
-                    Opcode::Mov64rr
-                    | Opcode::Mov64rm
-                    | Opcode::Mov64mr
-                    | Opcode::Mov64mi
-                    | Opcode::Mov64ri => OperandSize::Qword,
-                    _ => unreachable!(),
-                };
-
-                self.write_operand(src, size)?;
-                write!(self.text, ", ")?;
-                self.write_operand(dest, size)?;
-                write!(self.text, "\n")
-            }
-            Opcode::Lea => unimplemented!(),
-            Opcode::Jmp => unimplemented!(),
-            Opcode::Test => unimplemented!(),
-            Opcode::Jcc => unimplemented!(),
-            Opcode::Num => unreachable!(),
-        }
+        write!(self.text, "\n")
     }
 
-    fn write_operand(
-        &mut self,
-        operands: &[Operand],
-        size: OperandSize,
-    ) -> Result<(), std::fmt::Error> {
+    pub fn stringify_operand(&mut self, operands: &[Operand]) -> Result<String, std::fmt::Error> {
         match operands {
             [Operand::Vreg(idx, _)] => match self.vregs[idx] {
                 allocator::Location::Register(r) => {
-                    write!(self.text, "{}", self.target.register_info().get_name(&r))
+                    Ok(self.target.register_info().get_name(&r).to_string())
                 }
                 allocator::Location::Spill(idx) => {
-                    self.write_operand(&self.stack_slots[&idx].clone(), size)
+                    self.stringify_operand(&self.stack_slots[&idx].clone())
                 }
             },
-            [Operand::Reg(r)] => {
-                write!(self.text, "{}", self.target.register_info().get_name(r))
-            }
-            [Operand::Frame(idx)] => self.write_operand(&self.stack_slots[idx].clone(), size),
+            [Operand::Reg(r)] => Ok(self.target.register_info().get_name(r).to_string()),
+            [Operand::Frame(idx)] => self.stringify_operand(&self.stack_slots[idx].clone()),
             [
                 base,
                 index,
                 Operand::Immediate(scale),
                 Operand::Immediate(displacement),
             ] => {
-                write!(self.text, "{size} [")?;
+                let mut result = String::from("[");
 
                 match base {
                     Operand::Reg(r) => {
-                        write!(self.text, "{}", self.target.register_info().get_name(r))?;
+                        result.push_str(self.target.register_info().get_name(r));
                     }
                     Operand::Vreg(idx, _) => match self.vregs[idx] {
                         allocator::Location::Register(r) => {
-                            write!(self.text, "{}", self.target.register_info().get_name(&r))?
+                            write!(&mut result, "{}", self.target.register_info().get_name(&r))?
                         }
                         allocator::Location::Spill(_) => unreachable!(),
                     },
-                    Operand::Global(idx) => write!(self.text, "{}", self.globals[*idx].name)?,
+                    Operand::Global(idx) => write!(&mut result, "{}", self.globals[*idx].name)?,
                     _ => unreachable!(),
                 };
 
                 match index {
                     Operand::Reg(r) => {
-                        write!(self.text, "{}", self.target.register_info().get_name(r))?;
+                        write!(
+                            &mut result,
+                            " + {}",
+                            self.target.register_info().get_name(r)
+                        )?;
                     }
                     Operand::Vreg(idx, _) => match self.vregs[idx] {
-                        allocator::Location::Register(r) => {
-                            write!(self.text, "{}", self.target.register_info().get_name(&r))?
-                        }
+                        allocator::Location::Register(r) => write!(
+                            &mut result,
+                            " + {}",
+                            self.target.register_info().get_name(&r)
+                        )?,
                         allocator::Location::Spill(_) => unreachable!(),
                     },
                     _ => unreachable!(),
                 };
 
                 if *scale > 0 {
-                    write!(self.text, "* {}", *scale)?;
+                    write!(&mut result, "* {}", *scale)?;
                 }
 
                 let displacement = *displacement as i64;
                 if displacement != 0 {
                     if displacement > 0 {
-                        write!(self.text, "+")?;
+                        write!(&mut result, "+")?;
                     } else {
-                        write!(self.text, "-")?;
+                        write!(&mut result, "-")?;
                     }
 
-                    write!(self.text, "{displacement}")?;
+                    write!(&mut result, "{displacement}")?;
                 }
 
-                write!(self.text, "]")
+                write!(&mut result, "]")?;
+
+                Ok(result)
             }
-            [Operand::Immediate(imm)] => {
-                write!(self.text, "{imm}")
-            }
+            [Operand::Immediate(imm)] => Ok(imm.to_string()),
             operands => unreachable!("{:?}", operands),
         }
     }

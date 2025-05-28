@@ -1,5 +1,7 @@
 pub mod amd64;
 
+//use super::calling_convention::CallingConvention;
+use crate::hir::ty::{Storage, TyIdx};
 use crate::mir::{Register, RegisterClass};
 
 pub trait RegisterInfo {
@@ -12,9 +14,6 @@ pub trait Target {
     fn abi(&self) -> &dyn Abi;
     fn register_info(&self) -> &dyn RegisterInfo;
 }
-
-//use super::calling_convention::CallingConvention;
-use crate::hir::ty::{Storage, TyIdx};
 
 pub trait Abi {
     fn field_offset(&self, storage: &Storage, fields: &[TyIdx], i: usize) -> usize;
