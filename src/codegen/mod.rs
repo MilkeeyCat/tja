@@ -1,4 +1,4 @@
-mod allocator;
+pub mod allocator;
 //pub mod calling_convention;
 mod condition;
 mod operands;
@@ -7,10 +7,7 @@ mod register;
 use crate::{
     hir,
     mir::{Function, Instruction, Module, Operand, Register, StackFrameIdx, VregIdx},
-    targets::{
-        Target,
-        amd64::{self, Opcode},
-    },
+    targets::{Target, amd64},
 };
 use allocator::Allocator;
 use derive_more::Display;
@@ -106,10 +103,10 @@ impl<'a> ModuleCodeGen<'a> {
 }
 
 pub struct FunctionCodeGen<'a> {
-    vregs: HashMap<VregIdx, allocator::Location>,
-    stack_slots: HashMap<StackFrameIdx, Vec<Operand>>,
-    globals: &'a [hir::Global],
-    target: &'a dyn Target,
+    pub vregs: HashMap<VregIdx, allocator::Location>,
+    pub stack_slots: HashMap<StackFrameIdx, Vec<Operand>>,
+    pub globals: &'a [hir::Global],
+    pub target: &'a dyn Target,
     pub text: &'a mut String,
 }
 
@@ -120,83 +117,6 @@ impl<'a> FunctionCodeGen<'a> {
         amd64::Opcode::from(instr.opcode).write_instruction(self, &instr.operands)?;
 
         write!(self.text, "\n")
-    }
-
-    pub fn stringify_operand(&mut self, operands: &[Operand]) -> Result<String, std::fmt::Error> {
-        match operands {
-            [Operand::Vreg(idx, _)] => match self.vregs[idx] {
-                allocator::Location::Register(r) => {
-                    Ok(self.target.register_info().get_name(&r).to_string())
-                }
-                allocator::Location::Spill(idx) => {
-                    self.stringify_operand(&self.stack_slots[&idx].clone())
-                }
-            },
-            [Operand::Reg(r)] => Ok(self.target.register_info().get_name(r).to_string()),
-            [Operand::Frame(idx)] => self.stringify_operand(&self.stack_slots[idx].clone()),
-            [
-                base,
-                index,
-                Operand::Immediate(scale),
-                Operand::Immediate(displacement),
-            ] => {
-                let mut result = String::from("[");
-
-                match base {
-                    Operand::Reg(r) => {
-                        result.push_str(self.target.register_info().get_name(r));
-                    }
-                    Operand::Vreg(idx, _) => match self.vregs[idx] {
-                        allocator::Location::Register(r) => {
-                            write!(&mut result, "{}", self.target.register_info().get_name(&r))?
-                        }
-                        allocator::Location::Spill(_) => unreachable!(),
-                    },
-                    Operand::Global(idx) => write!(&mut result, "{}", self.globals[*idx].name)?,
-                    _ => unreachable!(),
-                };
-
-                match index {
-                    Operand::Reg(r) => {
-                        write!(
-                            &mut result,
-                            " + {}",
-                            self.target.register_info().get_name(r)
-                        )?;
-                    }
-                    Operand::Vreg(idx, _) => match self.vregs[idx] {
-                        allocator::Location::Register(r) => write!(
-                            &mut result,
-                            " + {}",
-                            self.target.register_info().get_name(&r)
-                        )?,
-                        allocator::Location::Spill(_) => unreachable!(),
-                    },
-                    _ => unreachable!(),
-                };
-
-                if *scale > 0 {
-                    write!(&mut result, "* {}", *scale)?;
-                }
-
-                let displacement = *displacement as i64;
-                if displacement != 0 {
-                    if displacement > 0 {
-                        write!(&mut result, "+")?;
-                    } else {
-                        write!(&mut result, "-")?;
-                    }
-
-                    write!(&mut result, "{displacement}")?;
-                }
-
-                write!(&mut result, "]")?;
-
-                Ok(result)
-            }
-            [Operand::Immediate(imm)] => Ok(imm.to_string()),
-            operands => unreachable!("{:?}", operands),
-        }
     }
 }
 

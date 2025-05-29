@@ -1,36 +1,177 @@
-use crate::{codegen::FunctionCodeGen, mir::Operand};
-use std::fmt::{Result, Write};
+use super::Condition;
+use crate::{
+    codegen::{FunctionCodeGen, allocator::Location},
+    mir::Operand,
+};
+use std::fmt::Write;
 
-macro_rules! define_operand_class {
-    ($name: ident, $mir_length: literal) => {
-        define_operand_class! {$name, $mir_length, ""}
-    };
+fn register(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+    match operands {
+        [Operand::Vreg(idx, _)] => match codegen.vregs[idx] {
+            Location::Register(r) => Ok(codegen.target.register_info().get_name(&r).to_string()),
+            Location::Spill(_) => unreachable!(),
+        },
+        [Operand::Reg(r)] => Ok(codegen.target.register_info().get_name(r).to_string()),
+        _ => unreachable!(),
+    }
+}
 
-    ($name: ident, $mir_length: literal, $prefix: literal) => {
+fn memory(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+    match operands {
+        [Operand::Frame(idx)] => memory(&codegen, &codegen.stack_slots[idx]),
+        [
+            base,
+            index,
+            Operand::Immediate(scale),
+            Operand::Immediate(displacement),
+        ] => {
+            let mut result = String::from("[");
+
+            match base {
+                Operand::Reg(r) => {
+                    result.push_str(codegen.target.register_info().get_name(r));
+                }
+                Operand::Vreg(idx, _) => match codegen.vregs[idx] {
+                    Location::Register(r) => write!(
+                        &mut result,
+                        "{}",
+                        codegen.target.register_info().get_name(&r)
+                    )?,
+                    Location::Spill(_) => unreachable!(),
+                },
+                Operand::Global(idx) => write!(&mut result, "{}", codegen.globals[*idx].name)?,
+                _ => unreachable!(),
+            };
+
+            match index {
+                Operand::Reg(r) => {
+                    write!(
+                        &mut result,
+                        " + {}",
+                        codegen.target.register_info().get_name(r)
+                    )?;
+                }
+                Operand::Vreg(idx, _) => match codegen.vregs[idx] {
+                    Location::Register(r) => write!(
+                        &mut result,
+                        " + {}",
+                        codegen.target.register_info().get_name(&r)
+                    )?,
+                    Location::Spill(_) => unreachable!(),
+                },
+                _ => unreachable!(),
+            };
+
+            if *scale > 0 {
+                write!(&mut result, "* {}", *scale)?;
+            }
+
+            let displacement = *displacement as i64;
+            if displacement != 0 {
+                if displacement > 0 {
+                    write!(&mut result, "+")?;
+                } else {
+                    write!(&mut result, "-")?;
+                }
+
+                write!(&mut result, "{displacement}")?;
+            }
+
+            write!(&mut result, "]")?;
+
+            Ok(result)
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[allow(non_camel_case_types)]
+struct r8;
+
+impl r8 {
+    const MIR_LENGTH: usize = 1;
+
+    fn from_operands(
+        codegen: &FunctionCodeGen,
+        operands: &[Operand],
+    ) -> Result<String, std::fmt::Error> {
+        register(codegen, operands)
+    }
+}
+
+#[allow(non_camel_case_types)]
+type r16 = r8;
+
+#[allow(non_camel_case_types)]
+type r32 = r8;
+
+#[allow(non_camel_case_types)]
+type r64 = r8;
+
+macro_rules! mem_operand {
+    ($name: ident, $prefix: literal) => {
         #[allow(non_camel_case_types)]
         struct $name;
 
         impl $name {
-            const MIR_LENGTH: usize = $mir_length;
+            const MIR_LENGTH: usize = 4;
 
-            fn prefix() -> &'static str {
-                $prefix
+            fn from_operands(
+                codegen: &FunctionCodeGen,
+                operands: &[Operand],
+            ) -> Result<String, std::fmt::Error> {
+                Ok(format!("{} ptr {}", $prefix, memory(codegen, operands)?))
             }
         }
     };
 }
 
-define_operand_class! {r8, 1}
-define_operand_class! {r16, 1}
-define_operand_class! {r32, 1}
-define_operand_class! {r64, 1}
+mem_operand! {m8, "byte"}
+mem_operand! {m16, "word"}
+mem_operand! {m32, "dword"}
+mem_operand! {m64, "qword"}
 
-define_operand_class! {imm, 1}
+#[allow(non_camel_case_types)]
+struct ccode;
 
-define_operand_class! {m8, 4, "byte ptr "}
-define_operand_class! {m16, 4, "word ptr "}
-define_operand_class! {m32, 4, "dword ptr "}
-define_operand_class! {m64, 4, "qword ptr "}
+impl ccode {
+    const MIR_LENGTH: usize = 1;
+
+    fn from_operands(_: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+        match operands {
+            [Operand::Immediate(value)] => Ok(Condition::from(*value as usize).to_string()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[allow(non_camel_case_types)]
+struct imm;
+
+impl imm {
+    const MIR_LENGTH: usize = 1;
+
+    fn from_operands(_: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+        match operands {
+            [Operand::Immediate(value)] => Ok(value.to_string()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[allow(non_camel_case_types)]
+struct label;
+
+impl label {
+    const MIR_LENGTH: usize = 1;
+
+    fn from_operands(_: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+        match operands {
+            [Operand::Block(idx)] => Ok(format!(".L{idx}")),
+            _ => unreachable!(),
+        }
+    }
+}
 
 macro_rules! opcodes {
     ($($variant: ident = $asm: literal, ($($var: ident = $class: ty),+);)+) => {
@@ -44,13 +185,13 @@ macro_rules! opcodes {
         }
 
         impl Opcode {
-            pub fn write_instruction(&self, codegen: &mut FunctionCodeGen, operands: &[Operand]) -> Result {
+            pub fn write_instruction(&self, codegen: &mut FunctionCodeGen, operands: &[Operand]) -> std::fmt::Result {
                 match self {
                     $(
                         Self::$variant => {
                             let mut start = 0;
                             $(
-                                let $var = format!("{}{}", <$class>::prefix(), codegen.stringify_operand(&operands[start..start+<$class>::MIR_LENGTH])?);
+                                let $var = <$class>::from_operands(codegen, &operands[start..start+<$class>::MIR_LENGTH])?;
                                 #[allow(unused_assignments)]
                                 {
                                     start += <$class>::MIR_LENGTH;
@@ -124,4 +265,28 @@ opcodes! {
     Add64mr = "add {dest}, {src}", (dest = m64, src = r64);
     Add64mi = "add {dest}, {src}", (dest = m64, src = imm);
     Add64ri = "add {dest}, {src}", (dest = r64, src = imm);
+
+    Test8ri = "test {lhs}, {rhs}", (lhs = r8, rhs = imm);
+    Test8mi = "test {lhs}, {rhs}", (lhs = m8, rhs = imm);
+    Test8rr = "test {lhs}, {rhs}", (lhs = r8, rhs = r8);
+    Test8mr = "test {lhs}, {rhs}", (lhs = m8, rhs = r8);
+
+    Test16ri = "test {lhs}, {rhs}", (lhs = r16, rhs = imm);
+    Test16mi = "test {lhs}, {rhs}", (lhs = m16, rhs = imm);
+    Test16rr = "test {lhs}, {rhs}", (lhs = r16, rhs = r16);
+    Test16mr = "test {lhs}, {rhs}", (lhs = m16, rhs = r16);
+
+    Test32ri = "test {lhs}, {rhs}", (lhs = r32, rhs = imm);
+    Test32mi = "test {lhs}, {rhs}", (lhs = m32, rhs = imm);
+    Test32rr = "test {lhs}, {rhs}", (lhs = r32, rhs = r32);
+    Test32mr = "test {lhs}, {rhs}", (lhs = m32, rhs = r32);
+
+    Test64ri = "test {lhs}, {rhs}", (lhs = r64, rhs = imm);
+    Test64mi = "test {lhs}, {rhs}", (lhs = m64, rhs = imm);
+    Test64rr = "test {lhs}, {rhs}", (lhs = r64, rhs = r64);
+    Test64mr = "test {lhs}, {rhs}", (lhs = m64, rhs = r64);
+
+    Jmp = "jmp {dest}", (dest = label);
+
+    Jcc = "j{cc} {dest}", (dest = label, cc = ccode);
 }

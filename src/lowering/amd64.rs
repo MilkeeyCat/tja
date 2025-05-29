@@ -9,6 +9,7 @@ use crate::{
 };
 use std::collections::HashMap;
 
+#[derive(Clone, Copy)]
 enum OperandKind {
     Memory,
     Register,
@@ -154,28 +155,26 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
                     iffalse,
                 } => {
                     let operand = self.lower_operand(bb, condition);
+                    let kind = operand.kind();
 
-                    //bb.instructions.push(mir::Instruction {
-                    //    opcode: amd64::Opcode::Test as usize,
-                    //    operands: vec![operand],
-                    //});
-                    //bb.instructions.push(mir::Instruction {
-                    //    opcode: amd64::Opcode::Jcc as usize,
-                    //    operands: vec![
-                    //        mir::Operand::Block(*iftrue),
-                    //        mir::Operand::Immediate(amd64::Condition::NotEqual as u64),
-                    //    ],
-                    //});
-                    //bb.instructions.push(mir::Instruction {
-                    //    opcode: amd64::Opcode::Jmp as usize,
-                    //    operands: vec![mir::Operand::Block(*iffalse)],
-                    //});
+                    test(bb, vec![operand.clone(), operand], kind, kind, 1);
+                    bb.instructions.push(mir::Instruction {
+                        opcode: amd64::Opcode::Jcc as mir::Opcode,
+                        operands: vec![
+                            mir::Operand::Block(*iftrue),
+                            mir::Operand::Immediate(amd64::Condition::NotEqual as u64),
+                        ],
+                    });
+                    bb.instructions.push(mir::Instruction {
+                        opcode: amd64::Opcode::Jmp as mir::Opcode,
+                        operands: vec![mir::Operand::Block(*iffalse)],
+                    });
                 }
                 hir::Branch::Unconditional { block_idx } => {
-                    //bb.instructions.push(mir::Instruction {
-                    //    opcode: amd64::Opcode::Jmp as usize,
-                    //    operands: vec![mir::Operand::Block(*block_idx)],
-                    //});
+                    bb.instructions.push(mir::Instruction {
+                        opcode: amd64::Opcode::Jmp as mir::Opcode,
+                        operands: vec![mir::Operand::Block(*block_idx)],
+                    });
                 }
             },
         }
@@ -247,6 +246,43 @@ fn mov(
         (OperandKind::Memory, OperandKind::Register, 8) => amd64::Opcode::Mov64mr,
         (OperandKind::Memory, OperandKind::Immediate, 8) => amd64::Opcode::Mov64mi,
         (OperandKind::Register, OperandKind::Immediate, 8) => amd64::Opcode::Mov64ri,
+
+        _ => unreachable!(),
+    };
+
+    bb.instructions.push(mir::Instruction {
+        opcode: opcode as mir::Opcode,
+        operands,
+    });
+}
+
+fn test(
+    bb: &mut mir::BasicBlock,
+    operands: Vec<mir::Operand>,
+    dest: OperandKind,
+    src: OperandKind,
+    size: usize,
+) {
+    let opcode = match (dest, src, size) {
+        (OperandKind::Register, OperandKind::Immediate, 1) => amd64::Opcode::Test8ri,
+        (OperandKind::Memory, OperandKind::Immediate, 1) => amd64::Opcode::Test8mi,
+        (OperandKind::Register, OperandKind::Register, 1) => amd64::Opcode::Test8rr,
+        (OperandKind::Memory, OperandKind::Register, 1) => amd64::Opcode::Test8mr,
+
+        (OperandKind::Register, OperandKind::Immediate, 2) => amd64::Opcode::Test16ri,
+        (OperandKind::Memory, OperandKind::Immediate, 2) => amd64::Opcode::Test16mi,
+        (OperandKind::Register, OperandKind::Register, 2) => amd64::Opcode::Test16rr,
+        (OperandKind::Memory, OperandKind::Register, 2) => amd64::Opcode::Test16mr,
+
+        (OperandKind::Register, OperandKind::Immediate, 4) => amd64::Opcode::Test32ri,
+        (OperandKind::Memory, OperandKind::Immediate, 4) => amd64::Opcode::Test32mi,
+        (OperandKind::Register, OperandKind::Register, 4) => amd64::Opcode::Test32rr,
+        (OperandKind::Memory, OperandKind::Register, 4) => amd64::Opcode::Test32mr,
+
+        (OperandKind::Register, OperandKind::Immediate, 8) => amd64::Opcode::Test64ri,
+        (OperandKind::Memory, OperandKind::Immediate, 8) => amd64::Opcode::Test64mi,
+        (OperandKind::Register, OperandKind::Register, 8) => amd64::Opcode::Test64rr,
+        (OperandKind::Memory, OperandKind::Register, 8) => amd64::Opcode::Test64mr,
 
         _ => unreachable!(),
     };

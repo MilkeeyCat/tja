@@ -15,6 +15,7 @@ use std::collections::HashMap;
 // between two signed integer values.
 
 #[derive(Debug, Display, Eq, PartialEq)]
+#[repr(usize)]
 pub enum Condition {
     #[display("a")]
     Above,
@@ -36,6 +37,16 @@ pub enum Condition {
     Less,
     #[display("le")]
     LessEqual,
+
+    Num,
+}
+
+impl From<usize> for Condition {
+    fn from(value: usize) -> Self {
+        assert!(value < Self::Num as usize);
+
+        unsafe { std::mem::transmute::<_, Self>(value) }
+    }
 }
 
 #[repr(usize)]
