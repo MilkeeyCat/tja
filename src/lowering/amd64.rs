@@ -33,7 +33,7 @@ struct FnLowering<'hir, 'a> {
     ty_storage: &'a ty::Storage,
     locals: &'a [TyIdx],
     target: &'a dyn Target,
-    local_to_operand: HashMap<hir::LocalIdx, mir::Operand>,
+    local_to_operand: HashMap<hir::LocalIdx, Vec<mir::Operand>>,
 }
 
 impl<'hir, 'a> FnLowering<'hir, 'a> {
@@ -78,13 +78,13 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
         &mut self,
         _bb: &mut mir::BasicBlock<'_>,
         operand: &hir::Operand,
-    ) -> mir::Operand {
+    ) -> Vec<mir::Operand> {
         match operand {
             hir::Operand::Local(idx) => self.local_to_operand[idx].clone(),
             hir::Operand::Const(c, _) => match c {
-                hir::Const::Global(idx) => mir::Operand::Global(*idx),
-                hir::Const::Function(idx) => mir::Operand::Function(*idx),
-                hir::Const::Int(value) => mir::Operand::Immediate(*value),
+                hir::Const::Global(idx) => vec![mir::Operand::Global(*idx)],
+                hir::Const::Function(idx) => vec![mir::Operand::Function(*idx)],
+                hir::Const::Int(value) => vec![mir::Operand::Immediate(*value)],
                 hir::Const::Aggregate(_) => unimplemented!(),
             },
         }
@@ -104,7 +104,7 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
                         .abi()
                         .ty_size(self.ty_storage, self.locals[*out]);
                     let vreg = self.create_vreg_from_local(*out, gpr_by_size(ty_size));
-                    let lhs = self.lower_operand(bb, lhs);
+                    let lhs = self.lower_operand(bb, lhs)[0].clone();
                     let lhs_kind = lhs.kind();
 
                     mov(
@@ -115,7 +115,7 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
                         ty_size,
                     );
 
-                    let rhs = self.lower_operand(bb, rhs);
+                    let rhs = self.lower_operand(bb, rhs)[0].clone();
                     let rhs_kind = rhs.kind();
 
                     add(
@@ -135,7 +135,8 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
                 self.function
                     .stack_slots
                     .insert(idx, self.target.abi().ty_size(self.ty_storage, *ty));
-                self.local_to_operand.insert(*out, mir::Operand::Frame(idx));
+                self.local_to_operand
+                    .insert(*out, vec![mir::Operand::Frame(idx)]);
             }
             _ => unimplemented!(),
         }
@@ -154,7 +155,7 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
                     iftrue,
                     iffalse,
                 } => {
-                    let operand = self.lower_operand(bb, condition);
+                    let operand = self.lower_operand(bb, condition)[0].clone();
                     let kind = operand.kind();
 
                     test(bb, vec![operand.clone(), operand], kind, kind, 1);
@@ -197,7 +198,7 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
         let idx = self.create_vreg(class);
 
         self.local_to_operand
-            .insert(local_idx, mir::Operand::Vreg(idx, mir::VregRole::Use));
+            .insert(local_idx, vec![mir::Operand::Vreg(idx, mir::VregRole::Use)]);
 
         idx
     }
