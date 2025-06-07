@@ -8,7 +8,7 @@ use std::collections::HashSet;
 pub type VregIdx = usize;
 pub type StackFrameIdx = usize;
 pub type RegisterClass = usize;
-pub type Register = usize;
+pub type PhysicalRegister = usize;
 pub type Opcode = usize;
 pub type BlockIdx = hir::BlockIdx;
 
@@ -29,15 +29,20 @@ pub struct BasicBlock<'hir> {
 }
 
 #[derive(Debug, Clone)]
-pub enum VregRole {
+pub enum RegisterRole {
     Def,
     Use,
 }
 
 #[derive(Debug, Clone)]
+pub enum Register {
+    Virtual(VregIdx),
+    Physical(PhysicalRegister),
+}
+
+#[derive(Debug, Clone)]
 pub enum Operand {
-    Vreg(VregIdx, VregRole),
-    Reg(Register),
+    Register(Register, RegisterRole),
     Frame(StackFrameIdx),
     Global(hir::GlobalIdx),
     Function(FunctionIdx),
@@ -56,7 +61,7 @@ impl Instruction {
         self.operands
             .iter()
             .filter_map(|operand| match operand {
-                Operand::Vreg(idx, VregRole::Def) => Some(*idx),
+                Operand::Register(Register::Virtual(idx), RegisterRole::Def) => Some(*idx),
                 _ => None,
             })
             .collect()
@@ -66,7 +71,7 @@ impl Instruction {
         self.operands
             .iter()
             .filter_map(|operand| match operand {
-                Operand::Vreg(idx, VregRole::Use) => Some(*idx),
+                Operand::Register(Register::Virtual(idx), RegisterRole::Use) => Some(*idx),
                 _ => None,
             })
             .collect()

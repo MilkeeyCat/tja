@@ -6,7 +6,10 @@ mod register;
 
 use crate::{
     hir,
-    mir::{Function, Instruction, Module, Operand, Register, StackFrameIdx, VregIdx},
+    mir::{
+        Function, Instruction, Module, Operand, PhysicalRegister, Register, RegisterRole,
+        StackFrameIdx, VregIdx,
+    },
     targets::{Target, amd64},
 };
 use allocator::Allocator;
@@ -44,7 +47,10 @@ fn lower_stack_slots(func: &Function) -> HashMap<StackFrameIdx, Vec<Operand>> {
                 locations.insert(
                     *idx,
                     vec![
-                        Operand::Reg(amd64::Register::Rbp as Register),
+                        Operand::Register(
+                            Register::Physical(amd64::Register::Rbp as PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
                         Operand::Immediate(0),
                         Operand::Immediate(0),
                         Operand::Immediate(-stack_offset as u64),

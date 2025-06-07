@@ -57,7 +57,7 @@ pub enum RegisterClass {
     Gpr8,
 }
 
-struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::Register>>);
+struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::PhysicalRegister>>);
 
 impl RegisterInfo {
     fn new() -> Self {
@@ -65,73 +65,73 @@ impl RegisterInfo {
             (
                 RegisterClass::Gpr64 as mir::RegisterClass,
                 vec![
-                    Register::R15 as mir::Register,
-                    Register::R14 as mir::Register,
-                    Register::R13 as mir::Register,
-                    Register::R12 as mir::Register,
-                    Register::R11 as mir::Register,
-                    Register::R10 as mir::Register,
-                    Register::R9 as mir::Register,
-                    Register::Rcx as mir::Register,
-                    Register::Rdx as mir::Register,
-                    Register::Rsi as mir::Register,
-                    Register::Rdi as mir::Register,
-                    Register::Rax as mir::Register,
+                    Register::R15 as mir::PhysicalRegister,
+                    Register::R14 as mir::PhysicalRegister,
+                    Register::R13 as mir::PhysicalRegister,
+                    Register::R12 as mir::PhysicalRegister,
+                    Register::R11 as mir::PhysicalRegister,
+                    Register::R10 as mir::PhysicalRegister,
+                    Register::R9 as mir::PhysicalRegister,
+                    Register::Rcx as mir::PhysicalRegister,
+                    Register::Rdx as mir::PhysicalRegister,
+                    Register::Rsi as mir::PhysicalRegister,
+                    Register::Rdi as mir::PhysicalRegister,
+                    Register::Rax as mir::PhysicalRegister,
                     //Register::R8 as mir::Register,
                 ],
             ),
             (
                 RegisterClass::Gpr32 as mir::RegisterClass,
                 vec![
-                    Register::R15d as mir::Register,
-                    Register::R14d as mir::Register,
-                    Register::R13d as mir::Register,
-                    Register::R12d as mir::Register,
-                    Register::R11d as mir::Register,
-                    Register::R10d as mir::Register,
-                    Register::R9d as mir::Register,
-                    Register::Ecx as mir::Register,
-                    Register::Edx as mir::Register,
-                    Register::Esi as mir::Register,
-                    Register::Edi as mir::Register,
-                    Register::Eax as mir::Register,
+                    Register::R15d as mir::PhysicalRegister,
+                    Register::R14d as mir::PhysicalRegister,
+                    Register::R13d as mir::PhysicalRegister,
+                    Register::R12d as mir::PhysicalRegister,
+                    Register::R11d as mir::PhysicalRegister,
+                    Register::R10d as mir::PhysicalRegister,
+                    Register::R9d as mir::PhysicalRegister,
+                    Register::Ecx as mir::PhysicalRegister,
+                    Register::Edx as mir::PhysicalRegister,
+                    Register::Esi as mir::PhysicalRegister,
+                    Register::Edi as mir::PhysicalRegister,
+                    Register::Eax as mir::PhysicalRegister,
                     //Register::R8d as mir::Register,
                 ],
             ),
             (
                 RegisterClass::Gpr16 as mir::RegisterClass,
                 vec![
-                    Register::R15w as mir::Register,
-                    Register::R14w as mir::Register,
-                    Register::R13w as mir::Register,
-                    Register::R12w as mir::Register,
-                    Register::R11w as mir::Register,
-                    Register::R10w as mir::Register,
-                    Register::R9w as mir::Register,
-                    Register::Cx as mir::Register,
-                    Register::Dx as mir::Register,
-                    Register::Si as mir::Register,
-                    Register::Di as mir::Register,
-                    Register::Ax as mir::Register,
+                    Register::R15w as mir::PhysicalRegister,
+                    Register::R14w as mir::PhysicalRegister,
+                    Register::R13w as mir::PhysicalRegister,
+                    Register::R12w as mir::PhysicalRegister,
+                    Register::R11w as mir::PhysicalRegister,
+                    Register::R10w as mir::PhysicalRegister,
+                    Register::R9w as mir::PhysicalRegister,
+                    Register::Cx as mir::PhysicalRegister,
+                    Register::Dx as mir::PhysicalRegister,
+                    Register::Si as mir::PhysicalRegister,
+                    Register::Di as mir::PhysicalRegister,
+                    Register::Ax as mir::PhysicalRegister,
                     //Register::R8w as mir::Register,
                 ],
             ),
             (
                 RegisterClass::Gpr8 as mir::RegisterClass,
                 vec![
-                    Register::R15b as mir::Register,
-                    Register::R14b as mir::Register,
-                    Register::R13b as mir::Register,
-                    Register::R12b as mir::Register,
-                    Register::R11b as mir::Register,
-                    Register::R10b as mir::Register,
-                    Register::R9b as mir::Register,
-                    Register::Cl as mir::Register,
-                    Register::Dl as mir::Register,
-                    Register::Sil as mir::Register,
-                    Register::Dil as mir::Register,
-                    Register::Ah as mir::Register,
-                    Register::Al as mir::Register,
+                    Register::R15b as mir::PhysicalRegister,
+                    Register::R14b as mir::PhysicalRegister,
+                    Register::R13b as mir::PhysicalRegister,
+                    Register::R12b as mir::PhysicalRegister,
+                    Register::R11b as mir::PhysicalRegister,
+                    Register::R10b as mir::PhysicalRegister,
+                    Register::R9b as mir::PhysicalRegister,
+                    Register::Cl as mir::PhysicalRegister,
+                    Register::Dl as mir::PhysicalRegister,
+                    Register::Sil as mir::PhysicalRegister,
+                    Register::Dil as mir::PhysicalRegister,
+                    Register::Ah as mir::PhysicalRegister,
+                    Register::Al as mir::PhysicalRegister,
                     //Register::R8b as mir::Register,
                 ],
             ),
@@ -140,18 +140,18 @@ impl RegisterInfo {
 }
 
 impl super::RegisterInfo for RegisterInfo {
-    fn get_registers_by_class(&self, class: &mir::RegisterClass) -> &[mir::Register] {
+    fn get_registers_by_class(&self, class: &mir::RegisterClass) -> &[mir::PhysicalRegister] {
         &self.0[class]
     }
 
-    fn overlaps(&self, a: &mir::Register, b: &mir::Register) -> bool {
+    fn overlaps(&self, a: &mir::PhysicalRegister, b: &mir::PhysicalRegister) -> bool {
         let a: Register = (*a).into();
         let b: Register = (*b).into();
 
         a == b || a.contains(b) || b.contains(a)
     }
 
-    fn get_name(&self, r: &mir::Register) -> &'static str {
+    fn get_name(&self, r: &mir::PhysicalRegister) -> &'static str {
         let r: Register = (*r).into();
 
         r.name()

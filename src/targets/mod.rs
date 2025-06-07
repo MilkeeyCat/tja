@@ -2,12 +2,12 @@ pub mod amd64;
 
 //use super::calling_convention::CallingConvention;
 use crate::hir::ty::{Storage, TyIdx};
-use crate::mir::{Register, RegisterClass};
+use crate::mir::{PhysicalRegister, RegisterClass};
 
 pub trait RegisterInfo {
-    fn get_registers_by_class(&self, class: &RegisterClass) -> &[Register];
-    fn overlaps(&self, a: &Register, b: &Register) -> bool;
-    fn get_name(&self, r: &Register) -> &'static str;
+    fn get_registers_by_class(&self, class: &RegisterClass) -> &[PhysicalRegister];
+    fn overlaps(&self, a: &PhysicalRegister, b: &PhysicalRegister) -> bool;
+    fn get_name(&self, r: &PhysicalRegister) -> &'static str;
 }
 
 pub trait Target {

@@ -1,5 +1,5 @@
 use super::{
-    BasicBlock, Register, RegisterClass, StackFrameIdx, VregIdx,
+    BasicBlock, PhysicalRegister, RegisterClass, StackFrameIdx, VregIdx,
     interference_graph::InterferenceGraph,
 };
 use std::collections::{HashMap, HashSet};
@@ -18,7 +18,7 @@ pub struct Function<'hir> {
     pub vregs: HashMap<VregIdx, RegisterClass>,
     pub next_stack_frame_idx: StackFrameIdx,
     pub stack_slots: HashMap<StackFrameIdx, usize>,
-    pub precolored_vregs: HashMap<VregIdx, Register>,
+    pub precolored_vregs: HashMap<VregIdx, PhysicalRegister>,
     pub blocks: Vec<BasicBlock<'hir>>,
 }
 

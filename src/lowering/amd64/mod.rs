@@ -22,7 +22,7 @@ enum OperandKind {
 impl mir::Operand {
     fn kind(&self) -> OperandKind {
         match self {
-            Self::Vreg(_, _) | Self::Reg(_) => OperandKind::Register,
+            Self::Register(_, _) => OperandKind::Register,
             Self::Frame(_) | Self::Global(_) | Self::Function(_) | Self::Block(_) => {
                 OperandKind::Memory
             }
@@ -112,7 +112,13 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
 
                     instr::mov(
                         bb,
-                        vec![mir::Operand::Vreg(vreg, mir::VregRole::Def), lhs],
+                        vec![
+                            mir::Operand::Register(
+                                mir::Register::Virtual(vreg),
+                                mir::RegisterRole::Def,
+                            ),
+                            lhs,
+                        ],
                         OperandKind::Register,
                         lhs_kind,
                         ty_size,
@@ -123,7 +129,13 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
 
                     instr::add(
                         bb,
-                        vec![mir::Operand::Vreg(vreg, mir::VregRole::Use), rhs],
+                        vec![
+                            mir::Operand::Register(
+                                mir::Register::Virtual(vreg),
+                                mir::RegisterRole::Use,
+                            ),
+                            rhs,
+                        ],
                         OperandKind::Register,
                         rhs_kind,
                         ty_size,
@@ -200,8 +212,13 @@ impl<'hir, 'a> FnLowering<'hir, 'a> {
     ) -> mir::VregIdx {
         let idx = self.create_vreg(class);
 
-        self.local_to_operand
-            .insert(local_idx, vec![mir::Operand::Vreg(idx, mir::VregRole::Use)]);
+        self.local_to_operand.insert(
+            local_idx,
+            vec![mir::Operand::Register(
+                mir::Register::Virtual(idx),
+                mir::RegisterRole::Use,
+            )],
+        );
 
         idx
     }

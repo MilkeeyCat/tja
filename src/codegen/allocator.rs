@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Location {
-    Register(mir::Register),
+    Register(mir::PhysicalRegister),
     Spill(StackFrameIdx),
 }
 
@@ -37,7 +37,7 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
         &self,
         node: VregIdx,
         neighbors: &HashSet<VregIdx>,
-    ) -> Option<mir::Register> {
+    ) -> Option<mir::PhysicalRegister> {
         for r in self
             .register_info
             .get_registers_by_class(&self.function.vregs[&node])

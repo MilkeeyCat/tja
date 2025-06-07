@@ -1,17 +1,21 @@
 use super::Condition;
 use crate::{
     codegen::{FunctionCodeGen, allocator::Location},
-    mir::Operand,
+    mir::{Operand, Register},
 };
 use std::fmt::Write;
 
 fn register(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
     match operands {
-        [Operand::Vreg(idx, _)] => match codegen.vregs[idx] {
-            Location::Register(r) => Ok(codegen.target.register_info().get_name(&r).to_string()),
-            Location::Spill(_) => unreachable!(),
+        [Operand::Register(register, _)] => match register {
+            Register::Virtual(idx) => match codegen.vregs[idx] {
+                Location::Register(r) => {
+                    Ok(codegen.target.register_info().get_name(&r).to_string())
+                }
+                Location::Spill(_) => unreachable!(),
+            },
+            Register::Physical(r) => Ok(codegen.target.register_info().get_name(r).to_string()),
         },
-        [Operand::Reg(r)] => Ok(codegen.target.register_info().get_name(r).to_string()),
         _ => unreachable!(),
     }
 }
@@ -28,36 +32,40 @@ fn memory(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std
             let mut result = String::from("[");
 
             match base {
-                Operand::Reg(r) => {
-                    result.push_str(codegen.target.register_info().get_name(r));
-                }
-                Operand::Vreg(idx, _) => match codegen.vregs[idx] {
-                    Location::Register(r) => write!(
-                        &mut result,
-                        "{}",
-                        codegen.target.register_info().get_name(&r)
-                    )?,
-                    Location::Spill(_) => unreachable!(),
+                Operand::Register(register, _) => match register {
+                    Register::Virtual(idx) => match codegen.vregs[idx] {
+                        Location::Register(r) => write!(
+                            &mut result,
+                            "{}",
+                            codegen.target.register_info().get_name(&r)
+                        )?,
+                        Location::Spill(_) => unreachable!(),
+                    },
+                    Register::Physical(r) => {
+                        result.push_str(codegen.target.register_info().get_name(r));
+                    }
                 },
                 Operand::Global(idx) => write!(&mut result, "{}", codegen.globals[*idx].name)?,
                 _ => unreachable!(),
             };
 
             match index {
-                Operand::Reg(r) => {
-                    write!(
-                        &mut result,
-                        " + {}",
-                        codegen.target.register_info().get_name(r)
-                    )?;
-                }
-                Operand::Vreg(idx, _) => match codegen.vregs[idx] {
-                    Location::Register(r) => write!(
-                        &mut result,
-                        " + {}",
-                        codegen.target.register_info().get_name(&r)
-                    )?,
-                    Location::Spill(_) => unreachable!(),
+                Operand::Register(register, _) => match register {
+                    Register::Virtual(idx) => match codegen.vregs[idx] {
+                        Location::Register(r) => write!(
+                            &mut result,
+                            " + {}",
+                            codegen.target.register_info().get_name(&r)
+                        )?,
+                        Location::Spill(_) => unreachable!(),
+                    },
+                    Register::Physical(r) => {
+                        write!(
+                            &mut result,
+                            " + {}",
+                            codegen.target.register_info().get_name(r)
+                        )?;
+                    }
                 },
                 _ => unreachable!(),
             };
