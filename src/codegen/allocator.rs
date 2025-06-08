@@ -40,7 +40,7 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
     ) -> Option<mir::PhysicalRegister> {
         for r in self
             .register_info
-            .get_registers_by_class(&self.function.vregs[&node])
+            .get_registers_by_class(&self.function.vreg_classes[&node])
         {
             let mut found = true;
 
@@ -66,7 +66,7 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
         let locations = self.locations.clone();
         let mut nodes = self
             .function
-            .vregs
+            .vreg_classes
             .keys()
             .cloned()
             .collect::<Vec<VregIdx>>();
@@ -79,7 +79,7 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
             let (node, _) = if neighbors_count
                 < self
                     .register_info
-                    .get_registers_by_class(&self.function.vregs[&node])
+                    .get_registers_by_class(&self.function.vreg_classes[&node])
                     .len()
             {
                 min(&graph, &self.locations, &nodes)
@@ -123,7 +123,7 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
             self.allocate()
         } else {
             self.function
-                .vregs
+                .vreg_classes
                 .iter()
                 .map(|(vreg, _)| (*vreg, self.locations[vreg].clone()))
                 .collect()

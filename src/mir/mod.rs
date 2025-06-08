@@ -1,15 +1,16 @@
 mod function;
 pub mod interference_graph;
+mod opcode;
 
 use crate::hir::{self, FunctionIdx};
 pub use function::Function;
+pub use opcode::{GenericOpcode, Opcode};
 use std::collections::HashSet;
 
 pub type VregIdx = usize;
 pub type StackFrameIdx = usize;
 pub type RegisterClass = usize;
 pub type PhysicalRegister = usize;
-pub type Opcode = usize;
 pub type BlockIdx = hir::BlockIdx;
 
 #[derive(Debug)]

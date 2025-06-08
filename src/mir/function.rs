@@ -2,6 +2,7 @@ use super::{
     BasicBlock, PhysicalRegister, RegisterClass, StackFrameIdx, VregIdx,
     interference_graph::InterferenceGraph,
 };
+use crate::hir::ty::TyIdx;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -15,7 +16,8 @@ struct DefUseBlock {
 pub struct Function<'hir> {
     pub name: &'hir str,
     pub next_vreg_idx: VregIdx,
-    pub vregs: HashMap<VregIdx, RegisterClass>,
+    pub vreg_classes: HashMap<VregIdx, RegisterClass>,
+    pub vreg_types: HashMap<VregIdx, TyIdx>,
     pub next_stack_frame_idx: StackFrameIdx,
     pub stack_slots: HashMap<StackFrameIdx, usize>,
     pub precolored_vregs: HashMap<VregIdx, PhysicalRegister>,
@@ -114,7 +116,7 @@ impl Function<'_> {
         let mut graph = InterferenceGraph::new();
         let liveness = self.liveness();
 
-        for &vreg in self.vregs.keys() {
+        for &vreg in self.vreg_classes.keys() {
             graph.add_node(vreg);
         }
 
