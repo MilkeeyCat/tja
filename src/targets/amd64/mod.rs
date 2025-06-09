@@ -1,12 +1,14 @@
 mod abi;
 mod opcode;
 pub mod register;
+mod register_class_selector;
 
 use crate::mir;
 use abi::SysVAmd64;
 use derive_more::Display;
 pub use opcode::Opcode;
 pub use register::Register;
+pub use register_class_selector::select_register_class;
 use std::collections::HashMap;
 
 // The terms "above" and "below" are associated with the CF flag and refer to
