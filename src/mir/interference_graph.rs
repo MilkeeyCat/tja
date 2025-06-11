@@ -1,36 +1,72 @@
+use super::Register;
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
+
+#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct NodeId(usize);
+
+impl NodeId {
+    fn next(&mut self) -> Self {
+        let idx = Self(self.0);
+        self.0 += 1;
+
+        idx
+    }
+}
 
 #[derive(Debug)]
-pub struct InterferenceGraph<K: Copy + Eq + Hash>(HashMap<K, HashSet<K>>);
+pub struct InterferenceGraph {
+    next_idx: NodeId,
+    nodes: HashMap<NodeId, Register>,
+    edges: HashMap<NodeId, HashSet<NodeId>>,
+}
 
-impl<K: Copy + Eq + Hash> InterferenceGraph<K> {
+impl InterferenceGraph {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self {
+            next_idx: NodeId::default(),
+            nodes: HashMap::new(),
+            edges: HashMap::new(),
+        }
     }
 
-    pub fn add_node(&mut self, node: K) {
-        self.0.insert(node, HashSet::new());
+    pub fn add_node(&mut self, node: Register) -> NodeId {
+        let id = self.next_idx.next();
+
+        self.nodes.insert(id, node);
+        self.edges.insert(id, HashSet::new());
+
+        id
     }
 
-    pub fn remove_node(&mut self, node: &K) {
-        if let Some(neighbors) = self.0.remove(node) {
+    pub fn add_node_with_node_id(&mut self, node: Register, id: NodeId) {
+        assert!(self.nodes.insert(id, node).is_none());
+        self.edges.insert(id, HashSet::new());
+    }
+
+    pub fn remove_node(&mut self, idx: NodeId) {
+        self.nodes.remove(&idx);
+
+        if let Some(neighbors) = self.edges.remove(&idx) {
             for neighbor in neighbors {
-                if let Some(neighbors) = self.0.get_mut(&neighbor) {
-                    neighbors.remove(node);
+                if let Some(neighbors) = self.edges.get_mut(&neighbor) {
+                    neighbors.remove(&idx);
                 }
             }
         }
     }
 
-    pub fn add_edge(&mut self, a: K, b: K) {
-        if a != b {
-            self.0.get_mut(&a).unwrap().insert(b);
-            self.0.get_mut(&b).unwrap().insert(a);
-        }
+    pub fn add_edge(&mut self, a: NodeId, b: NodeId) {
+        assert!(a != b);
+
+        self.edges.get_mut(&a).unwrap().insert(b);
+        self.edges.get_mut(&b).unwrap().insert(a);
     }
 
-    pub fn neighbors(&self, node: &K) -> &HashSet<K> {
-        &self.0[node]
+    pub fn neighbors(&self, idx: NodeId) -> &HashSet<NodeId> {
+        &self.edges[&idx]
+    }
+
+    pub fn get_node(&self, idx: NodeId) -> &Register {
+        &self.nodes[&idx]
     }
 }

@@ -1,14 +1,14 @@
 use super::{
-    BasicBlock, PhysicalRegister, RegisterClass, StackFrameIdx, VregIdx,
-    interference_graph::InterferenceGraph,
+    BasicBlock, Operand, PhysicalRegister, Register, RegisterClass, StackFrameIdx, VregIdx,
+    interference_graph::{InterferenceGraph, NodeId},
 };
 use crate::hir::ty::TyIdx;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 struct DefUseBlock {
-    defs: HashSet<VregIdx>,
-    uses: HashSet<VregIdx>,
+    defs: HashSet<Register>,
+    uses: HashSet<Register>,
     next: HashSet<usize>,
 }
 
@@ -71,7 +71,7 @@ impl Function<'_> {
         blocks
     }
 
-    fn liveness(&self) -> Vec<(HashSet<VregIdx>, HashSet<VregIdx>)> {
+    fn liveness(&self) -> Vec<(HashSet<Register>, HashSet<Register>)> {
         let defs_uses = self.defs_uses();
         let mut liveness: Vec<_> = defs_uses
             .iter()
@@ -112,22 +112,54 @@ impl Function<'_> {
         liveness
     }
 
-    pub fn interference(&self) -> InterferenceGraph<VregIdx> {
+    pub fn interference(&self) -> (InterferenceGraph, Vec<NodeId>) {
         let mut graph = InterferenceGraph::new();
         let liveness = self.liveness();
-
-        for &vreg in self.vreg_classes.keys() {
-            graph.add_node(vreg);
-        }
+        let r_to_node_idx: HashMap<Register, NodeId> = self
+            .registers()
+            .into_iter()
+            .map(|r| (r.clone(), graph.add_node(r)))
+            .collect();
+        let node_ids: Vec<NodeId> = self
+            .registers()
+            .into_iter()
+            .filter_map(|r| match r {
+                Register::Virtual(_) => Some(r_to_node_idx[&r]),
+                Register::Physical(_) => None,
+            })
+            .collect();
 
         for (i, block) in self.defs_uses().into_iter().enumerate() {
             for def in block.defs {
-                for &out in &liveness[i].1 {
-                    graph.add_edge(out, def);
+                for out in &liveness[i].1 {
+                    let a = r_to_node_idx[out];
+                    let b = r_to_node_idx[&def];
+
+                    if a != b {
+                        graph.add_edge(a, b);
+                    }
                 }
             }
         }
 
-        graph
+        (graph, node_ids)
+    }
+
+    pub fn registers(&self) -> Vec<Register> {
+        let mut registers = Vec::new();
+
+        for bb in &self.blocks {
+            for instr in &bb.instructions {
+                for operand in &instr.operands {
+                    if let Operand::Register(r, _) = operand {
+                        if !registers.contains(r) {
+                            registers.push(r.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        registers
     }
 }

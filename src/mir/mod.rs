@@ -35,7 +35,7 @@ pub enum RegisterRole {
     Use,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Register {
     Virtual(VregIdx),
     Physical(PhysicalRegister),
@@ -58,21 +58,21 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    fn defs(&self) -> HashSet<VregIdx> {
+    fn defs(&self) -> HashSet<Register> {
         self.operands
             .iter()
             .filter_map(|operand| match operand {
-                Operand::Register(Register::Virtual(idx), RegisterRole::Def) => Some(*idx),
+                Operand::Register(r, RegisterRole::Def) => Some(r.clone()),
                 _ => None,
             })
             .collect()
     }
 
-    fn uses(&self) -> HashSet<VregIdx> {
+    fn uses(&self) -> HashSet<Register> {
         self.operands
             .iter()
             .filter_map(|operand| match operand {
-                Operand::Register(Register::Virtual(idx), RegisterRole::Use) => Some(*idx),
+                Operand::Register(r, RegisterRole::Use) => Some(r.clone()),
                 _ => None,
             })
             .collect()

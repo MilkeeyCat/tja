@@ -79,8 +79,7 @@ impl<'a> ModuleCodeGen<'a> {
     }
 
     fn emit_function(&mut self, func: &mut Function) -> Result<(), std::fmt::Error> {
-        let vregs =
-            Allocator::new(self.target.register_info(), HashMap::new(), false, func).allocate();
+        let vregs = Allocator::new(self.target.register_info(), false, func).allocate();
         lower_stack_slots(func);
         let stack_slots = lower_stack_slots(func);
 
