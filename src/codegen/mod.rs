@@ -12,7 +12,7 @@ use crate::{
     },
     targets::{Target, amd64},
 };
-use allocator::Allocator;
+use allocator::allocate;
 use derive_more::Display;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -79,7 +79,7 @@ impl<'a> ModuleCodeGen<'a> {
     }
 
     fn emit_function(&mut self, func: &mut Function) -> Result<(), std::fmt::Error> {
-        let vregs = Allocator::new(self.target.register_info(), false, func).allocate();
+        let vregs = allocate(self.target.register_info(), false, func);
         lower_stack_slots(func);
         let stack_slots = lower_stack_slots(func);
 

@@ -14,7 +14,7 @@ pub enum Location {
 }
 
 /// A weird looking graph coloring by simplification register allocator
-pub struct Allocator<'a, 'mir, 'hir> {
+struct Allocator<'a, 'mir, 'hir> {
     register_info: &'a dyn RegisterInfo,
     locations: HashMap<VregIdx, Location>,
     spill_mode: bool,
@@ -22,7 +22,7 @@ pub struct Allocator<'a, 'mir, 'hir> {
 }
 
 impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
-    pub fn new(
+    fn new(
         register_info: &'a dyn RegisterInfo,
         spill_mode: bool,
         function: &'mir mut mir::Function<'hir>,
@@ -79,69 +79,6 @@ impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
 
         None
     }
-
-    pub fn allocate(mut self) -> HashMap<VregIdx, Location> {
-        let locations = self.locations.clone();
-        let (mut graph, mut node_ids) = self.function.interference();
-        let mut stack: Vec<(VregIdx, NodeId, HashSet<NodeId>)> = Vec::new();
-        let mut redo = false;
-
-        while let Some(node_id) = min(&graph, &node_ids) {
-            let neighbors_count = graph.neighbors(node_id).len();
-            let vreg_idx = match graph.get_node(node_id) {
-                Register::Virtual(idx) => *idx,
-                Register::Physical(_) => unreachable!(),
-            };
-            let node_id = if neighbors_count
-                < self
-                    .register_info
-                    .get_registers_by_class(&self.function.vreg_classes[&vreg_idx])
-                    .len()
-            {
-                min(&graph, &node_ids)
-            } else {
-                max(&graph, &node_ids)
-            }
-            .unwrap();
-            let neighbors = graph.neighbors(node_id).clone();
-            let pos = node_ids.iter().position(|idx| idx == &node_id).unwrap();
-
-            node_ids.remove(pos);
-            graph.remove_node(node_id);
-            stack.push((vreg_idx, node_id, neighbors));
-        }
-
-        for (vreg_idx, node_id, neighbors) in stack.into_iter().rev() {
-            graph.add_node_with_node_id(Register::Virtual(vreg_idx), node_id);
-
-            for neighbor in neighbors {
-                graph.add_edge(node_id, neighbor);
-            }
-
-            if let Some(r) = self.unique_register(&graph, node_id) {
-                self.locations.insert(vreg_idx, Location::Register(r));
-            } else {
-                if self.spill_mode {
-                    let idx = self.function.next_stack_frame_idx;
-                    self.function.next_stack_frame_idx += 1;
-
-                    self.locations.insert(vreg_idx, Location::Spill(idx));
-                } else {
-                    self.spill_mode = true;
-                    redo = true;
-                    break;
-                }
-            }
-        }
-
-        if redo {
-            self.locations = locations;
-
-            self.allocate()
-        } else {
-            self.locations
-        }
-    }
 }
 
 fn min(graph: &InterferenceGraph, node_ids: &[NodeId]) -> Option<NodeId> {
@@ -156,4 +93,72 @@ fn max(graph: &InterferenceGraph, nodes_ids: &[NodeId]) -> Option<NodeId> {
         .iter()
         .max_by_key(|node_id| graph.neighbors(**node_id).len())
         .cloned()
+}
+
+pub fn allocate(
+    register_info: &dyn RegisterInfo,
+    spill_mode: bool,
+    function: &mut mir::Function,
+) -> HashMap<VregIdx, Location> {
+    let mut allocator = Allocator::new(register_info, spill_mode, function);
+    let locations = allocator.locations.clone();
+    let (mut graph, mut node_ids) = allocator.function.interference();
+    let mut stack: Vec<(VregIdx, NodeId, HashSet<NodeId>)> = Vec::new();
+    let mut redo = false;
+
+    while let Some(node_id) = min(&graph, &node_ids) {
+        let neighbors_count = graph.neighbors(node_id).len();
+        let vreg_idx = match graph.get_node(node_id) {
+            Register::Virtual(idx) => *idx,
+            Register::Physical(_) => unreachable!(),
+        };
+        let node_id = if neighbors_count
+            < allocator
+                .register_info
+                .get_registers_by_class(&allocator.function.vreg_classes[&vreg_idx])
+                .len()
+        {
+            min(&graph, &node_ids)
+        } else {
+            max(&graph, &node_ids)
+        }
+        .unwrap();
+        let neighbors = graph.neighbors(node_id).clone();
+        let pos = node_ids.iter().position(|idx| idx == &node_id).unwrap();
+
+        node_ids.remove(pos);
+        graph.remove_node(node_id);
+        stack.push((vreg_idx, node_id, neighbors));
+    }
+
+    for (vreg_idx, node_id, neighbors) in stack.into_iter().rev() {
+        graph.add_node_with_node_id(Register::Virtual(vreg_idx), node_id);
+
+        for neighbor in neighbors {
+            graph.add_edge(node_id, neighbor);
+        }
+
+        if let Some(r) = allocator.unique_register(&graph, node_id) {
+            allocator.locations.insert(vreg_idx, Location::Register(r));
+        } else {
+            if allocator.spill_mode {
+                let idx = allocator.function.next_stack_frame_idx;
+                allocator.function.next_stack_frame_idx += 1;
+
+                allocator.locations.insert(vreg_idx, Location::Spill(idx));
+            } else {
+                allocator.spill_mode = true;
+                redo = true;
+                break;
+            }
+        }
+    }
+
+    if redo {
+        allocator.locations = locations;
+
+        allocate(register_info, allocator.spill_mode, function)
+    } else {
+        allocator.locations
+    }
 }
