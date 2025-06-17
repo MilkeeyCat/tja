@@ -51,6 +51,16 @@ pub enum Operand {
     Immediate(u64),
 }
 
+impl Operand {
+    pub fn get_vreg_idx(&self) -> Option<&VregIdx> {
+        if let Self::Register(Register::Virtual(idx), _) = self {
+            Some(idx)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Instruction {
     pub opcode: Opcode,

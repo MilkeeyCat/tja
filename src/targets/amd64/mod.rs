@@ -1,4 +1,5 @@
 mod abi;
+mod instruction_selector;
 mod opcode;
 pub mod register;
 mod register_class_selector;
@@ -6,6 +7,7 @@ mod register_class_selector;
 use crate::mir;
 use abi::SysVAmd64;
 use derive_more::Display;
+pub use instruction_selector::select_instructions;
 pub use opcode::Opcode;
 pub use register::Register;
 pub use register_class_selector::select_register_class;
