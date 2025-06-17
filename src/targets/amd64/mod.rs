@@ -1,17 +1,37 @@
 mod abi;
 mod instruction_selector;
+mod materialize_copy;
 mod opcode;
 pub mod register;
 mod register_class_selector;
 
-use crate::mir;
+use crate::mir::{self, Operand};
 use abi::SysVAmd64;
 use derive_more::Display;
 pub use instruction_selector::select_instructions;
+pub use materialize_copy::materialize_copy;
 pub use opcode::Opcode;
 pub use register::Register;
 pub use register_class_selector::select_register_class;
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy)]
+enum OperandKind {
+    Register,
+    Memory,
+    Immediate,
+}
+
+impl From<&Operand> for OperandKind {
+    fn from(value: &Operand) -> Self {
+        match value {
+            Operand::Register(_, _) => Self::Register,
+            Operand::Frame(_) => Self::Memory,
+            Operand::Immediate(_) => Self::Immediate,
+            Operand::Global(_) | Operand::Function(_) | Operand::Block(_) => unimplemented!(),
+        }
+    }
+}
 
 // The terms "above" and "below" are associated with the CF flag and refer to
 // the relationship between two unsigned integer values. The terms "greater" and

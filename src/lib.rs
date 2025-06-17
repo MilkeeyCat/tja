@@ -4,7 +4,7 @@ extern crate impl_ops;
 pub mod codegen;
 pub mod hir;
 pub mod lowering;
-mod mir;
+pub mod mir;
 pub mod targets;
 
 use codegen::generate;

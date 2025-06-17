@@ -1,26 +1,9 @@
+use super::OperandKind;
 use crate::{
     hir::ty,
-    mir::{GenericOpcode, Mir, Opcode, Operand},
+    mir::{GenericOpcode, Mir, Opcode},
     targets::Abi,
 };
-
-#[derive(Debug, Clone, Copy)]
-enum OperandKind {
-    Register,
-    Memory,
-    Immediate,
-}
-
-impl From<&Operand> for OperandKind {
-    fn from(value: &Operand) -> Self {
-        match value {
-            Operand::Register(_, _) => Self::Register,
-            Operand::Frame(_) => Self::Memory,
-            Operand::Immediate(_) => Self::Immediate,
-            Operand::Global(_) | Operand::Function(_) | Operand::Block(_) => unimplemented!(),
-        }
-    }
-}
 
 fn get_add_op(dest: OperandKind, src: OperandKind, size: usize) -> Opcode {
     (match (dest, src, size) {
@@ -57,7 +40,7 @@ pub fn select_instructions(mir: &mut Mir, abi: &dyn Abi, ty_storage: &ty::Storag
         for func in &mut module.functions {
             for bb in &mut func.blocks {
                 for instr in &mut bb.instructions {
-                    match unsafe { std::mem::transmute::<_, GenericOpcode>(instr.opcode) } {
+                    match GenericOpcode::from(instr.opcode) {
                         GenericOpcode::Add => {
                             let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
                             let ty = func.vreg_types[vreg_idx];
@@ -68,12 +51,15 @@ pub fn select_instructions(mir: &mut Mir, abi: &dyn Abi, ty_storage: &ty::Storag
                                 (&instr.operands[1]).into(),
                                 size,
                             );
+                            instr.tied_operands = Some((0, 1));
                         }
                         GenericOpcode::Sub => unimplemented!(),
                         GenericOpcode::Mul => unimplemented!(),
                         GenericOpcode::SDiv => unimplemented!(),
                         GenericOpcode::UDiv => unimplemented!(),
                         GenericOpcode::FrameIndex => unimplemented!(),
+                        GenericOpcode::Copy => (), // skip copy instructions at this step
+                        GenericOpcode::Num => unreachable!(),
                     }
                 }
             }

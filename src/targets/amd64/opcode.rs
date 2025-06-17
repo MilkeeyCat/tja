@@ -1,7 +1,7 @@
 use super::Condition;
 use crate::{
     codegen::{FunctionCodeGen, allocator::Location},
-    mir::{Operand, Register},
+    mir::{GenericOpcode, Operand, Register},
 };
 use std::fmt::Write;
 
@@ -185,6 +185,7 @@ macro_rules! opcodes {
     ($($variant: ident = $asm: literal, ($($var: ident = $class: ty),+);)+) => {
         #[repr(usize)]
         pub enum Opcode {
+            _Dummy = GenericOpcode::Num as usize - 1,
             $(
                 $variant,
             )+
@@ -195,6 +196,7 @@ macro_rules! opcodes {
         impl Opcode {
             pub fn write_instruction(&self, codegen: &mut FunctionCodeGen, operands: &[Operand]) -> std::fmt::Result {
                 match self {
+                    Self::_Dummy => unreachable!(),
                     $(
                         Self::$variant => {
                             let mut start = 0;

@@ -1,6 +1,7 @@
 mod function;
 pub mod interference_graph;
 mod opcode;
+pub mod passes;
 
 use crate::hir::{self, FunctionIdx};
 pub use function::Function;
@@ -12,6 +13,8 @@ pub type StackFrameIdx = usize;
 pub type RegisterClass = usize;
 pub type PhysicalRegister = usize;
 pub type BlockIdx = hir::BlockIdx;
+pub type InstructionIdx = hir::InstructionIdx;
+pub type OperandIdx = usize;
 
 #[derive(Debug)]
 pub struct Mir<'hir>(pub Vec<Module<'hir>>);
@@ -27,6 +30,32 @@ pub struct Module<'hir> {
 pub struct BasicBlock<'hir> {
     pub name: &'hir str,
     pub instructions: Vec<Instruction>,
+}
+
+pub struct BasicBlockPatch {
+    new_instructions: Vec<(InstructionIdx, Instruction)>,
+}
+
+impl BasicBlockPatch {
+    pub fn new() -> Self {
+        Self {
+            new_instructions: Vec::new(),
+        }
+    }
+
+    pub fn add_instruction(&mut self, instr_idx: InstructionIdx, instr: Instruction) {
+        self.new_instructions.push((instr_idx, instr));
+    }
+
+    pub fn apply(self, bb: &mut BasicBlock) {
+        let mut new_instructions = self.new_instructions;
+
+        new_instructions.sort_by_key(|(instr_idx, _)| (*instr_idx));
+
+        for (instr_idx, instruction) in new_instructions.into_iter().rev() {
+            bb.instructions.insert(instr_idx, instruction);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -65,9 +94,22 @@ impl Operand {
 pub struct Instruction {
     pub opcode: Opcode,
     pub operands: Vec<Operand>,
+    pub tied_operands: Option<(OperandIdx, OperandIdx)>,
 }
 
 impl Instruction {
+    pub fn new(opcode: Opcode, operands: Vec<Operand>) -> Self {
+        Self {
+            opcode,
+            operands,
+            tied_operands: None,
+        }
+    }
+
+    pub fn is_copy(&self) -> bool {
+        self.opcode == GenericOpcode::Copy as Opcode
+    }
+
     fn defs(&self) -> HashSet<Register> {
         self.operands
             .iter()

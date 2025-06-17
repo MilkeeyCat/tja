@@ -95,19 +95,18 @@ impl<'a, 'hir> FnLowering<'a, 'hir> {
                     BinOp::UDiv => GenericOpcode::UDiv,
                 };
 
-                basic_block.instructions.push(mir::Instruction {
-                    opcode: opcode as Opcode,
-                    operands: vec![def, lhs, rhs],
-                });
+                basic_block
+                    .instructions
+                    .push(mir::Instruction::new(opcode as Opcode, vec![def, lhs, rhs]));
             }
             hir::Instruction::Alloca { ty, out } => {
                 let def = self.create_def(*out);
                 let frame_idx = self.create_frame_idx(*ty);
 
-                basic_block.instructions.push(mir::Instruction {
-                    opcode: GenericOpcode::FrameIndex as Opcode,
-                    operands: vec![def, mir::Operand::Frame(frame_idx)],
-                });
+                basic_block.instructions.push(mir::Instruction::new(
+                    GenericOpcode::FrameIndex as Opcode,
+                    vec![def, mir::Operand::Frame(frame_idx)],
+                ));
             }
             _ => todo!(),
         }

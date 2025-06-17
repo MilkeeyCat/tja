@@ -8,4 +8,15 @@ pub enum GenericOpcode {
     SDiv,
     UDiv,
     FrameIndex,
+    Copy,
+
+    Num,
+}
+
+impl From<usize> for GenericOpcode {
+    fn from(value: usize) -> Self {
+        assert!(value < Self::Num as usize);
+
+        unsafe { std::mem::transmute::<_, Self>(value) }
+    }
 }
