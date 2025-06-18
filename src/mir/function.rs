@@ -1,14 +1,21 @@
 use super::{
-    BasicBlock, Operand, PhysicalRegister, Register, RegisterClass, StackFrameIdx, VregIdx,
+    BasicBlock, Operand, PhysicalRegister, Register, RegisterClass, RegisterRole, StackFrameIdx,
+    VregIdx,
     interference_graph::{InterferenceGraph, NodeId},
 };
 use crate::hir::ty::TyIdx;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Value {
+    Virtual(VregIdx, usize),
+    Physical(PhysicalRegister),
+}
+
 #[derive(Debug)]
 struct DefUseBlock {
-    defs: HashSet<Register>,
-    uses: HashSet<Register>,
+    defs: HashSet<Value>,
+    uses: HashSet<Value>,
     next: HashSet<usize>,
 }
 
@@ -28,14 +35,36 @@ impl Function<'_> {
     fn defs_uses(&self) -> Vec<DefUseBlock> {
         let mut basic_block_to_def_use_block = HashMap::new();
         let mut blocks = Vec::new();
+        let mut vregs_occurences = HashMap::new();
 
         for (i, block) in self.blocks.iter().enumerate() {
             let last_blocks_len = blocks.len();
 
             for instr in &block.instructions {
                 blocks.push(DefUseBlock {
-                    defs: instr.defs(),
-                    uses: instr.uses(),
+                    defs: instr
+                        .defs()
+                        .into_iter()
+                        .map(|r| match r {
+                            Register::Virtual(idx) => {
+                                let def_idx = vregs_occurences
+                                    .entry(idx)
+                                    .and_modify(|def_idx| *def_idx += 1)
+                                    .or_default();
+
+                                Value::Virtual(idx, *def_idx)
+                            }
+                            Register::Physical(r) => Value::Physical(r),
+                        })
+                        .collect(),
+                    uses: instr
+                        .uses()
+                        .into_iter()
+                        .map(|r| match r {
+                            Register::Virtual(idx) => Value::Virtual(idx, vregs_occurences[&idx]),
+                            Register::Physical(r) => Value::Physical(r),
+                        })
+                        .collect(),
                     next: instr.next(),
                 });
             }
@@ -71,7 +100,7 @@ impl Function<'_> {
         blocks
     }
 
-    fn liveness(&self) -> Vec<(HashSet<Register>, HashSet<Register>)> {
+    fn liveness(&self) -> Vec<(HashSet<Value>, HashSet<Value>)> {
         let defs_uses = self.defs_uses();
         let mut liveness: Vec<_> = defs_uses
             .iter()
@@ -115,25 +144,25 @@ impl Function<'_> {
     pub fn interference(&self) -> (InterferenceGraph, Vec<NodeId>) {
         let mut graph = InterferenceGraph::new();
         let liveness = self.liveness();
-        let r_to_node_idx: HashMap<Register, NodeId> = self
-            .registers()
+        let value_to_node_idx: HashMap<Value, NodeId> = self
+            .values()
             .into_iter()
-            .map(|r| (r.clone(), graph.add_node(r)))
+            .map(|value| (value.clone(), graph.add_node(value)))
             .collect();
         let node_ids: Vec<NodeId> = self
-            .registers()
+            .values()
             .into_iter()
-            .filter_map(|r| match r {
-                Register::Virtual(_) => Some(r_to_node_idx[&r]),
-                Register::Physical(_) => None,
+            .filter_map(|value| match value {
+                Value::Virtual(_, _) => Some(value_to_node_idx[&value]),
+                Value::Physical(_) => None,
             })
             .collect();
 
         for (i, block) in self.defs_uses().into_iter().enumerate() {
             for def in block.defs {
                 for out in &liveness[i].1 {
-                    let a = r_to_node_idx[out];
-                    let b = r_to_node_idx[&def];
+                    let a = value_to_node_idx[out];
+                    let b = value_to_node_idx[&def];
 
                     if a != b {
                         graph.add_edge(a, b);
@@ -145,21 +174,38 @@ impl Function<'_> {
         (graph, node_ids)
     }
 
-    pub fn registers(&self) -> Vec<Register> {
-        let mut registers = Vec::new();
+    pub fn values(&self) -> Vec<Value> {
+        let mut values = Vec::new();
+        let mut vregs_occurences = HashMap::new();
 
         for bb in &self.blocks {
             for instr in &bb.instructions {
                 for operand in &instr.operands {
-                    if let Operand::Register(r, _) = operand {
-                        if !registers.contains(r) {
-                            registers.push(r.clone());
+                    if let Operand::Register(r, role) = operand {
+                        let value = match r {
+                            Register::Virtual(idx) => {
+                                let def_idx = vregs_occurences
+                                    .entry(idx)
+                                    .and_modify(|def_idx| {
+                                        if let RegisterRole::Def = role {
+                                            *def_idx += 1
+                                        }
+                                    })
+                                    .or_default();
+
+                                Value::Virtual(*idx, *def_idx)
+                            }
+                            Register::Physical(r) => Value::Physical(*r),
+                        };
+
+                        if !values.contains(&value) {
+                            values.push(value);
                         }
                     }
                 }
             }
         }
 
-        registers
+        values
     }
 }

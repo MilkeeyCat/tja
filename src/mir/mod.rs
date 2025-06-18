@@ -1,4 +1,4 @@
-mod function;
+pub mod function;
 pub mod interference_graph;
 mod opcode;
 pub mod passes;

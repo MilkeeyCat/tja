@@ -1,4 +1,4 @@
-use super::Register;
+use super::function::Value;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
@@ -16,7 +16,7 @@ impl NodeId {
 #[derive(Debug)]
 pub struct InterferenceGraph {
     next_idx: NodeId,
-    nodes: HashMap<NodeId, Register>,
+    nodes: HashMap<NodeId, Value>,
     edges: HashMap<NodeId, HashSet<NodeId>>,
 }
 
@@ -29,7 +29,7 @@ impl InterferenceGraph {
         }
     }
 
-    pub fn add_node(&mut self, node: Register) -> NodeId {
+    pub fn add_node(&mut self, node: Value) -> NodeId {
         let id = self.next_idx.next();
 
         self.nodes.insert(id, node);
@@ -38,7 +38,7 @@ impl InterferenceGraph {
         id
     }
 
-    pub fn add_node_with_node_id(&mut self, node: Register, id: NodeId) {
+    pub fn add_node_with_node_id(&mut self, node: Value, id: NodeId) {
         assert!(self.nodes.insert(id, node).is_none());
         self.edges.insert(id, HashSet::new());
     }
@@ -66,7 +66,7 @@ impl InterferenceGraph {
         &self.edges[&idx]
     }
 
-    pub fn get_node(&self, idx: NodeId) -> &Register {
+    pub fn get_node(&self, idx: NodeId) -> &Value {
         &self.nodes[&idx]
     }
 }

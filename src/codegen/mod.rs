@@ -12,7 +12,6 @@ use crate::{
     },
     targets::{Target, amd64},
 };
-use allocator::allocate;
 use derive_more::Display;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -79,7 +78,7 @@ impl<'a> ModuleCodeGen<'a> {
     }
 
     fn emit_function(&mut self, func: &mut Function) -> Result<(), std::fmt::Error> {
-        let vregs = allocate(self.target.register_info(), false, func);
+        //let vregs = allocate(self.target.register_info(), false, func);
         lower_stack_slots(func);
         let stack_slots = lower_stack_slots(func);
 
@@ -88,7 +87,7 @@ impl<'a> ModuleCodeGen<'a> {
         //TODO: allocate the stack frame
 
         let mut fn_codegen = FunctionCodeGen {
-            vregs,
+            vregs: HashMap::new(),
             stack_slots,
             target: self.target,
             text: &mut self.text,
