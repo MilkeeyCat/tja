@@ -1,5 +1,7 @@
 mod abi;
+mod address_mode;
 mod instruction_selector;
+mod lower_stack_slots;
 mod materialize_copy;
 mod opcode;
 pub mod register;
@@ -9,6 +11,7 @@ use crate::mir::{self, Operand};
 use abi::SysVAmd64;
 use derive_more::Display;
 pub use instruction_selector::select_instructions;
+pub use lower_stack_slots::lower_stack_slots;
 pub use materialize_copy::materialize_copy;
 pub use opcode::Opcode;
 pub use register::Register;
