@@ -14,7 +14,7 @@ pub fn materialize_copy(func: &mut Function, abi: &dyn Abi, ty_storage: &ty::Sto
                 let size = abi.ty_size(ty_storage, ty);
                 let opcode = match (
                     (&instr.operands[0]).into(),
-                    (&instr.operands[0]).into(),
+                    (&instr.operands[1]).into(),
                     size,
                 ) {
                     (OperandKind::Register, OperandKind::Register, 1) => super::Opcode::Mov8rr,

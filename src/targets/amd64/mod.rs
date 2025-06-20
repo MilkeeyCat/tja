@@ -1,19 +1,23 @@
 mod abi;
 mod address_mode;
+mod asm_printer;
 mod instruction_selector;
 mod lower_stack_slots;
 mod materialize_copy;
 mod opcode;
+mod prologue_epilogue_inserter;
 pub mod register;
 mod register_class_selector;
 
 use crate::mir::{self, Operand};
 use abi::SysVAmd64;
+pub use asm_printer::AsmPrinter;
 use derive_more::Display;
 pub use instruction_selector::select_instructions;
 pub use lower_stack_slots::lower_stack_slots;
 pub use materialize_copy::materialize_copy;
 pub use opcode::Opcode;
+pub use prologue_epilogue_inserter::insert_prologue_epilogue;
 pub use register::Register;
 pub use register_class_selector::select_register_class;
 use std::collections::HashMap;

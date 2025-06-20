@@ -1,28 +1,29 @@
-use super::Condition;
+use super::{AsmPrinter, Condition};
 use crate::{
-    codegen::{FunctionCodeGen, allocator::Location},
+    hir::Global,
     mir::{GenericOpcode, Operand, Register},
 };
 use std::fmt::Write;
 
-fn register(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+fn register<W: Write>(
+    printer: &AsmPrinter<W>,
+    operands: &[Operand],
+) -> Result<String, std::fmt::Error> {
     match operands {
         [Operand::Register(register, _)] => match register {
-            Register::Virtual(idx) => match codegen.vregs[idx] {
-                Location::Register(r) => {
-                    Ok(codegen.target.register_info().get_name(&r).to_string())
-                }
-                Location::Spill(_) => unreachable!(),
-            },
-            Register::Physical(r) => Ok(codegen.target.register_info().get_name(r).to_string()),
+            Register::Virtual(_) => unreachable!(),
+            Register::Physical(r) => Ok(printer.target.register_info().get_name(r).to_string()),
         },
-        _ => unreachable!(),
+        a => unreachable!("{a:?}"),
     }
 }
 
-fn memory(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+fn memory<W: Write>(
+    printer: &AsmPrinter<W>,
+    globals: &[Global],
+    operands: &[Operand],
+) -> Result<String, std::fmt::Error> {
     match operands {
-        [Operand::Frame(idx)] => memory(&codegen, &codegen.stack_slots[idx]),
         [
             base,
             index,
@@ -32,41 +33,17 @@ fn memory(codegen: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std
             let mut result = String::from("[");
 
             match base {
-                Operand::Register(register, _) => match register {
-                    Register::Virtual(idx) => match codegen.vregs[idx] {
-                        Location::Register(r) => write!(
-                            &mut result,
-                            "{}",
-                            codegen.target.register_info().get_name(&r)
-                        )?,
-                        Location::Spill(_) => unreachable!(),
-                    },
-                    Register::Physical(r) => {
-                        result.push_str(codegen.target.register_info().get_name(r));
-                    }
-                },
-                Operand::Global(idx) => write!(&mut result, "{}", codegen.globals[*idx].name)?,
+                Operand::Register(_, _) => {
+                    write!(&mut result, "{}", register(printer, &[base.clone()])?)?
+                }
+                Operand::Global(idx) => write!(&mut result, "{}", globals[*idx].name)?,
                 _ => unreachable!(),
             };
 
             match index {
-                Operand::Register(register, _) => match register {
-                    Register::Virtual(idx) => match codegen.vregs[idx] {
-                        Location::Register(r) => write!(
-                            &mut result,
-                            " + {}",
-                            codegen.target.register_info().get_name(&r)
-                        )?,
-                        Location::Spill(_) => unreachable!(),
-                    },
-                    Register::Physical(r) => {
-                        write!(
-                            &mut result,
-                            " + {}",
-                            codegen.target.register_info().get_name(r)
-                        )?;
-                    }
-                },
+                Operand::Register(_, _) => {
+                    write!(&mut result, "+ {}", register(printer, &[index.clone()])?)?
+                }
                 _ => unreachable!(),
             };
 
@@ -99,11 +76,12 @@ struct r8;
 impl r8 {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands(
-        codegen: &FunctionCodeGen,
+    fn from_operands<W: Write>(
+        printer: &AsmPrinter<W>,
+        _globals: &[Global],
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
-        register(codegen, operands)
+        register(printer, operands)
     }
 }
 
@@ -124,11 +102,16 @@ macro_rules! mem_operand {
         impl $name {
             const MIR_LENGTH: usize = 4;
 
-            fn from_operands(
-                codegen: &FunctionCodeGen,
+            fn from_operands<W: Write>(
+                printer: &AsmPrinter<W>,
+                globals: &[Global],
                 operands: &[Operand],
             ) -> Result<String, std::fmt::Error> {
-                Ok(format!("{} ptr {}", $prefix, memory(codegen, operands)?))
+                Ok(format!(
+                    "{} ptr {}",
+                    $prefix,
+                    memory(printer, globals, operands)?
+                ))
             }
         }
     };
@@ -145,7 +128,11 @@ struct ccode;
 impl ccode {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands(_: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+    fn from_operands<W: Write>(
+        _printer: &AsmPrinter<W>,
+        _globals: &[Global],
+        operands: &[Operand],
+    ) -> Result<String, std::fmt::Error> {
         match operands {
             [Operand::Immediate(value)] => Ok(Condition::from(*value as usize).to_string()),
             _ => unreachable!(),
@@ -159,7 +146,11 @@ struct imm;
 impl imm {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands(_: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+    fn from_operands<W: Write>(
+        _printer: &AsmPrinter<W>,
+        _globals: &[Global],
+        operands: &[Operand],
+    ) -> Result<String, std::fmt::Error> {
         match operands {
             [Operand::Immediate(value)] => Ok(value.to_string()),
             _ => unreachable!(),
@@ -173,7 +164,11 @@ struct label;
 impl label {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands(_: &FunctionCodeGen, operands: &[Operand]) -> Result<String, std::fmt::Error> {
+    fn from_operands<W: Write>(
+        _printer: &AsmPrinter<W>,
+        _globals: &[Global],
+        operands: &[Operand],
+    ) -> Result<String, std::fmt::Error> {
         match operands {
             [Operand::Block(idx)] => Ok(format!(".L{idx}")),
             _ => unreachable!(),
@@ -182,7 +177,7 @@ impl label {
 }
 
 macro_rules! opcodes {
-    ($($variant: ident = $asm: literal, ($($var: ident = $class: ty),+);)+) => {
+    ($($variant: ident = $asm: literal, ($($var: ident = $class: ty),*);)+) => {
         #[repr(usize)]
         pub enum Opcode {
             _Dummy = GenericOpcode::Num as usize - 1,
@@ -194,21 +189,23 @@ macro_rules! opcodes {
         }
 
         impl Opcode {
-            pub fn write_instruction(&self, codegen: &mut FunctionCodeGen, operands: &[Operand]) -> std::fmt::Result {
+            pub fn write_instruction<W: Write>(&self, printer: &mut AsmPrinter<W>, globals: &[Global], operands: &[Operand]) -> std::fmt::Result {
                 match self {
                     Self::_Dummy => unreachable!(),
                     $(
                         Self::$variant => {
+                            #[allow(unused_mut)]
+                            #[allow(unused_variables)]
                             let mut start = 0;
                             $(
-                                let $var = <$class>::from_operands(codegen, &operands[start..start+<$class>::MIR_LENGTH])?;
+                                let $var = <$class>::from_operands(printer, globals, &operands[start..start+<$class>::MIR_LENGTH])?;
                                 #[allow(unused_assignments)]
                                 {
                                     start += <$class>::MIR_LENGTH;
                                 }
-                            )+
+                            )*
 
-                            write!(codegen.text, $asm)
+                            write!(printer.buf, $asm)
                         }
                     )+,
 
@@ -276,6 +273,30 @@ opcodes! {
     Add64mi = "add {dest}, {src}", (dest = m64, src = imm);
     Add64ri = "add {dest}, {src}", (dest = r64, src = imm);
 
+    Sub8rr = "sub {dest}, {src}", (dest = r8, src = r8);
+    Sub8rm = "sub {dest}, {src}", (dest = r8, src = m8);
+    Sub8mr = "sub {dest}, {src}", (dest = m8, src = r8);
+    Sub8mi = "sub {dest}, {src}", (dest = m8, src = imm);
+    Sub8ri = "sub {dest}, {src}", (dest = r8, src = imm);
+
+    Sub16rr = "sub {dest}, {src}", (dest = r16, src = r16);
+    Sub16rm = "sub {dest}, {src}", (dest = r16, src = m16);
+    Sub16mr = "sub {dest}, {src}", (dest = m16, src = r16);
+    Sub16mi = "sub {dest}, {src}", (dest = m16, src = imm);
+    Sub16ri = "sub {dest}, {src}", (dest = r16, src = imm);
+
+    Sub32rr = "sub {dest}, {src}", (dest = r32, src = r32);
+    Sub32rm = "sub {dest}, {src}", (dest = r32, src = m32);
+    Sub32mr = "sub {dest}, {src}", (dest = m32, src = r32);
+    Sub32mi = "sub {dest}, {src}", (dest = m32, src = imm);
+    Sub32ri = "sub {dest}, {src}", (dest = r32, src = imm);
+
+    Sub64rr = "sub {dest}, {src}", (dest = r64, src = r64);
+    Sub64rm = "sub {dest}, {src}", (dest = r64, src = m64);
+    Sub64mr = "sub {dest}, {src}", (dest = m64, src = r64);
+    Sub64mi = "sub {dest}, {src}", (dest = m64, src = imm);
+    Sub64ri = "sub {dest}, {src}", (dest = r64, src = imm);
+
     Test8ri = "test {lhs}, {rhs}", (lhs = r8, rhs = imm);
     Test8mi = "test {lhs}, {rhs}", (lhs = m8, rhs = imm);
     Test8rr = "test {lhs}, {rhs}", (lhs = r8, rhs = r8);
@@ -296,7 +317,12 @@ opcodes! {
     Test64rr = "test {lhs}, {rhs}", (lhs = r64, rhs = r64);
     Test64mr = "test {lhs}, {rhs}", (lhs = m64, rhs = r64);
 
+    Push64r = "push {src}", (src = r64);
+
     Jmp = "jmp {dest}", (dest = label);
 
     Jcc = "j{cc} {dest}", (dest = label, cc = ccode);
+
+    Leave = "leave", ();
+    Ret = "ret", ();
 }

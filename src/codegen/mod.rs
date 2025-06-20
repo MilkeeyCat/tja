@@ -115,10 +115,10 @@ pub struct FunctionCodeGen<'a> {
 }
 
 impl<'a> FunctionCodeGen<'a> {
-    fn emit_instruction(&mut self, instr: &Instruction) -> Result<(), std::fmt::Error> {
+    fn emit_instruction(&mut self, _instr: &Instruction) -> Result<(), std::fmt::Error> {
         write!(self.text, "\t")?;
 
-        amd64::Opcode::from(instr.opcode).write_instruction(self, &instr.operands)?;
+        //amd64::Opcode::from(instr.opcode).write_instruction(self, &instr.operands)?;
 
         write!(self.text, "\n")
     }
