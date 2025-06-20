@@ -128,7 +128,6 @@ fn lower_fn<'hir>(
             vreg_types: HashMap::new(),
             next_stack_frame_idx: 0,
             stack_slots: HashMap::new(),
-            precolored_vregs: HashMap::new(),
             blocks: Vec::new(),
         },
         local_to_vreg_idx: HashMap::new(),

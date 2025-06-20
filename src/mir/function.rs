@@ -27,7 +27,6 @@ pub struct Function<'hir> {
     pub vreg_types: HashMap<VregIdx, TyIdx>,
     pub next_stack_frame_idx: StackFrameIdx,
     pub stack_slots: HashMap<StackFrameIdx, usize>,
-    pub precolored_vregs: HashMap<VregIdx, PhysicalRegister>,
     pub blocks: Vec<BasicBlock<'hir>>,
 }
 
