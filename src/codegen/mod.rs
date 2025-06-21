@@ -62,14 +62,14 @@ fn lower_stack_slots(func: &Function) -> HashMap<StackFrameIdx, Vec<Operand>> {
     locations
 }
 
-struct ModuleCodeGen<'a> {
-    target: &'a dyn Target,
+struct ModuleCodeGen<'a, T: Target> {
+    target: &'a T,
     globals: &'a [hir::Global],
     text: String,
 }
 
-impl<'a> ModuleCodeGen<'a> {
-    fn new(target: &'a dyn Target, globals: &'a [hir::Global]) -> Self {
+impl<'a, T: Target> ModuleCodeGen<'a, T> {
+    fn new(target: &'a T, globals: &'a [hir::Global]) -> Self {
         Self {
             target,
             globals,
@@ -106,15 +106,15 @@ impl<'a> ModuleCodeGen<'a> {
     }
 }
 
-pub struct FunctionCodeGen<'a> {
+pub struct FunctionCodeGen<'a, T: Target> {
     pub vregs: HashMap<VregIdx, allocator::Location>,
     pub stack_slots: HashMap<StackFrameIdx, Vec<Operand>>,
     pub globals: &'a [hir::Global],
-    pub target: &'a dyn Target,
+    pub target: &'a T,
     pub text: &'a mut String,
 }
 
-impl<'a> FunctionCodeGen<'a> {
+impl<'a, T: Target> FunctionCodeGen<'a, T> {
     fn emit_instruction(&mut self, _instr: &Instruction) -> Result<(), std::fmt::Error> {
         write!(self.text, "\t")?;
 
@@ -124,9 +124,9 @@ impl<'a> FunctionCodeGen<'a> {
     }
 }
 
-pub fn generate(
+pub fn generate<T: Target>(
     module: &mut Module,
-    target: &dyn Target,
+    target: &T,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut codegen = ModuleCodeGen::new(target, module.globals);
 

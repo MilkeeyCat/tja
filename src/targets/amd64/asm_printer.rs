@@ -5,13 +5,13 @@ use crate::{
 };
 use std::fmt::Write;
 
-pub struct AsmPrinter<'a, W: Write> {
-    pub target: &'a dyn Target,
+pub struct AsmPrinter<'a, T: Target, W: Write> {
+    pub target: &'a T,
     pub buf: &'a mut W,
 }
 
-impl<'a, W: Write> AsmPrinter<'a, W> {
-    pub fn new(target: &'a dyn Target, buf: &'a mut W) -> Self {
+impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
+    pub fn new(target: &'a T, buf: &'a mut W) -> Self {
         Self { target, buf }
     }
 

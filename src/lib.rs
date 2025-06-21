@@ -25,9 +25,9 @@ pub struct CompileArgs {
     pub shared: bool,
 }
 
-pub fn compile(
+pub fn compile<T: Target>(
     module: &mut Module,
-    target: &dyn Target,
+    target: &T,
     args: CompileArgs,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let code = generate(module, target)?;

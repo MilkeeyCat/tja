@@ -15,16 +15,16 @@ pub enum Location {
 }
 
 /// A weird looking graph coloring by simplification register allocator
-struct Allocator<'a, 'mir, 'hir> {
-    register_info: &'a dyn RegisterInfo,
+struct Allocator<'a, 'mir, 'hir, RI: RegisterInfo> {
+    register_info: &'a RI,
     locations: HashMap<(VregIdx, usize), Location>,
     spill_mode: bool,
     function: &'mir mut mir::Function<'hir>,
 }
 
-impl<'a, 'mir, 'hir> Allocator<'a, 'mir, 'hir> {
+impl<'a, 'mir, 'hir, RI: RegisterInfo> Allocator<'a, 'mir, 'hir, RI> {
     fn new(
-        register_info: &'a dyn RegisterInfo,
+        register_info: &'a RI,
         spill_mode: bool,
         function: &'mir mut mir::Function<'hir>,
     ) -> Self {
@@ -96,7 +96,11 @@ fn max(graph: &InterferenceGraph, nodes_ids: &[NodeId]) -> Option<NodeId> {
         .cloned()
 }
 
-pub fn allocate(register_info: &dyn RegisterInfo, spill_mode: bool, function: &mut mir::Function) {
+pub fn allocate<RI: RegisterInfo>(
+    register_info: &RI,
+    spill_mode: bool,
+    function: &mut mir::Function,
+) {
     let mut allocator = Allocator::new(register_info, spill_mode, function);
     let locations = allocator.locations.clone();
     let (mut graph, mut node_ids) = allocator.function.interference();

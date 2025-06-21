@@ -35,7 +35,7 @@ fn get_add_op(dest: OperandKind, src: OperandKind, size: usize) -> Opcode {
     }) as Opcode
 }
 
-pub fn select_instructions(mir: &mut Mir, abi: &dyn Abi, ty_storage: &ty::Storage) {
+pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Storage) {
     for module in &mut mir.0 {
         for func in &mut module.functions {
             for bb in &mut func.blocks {

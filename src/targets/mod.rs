@@ -11,8 +11,11 @@ pub trait RegisterInfo {
 }
 
 pub trait Target {
-    fn abi(&self) -> &dyn Abi;
-    fn register_info(&self) -> &dyn RegisterInfo;
+    type Abi: Abi;
+    type RegisterInfo: RegisterInfo;
+
+    fn abi(&self) -> &Self::Abi;
+    fn register_info(&self) -> &Self::RegisterInfo;
 }
 
 pub trait Abi {

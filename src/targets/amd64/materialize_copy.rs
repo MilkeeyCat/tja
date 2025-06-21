@@ -5,7 +5,7 @@ use crate::{
     targets::Abi,
 };
 
-pub fn materialize_copy(func: &mut Function, abi: &dyn Abi, ty_storage: &ty::Storage) {
+pub fn materialize_copy<A: Abi>(func: &mut Function, abi: &A, ty_storage: &ty::Storage) {
     for bb in &mut func.blocks {
         for instr in &mut bb.instructions {
             if instr.is_copy() {

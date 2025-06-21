@@ -2,11 +2,12 @@ use super::{AsmPrinter, Condition};
 use crate::{
     hir::Global,
     mir::{GenericOpcode, Operand, Register},
+    targets::{RegisterInfo, Target},
 };
 use std::fmt::Write;
 
-fn register<W: Write>(
-    printer: &AsmPrinter<W>,
+fn register<T: Target, W: Write>(
+    printer: &AsmPrinter<T, W>,
     operands: &[Operand],
 ) -> Result<String, std::fmt::Error> {
     match operands {
@@ -18,8 +19,8 @@ fn register<W: Write>(
     }
 }
 
-fn memory<W: Write>(
-    printer: &AsmPrinter<W>,
+fn memory<T: Target, W: Write>(
+    printer: &AsmPrinter<T, W>,
     globals: &[Global],
     operands: &[Operand],
 ) -> Result<String, std::fmt::Error> {
@@ -76,8 +77,8 @@ struct r8;
 impl r8 {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands<W: Write>(
-        printer: &AsmPrinter<W>,
+    fn from_operands<T: Target, W: Write>(
+        printer: &AsmPrinter<T, W>,
         _globals: &[Global],
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
@@ -102,8 +103,8 @@ macro_rules! mem_operand {
         impl $name {
             const MIR_LENGTH: usize = 4;
 
-            fn from_operands<W: Write>(
-                printer: &AsmPrinter<W>,
+            fn from_operands<T: Target, W: Write>(
+                printer: &AsmPrinter<T, W>,
                 globals: &[Global],
                 operands: &[Operand],
             ) -> Result<String, std::fmt::Error> {
@@ -128,8 +129,8 @@ struct ccode;
 impl ccode {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands<W: Write>(
-        _printer: &AsmPrinter<W>,
+    fn from_operands<T: Target, W: Write>(
+        _printer: &AsmPrinter<T, W>,
         _globals: &[Global],
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
@@ -146,8 +147,8 @@ struct imm;
 impl imm {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands<W: Write>(
-        _printer: &AsmPrinter<W>,
+    fn from_operands<T: Target, W: Write>(
+        _printer: &AsmPrinter<T, W>,
         _globals: &[Global],
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
@@ -164,8 +165,8 @@ struct label;
 impl label {
     const MIR_LENGTH: usize = 1;
 
-    fn from_operands<W: Write>(
-        _printer: &AsmPrinter<W>,
+    fn from_operands<T: Target, W: Write>(
+        _printer: &AsmPrinter<T, W>,
         _globals: &[Global],
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
@@ -189,7 +190,7 @@ macro_rules! opcodes {
         }
 
         impl Opcode {
-            pub fn write_instruction<W: Write>(&self, printer: &mut AsmPrinter<W>, globals: &[Global], operands: &[Operand]) -> std::fmt::Result {
+            pub fn write_instruction<T: Target, W: Write>(&self, printer: &mut AsmPrinter<T, W>, globals: &[Global], operands: &[Operand]) -> std::fmt::Result {
                 match self {
                     Self::_Dummy => unreachable!(),
                     $(

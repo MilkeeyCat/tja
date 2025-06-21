@@ -88,7 +88,7 @@ pub enum RegisterClass {
     Gpr8,
 }
 
-struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::PhysicalRegister>>);
+pub struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::PhysicalRegister>>);
 
 impl RegisterInfo {
     fn new() -> Self {
@@ -204,11 +204,14 @@ impl Target {
 }
 
 impl super::Target for Target {
-    fn register_info(&self) -> &dyn super::RegisterInfo {
+    type RegisterInfo = RegisterInfo;
+    type Abi = SysVAmd64;
+
+    fn register_info(&self) -> &Self::RegisterInfo {
         &self.register_info
     }
 
-    fn abi(&self) -> &dyn super::Abi {
+    fn abi(&self) -> &Self::Abi {
         &self.abi
     }
 }

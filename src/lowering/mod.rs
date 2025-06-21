@@ -9,10 +9,10 @@ use crate::{
 };
 use std::collections::HashMap;
 
-fn lower_module<'hir>(
+fn lower_module<'hir, A: Abi>(
     module: &'hir hir::Module,
     ty_storage: &ty::Storage,
-    abi: &dyn Abi,
+    abi: &A,
 ) -> mir::Module<'hir> {
     mir::Module {
         name: &module.name,
@@ -25,15 +25,15 @@ fn lower_module<'hir>(
     }
 }
 
-struct FnLowering<'a, 'hir> {
+struct FnLowering<'a, 'hir, A: Abi> {
     ty_storage: &'a ty::Storage,
     hir_function: &'a hir::Function,
     mir_function: mir::Function<'hir>,
     local_to_vreg_idx: HashMap<hir::LocalIdx, mir::VregIdx>,
-    abi: &'a dyn Abi,
+    abi: &'a A,
 }
 
-impl<'a, 'hir> FnLowering<'a, 'hir> {
+impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
     fn lower_operand(&self, operand: &hir::Operand) -> mir::Operand {
         match operand {
             hir::Operand::Local(idx) => mir::Operand::Register(
@@ -113,10 +113,10 @@ impl<'a, 'hir> FnLowering<'a, 'hir> {
     }
 }
 
-fn lower_fn<'hir>(
+fn lower_fn<'hir, A: Abi>(
     func: &'hir hir::Function,
     ty_storage: &ty::Storage,
-    abi: &dyn Abi,
+    abi: &A,
 ) -> mir::Function<'hir> {
     let mut lowering = FnLowering {
         ty_storage,
@@ -151,7 +151,7 @@ fn lower_fn<'hir>(
 }
 
 /// Lowers hir into generic mir
-pub fn lower<'hir>(hir: &'hir Hir, abi: &dyn Abi) -> Mir<'hir> {
+pub fn lower<'hir, A: Abi>(hir: &'hir Hir, abi: &A) -> Mir<'hir> {
     Mir(hir
         .modules
         .iter()
