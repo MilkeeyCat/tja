@@ -246,6 +246,87 @@ impl Register {
         }
     }
 
+    pub fn size(&self) -> usize {
+        match self {
+            Self::Rax => 8,
+            Self::Eax => 4,
+            Self::Ax => 2,
+            Self::Ah | Self::Al => 1,
+
+            Self::Rbp => 8,
+            Self::Ebp => 4,
+            Self::Bpl => 2,
+            Self::Bp => 1,
+
+            Self::Rcx => 8,
+            Self::Ecx => 4,
+            Self::Cx => 2,
+            Self::Cl => 1,
+
+            Self::Rdx => 8,
+            Self::Edx => 4,
+            Self::Dx => 2,
+            Self::Dl => 1,
+
+            Self::Rsi => 8,
+            Self::Esi => 4,
+            Self::Si => 2,
+            Self::Sil => 1,
+
+            Self::Rdi => 8,
+            Self::Edi => 4,
+            Self::Di => 2,
+            Self::Dil => 1,
+
+            Self::Rsp => 8,
+            Self::Esp => 4,
+            Self::Sp => 2,
+            Self::Spl => 1,
+
+            Self::R15 => 8,
+            Self::R15d => 4,
+            Self::R15w => 2,
+            Self::R15b => 1,
+
+            Self::R14 => 8,
+            Self::R14d => 4,
+            Self::R14w => 2,
+            Self::R14b => 1,
+
+            Self::R13 => 8,
+            Self::R13d => 4,
+            Self::R13w => 2,
+            Self::R13b => 1,
+
+            Self::R12 => 8,
+            Self::R12d => 4,
+            Self::R12w => 2,
+            Self::R12b => 1,
+
+            Self::R11 => 8,
+            Self::R11d => 4,
+            Self::R11w => 2,
+            Self::R11b => 1,
+
+            Self::R10 => 8,
+            Self::R10d => 4,
+            Self::R10w => 2,
+            Self::R10b => 1,
+
+            Self::R9 => 8,
+            Self::R9d => 4,
+            Self::R9w => 2,
+            Self::R9b => 1,
+
+            Self::R8 => 8,
+            Self::R8d => 4,
+            Self::R8w => 2,
+            Self::R8b => 1,
+
+            Self::Num => unreachable!(),
+        }
+    }
+
     pub fn contains(&self, r: Register) -> bool {
         self.subregs()
             .iter()

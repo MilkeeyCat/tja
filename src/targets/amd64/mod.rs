@@ -187,6 +187,12 @@ impl super::RegisterInfo for RegisterInfo {
 
         r.name()
     }
+
+    fn get_register_size(&self, r: &mir::PhysicalRegister) -> usize {
+        let r: Register = (*r).into();
+
+        r.size()
+    }
 }
 
 pub struct Target {

@@ -8,6 +8,7 @@ pub trait RegisterInfo {
     fn get_registers_by_class(&self, class: &RegisterClass) -> &[PhysicalRegister];
     fn overlaps(&self, a: &PhysicalRegister, b: &PhysicalRegister) -> bool;
     fn get_name(&self, r: &PhysicalRegister) -> &'static str;
+    fn get_register_size(&self, r: &PhysicalRegister) -> usize;
 }
 
 pub trait Target {
