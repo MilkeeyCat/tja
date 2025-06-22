@@ -242,6 +242,27 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
             _ => todo!(),
         }
     }
+
+    fn lower_terminator(&mut self, terminator: &hir::Terminator) {
+        match terminator {
+            hir::Terminator::Return(_value) => unimplemented!(),
+            hir::Terminator::Br(branch) => match branch {
+                hir::Branch::Conditional {
+                    condition: _,
+                    iftrue: _,
+                    iffalse: _,
+                } => unimplemented!(),
+                hir::Branch::Unconditional { block_idx } => {
+                    self.get_basic_block()
+                        .instructions
+                        .push(mir::Instruction::new(
+                            GenericOpcode::Br as Opcode,
+                            vec![mir::Operand::Block(*block_idx)],
+                        ));
+                }
+            },
+        }
+    }
 }
 
 impl<A: Abi> LocalStorage for FnLowering<'_, '_, A> {
@@ -283,6 +304,8 @@ fn lower_fn<'hir, A: Abi>(
         for instr in &bb.instructions {
             lowering.lower_instruction(instr);
         }
+
+        lowering.lower_terminator(&bb.terminator);
     }
 
     lowering.mir_function

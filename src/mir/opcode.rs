@@ -11,6 +11,7 @@ pub enum GenericOpcode {
     PtrAdd,
     Load,
     Store,
+    Br,
     Copy,
 
     Num,

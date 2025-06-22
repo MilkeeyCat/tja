@@ -145,7 +145,11 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                             instr.operands.remove(1);
                             address_mode.write(&mut instr.operands, 0);
                         }
+                        GenericOpcode::Br => {
+                            instr.opcode = super::Opcode::Jmp as Opcode;
+                        }
                         GenericOpcode::Copy => (), // skip copy instructions at this step
+
                         GenericOpcode::Num => unreachable!(),
                     }
                 }
