@@ -27,7 +27,9 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         write!(self.buf, ".global {}\n", func.name)?;
         write!(self.buf, "{}:\n", func.name)?;
 
-        for bb in &func.blocks {
+        for (idx, bb) in func.blocks.iter().enumerate() {
+            write!(self.buf, ".L{idx}\n")?;
+
             for instr in &bb.instructions {
                 write!(self.buf, "\t")?;
 
