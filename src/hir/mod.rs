@@ -36,7 +36,7 @@ impl Const {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
     Local(LocalIdx),
     Const(Const, TyIdx),

@@ -1,8 +1,11 @@
 use super::OperandKind;
 use crate::{
     hir::ty,
-    mir::{GenericOpcode, Mir, Opcode},
-    targets::Abi,
+    mir::{GenericOpcode, Mir, Opcode, Operand},
+    targets::{
+        Abi,
+        amd64::address_mode::{AddressMode, Base},
+    },
 };
 
 fn get_add_op(dest: OperandKind, src: OperandKind, size: usize) -> Opcode {
@@ -57,7 +60,91 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                         GenericOpcode::Mul => unimplemented!(),
                         GenericOpcode::SDiv => unimplemented!(),
                         GenericOpcode::UDiv => unimplemented!(),
-                        GenericOpcode::FrameIndex => unimplemented!(),
+                        GenericOpcode::FrameIndex => {
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
+                                    Operand::Frame(idx) => Base::Frame(*idx),
+                                    _ => unreachable!(),
+                                },
+                                index: None,
+                                scale: None,
+                                displacement: None,
+                            };
+
+                            instr.opcode = super::Opcode::Lea64 as Opcode;
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 1);
+                        }
+                        GenericOpcode::PtrAdd => {
+                            let displacement = match &instr.operands[2] {
+                                Operand::Immediate(value) => *value,
+                                _ => unreachable!(),
+                            };
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
+                                    Operand::Register(r, _) => Base::Register(r.clone()),
+                                    _ => unreachable!(),
+                                },
+                                index: None,
+                                scale: None,
+                                displacement: Some(displacement as isize),
+                            };
+
+                            instr.opcode = super::Opcode::Lea64 as Opcode;
+                            instr.operands.remove(2);
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 1);
+                        }
+                        GenericOpcode::Load => {
+                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                            let ty = func.vreg_types[vreg_idx];
+                            let size = abi.ty_size(ty_storage, ty);
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
+                                    Operand::Register(r, _) => Base::Register(r.clone()),
+                                    _ => unreachable!(),
+                                },
+                                index: None,
+                                scale: None,
+                                displacement: None,
+                            };
+                            let opcode = match size {
+                                1 => super::Opcode::Mov8rm,
+                                2 => super::Opcode::Mov16rm,
+                                4 => super::Opcode::Mov32rm,
+                                8 => super::Opcode::Mov64rm,
+                                _ => unreachable!(),
+                            };
+
+                            instr.opcode = opcode as Opcode;
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 1);
+                        }
+                        GenericOpcode::Store => {
+                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                            let ty = func.vreg_types[vreg_idx];
+                            let size = abi.ty_size(ty_storage, ty);
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
+                                    Operand::Register(r, _) => Base::Register(r.clone()),
+                                    _ => unreachable!(),
+                                },
+                                index: None,
+                                scale: None,
+                                displacement: None,
+                            };
+                            let opcode = match size {
+                                1 => super::Opcode::Mov8mr,
+                                2 => super::Opcode::Mov16mr,
+                                4 => super::Opcode::Mov32mr,
+                                8 => super::Opcode::Mov64mr,
+                                _ => unreachable!(),
+                            };
+
+                            instr.opcode = opcode as Opcode;
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 0);
+                        }
                         GenericOpcode::Copy => (), // skip copy instructions at this step
                         GenericOpcode::Num => unreachable!(),
                     }

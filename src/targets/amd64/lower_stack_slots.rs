@@ -1,5 +1,5 @@
 use super::address_mode::{AddressMode, Base};
-use crate::mir::{Function, Operand, PhysicalRegister};
+use crate::mir::{Function, Operand, PhysicalRegister, Register};
 use std::collections::HashMap;
 
 pub fn lower_stack_slots(func: &mut Function) {
@@ -18,7 +18,9 @@ pub fn lower_stack_slots(func: &mut Function) {
                             locations
                                 .entry(*idx)
                                 .or_insert(AddressMode {
-                                    base: Base::Register(super::Register::Rbp as PhysicalRegister),
+                                    base: Base::Register(Register::Physical(
+                                        super::Register::Rbp as PhysicalRegister,
+                                    )),
                                     index: None,
                                     scale: None,
                                     displacement: Some(-stack_offset),

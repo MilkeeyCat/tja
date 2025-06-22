@@ -1,9 +1,9 @@
-use crate::mir::{Operand, PhysicalRegister, Register, RegisterRole};
+use crate::mir::{Operand, PhysicalRegister, Register, RegisterRole, StackFrameIdx};
 
 #[derive(Clone, Debug)]
 pub enum Base {
-    Register(PhysicalRegister),
-    Label(String),
+    Register(Register),
+    Frame(StackFrameIdx),
 }
 
 #[derive(Clone, Debug)]
@@ -16,13 +16,12 @@ pub struct AddressMode {
 
 impl AddressMode {
     pub fn write(self, operands: &mut Vec<Operand>, idx: usize) {
-        match self.base {
-            Base::Register(r) => operands.insert(
-                idx,
-                Operand::Register(Register::Physical(r), RegisterRole::Use),
-            ),
-            Base::Label(_) => unimplemented!(),
-        }
+        let base = match self.base {
+            Base::Register(r) => Operand::Register(r, RegisterRole::Use),
+            Base::Frame(stack_frame_idx) => Operand::Frame(stack_frame_idx),
+        };
+
+        operands.insert(idx, base);
 
         match self.index {
             Some(r) => operands.insert(

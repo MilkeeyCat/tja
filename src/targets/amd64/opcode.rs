@@ -45,6 +45,7 @@ fn memory<T: Target, W: Write>(
                 Operand::Register(_, _) => {
                     write!(&mut result, "+ {}", register(printer, &[index.clone()])?)?
                 }
+                Operand::Immediate(0) => (),
                 _ => unreachable!(),
             };
 
@@ -60,7 +61,7 @@ fn memory<T: Target, W: Write>(
                     write!(&mut result, "-")?;
                 }
 
-                write!(&mut result, "{displacement}")?;
+                write!(&mut result, "{}", displacement.abs())?;
             }
 
             write!(&mut result, "]")?;
@@ -217,7 +218,7 @@ macro_rules! opcodes {
 
         impl From<usize> for Opcode {
             fn from(value: usize) -> Self {
-                assert!(value < Self::Num as usize);
+                assert!(value >= GenericOpcode::Num as usize && value < Self::Num as usize);
 
                 unsafe { std::mem::transmute::<_, Self>(value) }
             }
@@ -317,6 +318,8 @@ opcodes! {
     Test64mi = "test {lhs}, {rhs}", (lhs = m64, rhs = imm);
     Test64rr = "test {lhs}, {rhs}", (lhs = r64, rhs = r64);
     Test64mr = "test {lhs}, {rhs}", (lhs = m64, rhs = r64);
+
+    Lea64 = "lea {lhs}, {rhs}", (lhs = r64, rhs = m64);
 
     Push64r = "push {src}", (src = r64);
 

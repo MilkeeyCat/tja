@@ -8,6 +8,9 @@ pub enum GenericOpcode {
     SDiv,
     UDiv,
     FrameIndex,
+    PtrAdd,
+    Load,
+    Store,
     Copy,
 
     Num,

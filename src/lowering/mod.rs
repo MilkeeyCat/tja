@@ -1,10 +1,10 @@
 use crate::{
     hir::{
-        self, Hir,
+        self, Const, Hir, LocalStorage,
         op::BinOp,
-        ty::{self, TyIdx},
+        ty::{self, Ty, TyIdx},
     },
-    mir::{self, GenericOpcode, Mir, Opcode, Register, RegisterRole},
+    mir::{self, BlockIdx, GenericOpcode, Mir, Opcode, Register, RegisterRole},
     targets::Abi,
 };
 use std::collections::HashMap;
@@ -29,36 +29,103 @@ struct FnLowering<'a, 'hir, A: Abi> {
     ty_storage: &'a ty::Storage,
     hir_function: &'a hir::Function,
     mir_function: mir::Function<'hir>,
-    local_to_vreg_idx: HashMap<hir::LocalIdx, mir::VregIdx>,
+    operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
+    ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
     abi: &'a A,
+    current_bb_idx: BlockIdx,
 }
 
 impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
-    fn lower_operand(&self, operand: &hir::Operand) -> mir::Operand {
-        match operand {
-            hir::Operand::Local(idx) => mir::Operand::Register(
-                Register::Virtual(self.local_to_vreg_idx[idx]),
-                RegisterRole::Use,
-            ),
-            hir::Operand::Const(c, _) => match c {
-                hir::Const::Global(idx) => mir::Operand::Global(*idx),
-                hir::Const::Function(idx) => mir::Operand::Function(*idx),
-                hir::Const::Int(value) => mir::Operand::Immediate(*value),
-                hir::Const::Aggregate(_) => unimplemented!(),
-            },
-        }
-    }
-
-    fn create_def(&mut self, idx: hir::LocalIdx) -> mir::Operand {
+    fn create_vreg(&mut self, ty: TyIdx) -> mir::VregIdx {
         let vreg_idx = self.mir_function.next_vreg_idx;
 
         self.mir_function.next_vreg_idx += 1;
-        self.mir_function
-            .vreg_types
-            .insert(vreg_idx, self.hir_function.locals[idx]);
-        self.local_to_vreg_idx.insert(idx, vreg_idx);
+        self.mir_function.vreg_types.insert(vreg_idx, ty);
 
-        mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def)
+        vreg_idx
+    }
+
+    fn get_or_create_vregs(&mut self, operand: hir::Operand) -> &[mir::VregIdx] {
+        if self.operand_to_vreg_indices.contains_key(&operand) {
+            return &self.operand_to_vreg_indices[&operand];
+        }
+
+        let ty = match operand {
+            hir::Operand::Local(idx) => self.hir_function.locals[idx],
+            hir::Operand::Const(_, ty) => ty,
+        };
+
+        let mut vreg_indices: Vec<mir::VregIdx> = Vec::new();
+        let mut types = Vec::new();
+        let mut offsets = Vec::new();
+
+        self.lower_ty(ty, &mut types, &mut offsets, 0);
+
+        match &operand {
+            hir::Operand::Local(_) => {
+                for ty in types {
+                    vreg_indices.push(self.create_vreg(ty));
+                }
+            }
+            hir::Operand::Const(c, ty) => match c {
+                Const::Global(_global_idx) => unimplemented!(),
+                Const::Function(_fn_idx) => unimplemented!(),
+                Const::Int(value) => {
+                    let vreg_idx = self.create_vreg(*ty);
+                    let bb = &mut self.mir_function.blocks[self.current_bb_idx];
+
+                    bb.instructions.push(mir::Instruction::new(
+                        mir::GenericOpcode::Copy as mir::Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def),
+                            mir::Operand::Immediate(*value),
+                        ],
+                    ));
+                    vreg_indices.push(vreg_idx);
+                }
+                Const::Aggregate(consts) => {
+                    let tys = match self.ty_storage.get_ty(*ty) {
+                        Ty::Struct(tys) => tys,
+                        _ => unreachable!(),
+                    };
+
+                    assert_eq!(consts.len(), tys.len());
+
+                    for (c, ty) in consts.iter().zip(tys) {
+                        let tmp = self.get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
+
+                        vreg_indices.extend_from_slice(tmp);
+                    }
+                }
+            },
+        }
+
+        self.ty_to_offsets.entry(ty).or_insert(offsets);
+        self.operand_to_vreg_indices
+            .entry(operand)
+            .or_insert(vreg_indices)
+    }
+
+    fn get_or_create_vreg(&mut self, operand: hir::Operand) -> mir::VregIdx {
+        match self.get_or_create_vregs(operand) {
+            [idx] => *idx,
+            _ => unreachable!(),
+        }
+    }
+
+    fn lower_ty(&self, ty: TyIdx, types: &mut Vec<TyIdx>, offsets: &mut Vec<usize>, offset: usize) {
+        match self.ty_storage.get_ty(ty) {
+            Ty::Struct(tys) => {
+                for (i, &ty) in tys.iter().enumerate() {
+                    let field_offset = self.abi.field_offset(self.ty_storage, &tys, i);
+                    self.lower_ty(ty, types, offsets, offset + field_offset);
+                }
+            }
+            _ => {
+                types.push(ty);
+                offsets.push(offset);
+            }
+        }
     }
 
     fn create_frame_idx(&mut self, ty: TyIdx) -> mir::StackFrameIdx {
@@ -72,11 +139,11 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
         idx
     }
 
-    fn lower_instruction(
-        &mut self,
-        basic_block: &mut mir::BasicBlock<'hir>,
-        instruction: &hir::Instruction,
-    ) {
+    fn get_basic_block(&mut self) -> &mut mir::BasicBlock<'hir> {
+        &mut self.mir_function.blocks[self.current_bb_idx]
+    }
+
+    fn lower_instruction(&mut self, instruction: &hir::Instruction) {
         match instruction {
             hir::Instruction::Binary {
                 kind,
@@ -84,9 +151,9 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                 rhs,
                 out,
             } => {
-                let def = self.create_def(*out);
-                let lhs = self.lower_operand(lhs);
-                let rhs = self.lower_operand(rhs);
+                let def = self.get_or_create_vreg(hir::Operand::Local(*out));
+                let lhs = self.get_or_create_vreg(lhs.clone());
+                let rhs = self.get_or_create_vreg(rhs.clone());
                 let opcode = match kind {
                     BinOp::Add => GenericOpcode::Add,
                     BinOp::Sub => GenericOpcode::Sub,
@@ -95,21 +162,91 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                     BinOp::UDiv => GenericOpcode::UDiv,
                 };
 
-                basic_block
+                self.get_basic_block()
                     .instructions
-                    .push(mir::Instruction::new(opcode as Opcode, vec![def, lhs, rhs]));
+                    .push(mir::Instruction::new(
+                        opcode as Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(def), RegisterRole::Def),
+                            mir::Operand::Register(Register::Virtual(lhs), RegisterRole::Use),
+                            mir::Operand::Register(Register::Virtual(rhs), RegisterRole::Use),
+                        ],
+                    ));
             }
             hir::Instruction::Alloca { ty, out } => {
-                let def = self.create_def(*out);
+                let def = self.get_or_create_vreg(hir::Operand::Local(*out));
                 let frame_idx = self.create_frame_idx(*ty);
 
-                basic_block.instructions.push(mir::Instruction::new(
-                    GenericOpcode::FrameIndex as Opcode,
-                    vec![def, mir::Operand::Frame(frame_idx)],
-                ));
+                self.get_basic_block()
+                    .instructions
+                    .push(mir::Instruction::new(
+                        GenericOpcode::FrameIndex as Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(def), RegisterRole::Def),
+                            mir::Operand::Frame(frame_idx),
+                        ],
+                    ));
+            }
+            hir::Instruction::Store { ptr, value } => {
+                let base = self.get_or_create_vreg(ptr.clone());
+                let vregs = self.get_or_create_vregs(value.clone()).to_vec();
+                let offsets = self.ty_to_offsets[&value.ty(self)].to_vec();
+
+                for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
+                    let ptr_add = self.create_vreg(self.ty_storage.ptr_ty);
+                    let bb = self.get_basic_block();
+
+                    bb.instructions.push(mir::Instruction::new(
+                        GenericOpcode::PtrAdd as Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Def),
+                            mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
+                            mir::Operand::Immediate(offset as u64),
+                        ],
+                    ));
+                    bb.instructions.push(mir::Instruction::new(
+                        GenericOpcode::Store as Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Use),
+                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Use),
+                        ],
+                    ));
+                }
+            }
+            hir::Instruction::Load { ptr, out } => {
+                let base = self.get_or_create_vreg(ptr.clone());
+                let vregs = self.get_or_create_vregs(hir::Operand::Local(*out)).to_vec();
+                let offsets = self.ty_to_offsets[&self.hir_function.locals[*out]].to_vec();
+
+                for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
+                    let ptr_add = self.create_vreg(self.ty_storage.ptr_ty);
+                    let bb = self.get_basic_block();
+
+                    bb.instructions.push(mir::Instruction::new(
+                        GenericOpcode::PtrAdd as Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Def),
+                            mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
+                            mir::Operand::Immediate(offset as u64),
+                        ],
+                    ));
+                    bb.instructions.push(mir::Instruction::new(
+                        GenericOpcode::Load as Opcode,
+                        vec![
+                            mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def),
+                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Use),
+                        ],
+                    ));
+                }
             }
             _ => todo!(),
         }
+    }
+}
+
+impl<A: Abi> LocalStorage for FnLowering<'_, '_, A> {
+    fn get_local_ty(&self, idx: hir::LocalIdx) -> TyIdx {
+        self.hir_function.locals[idx]
     }
 }
 
@@ -130,21 +267,22 @@ fn lower_fn<'hir, A: Abi>(
             stack_slots: HashMap::new(),
             blocks: Vec::new(),
         },
-        local_to_vreg_idx: HashMap::new(),
+        operand_to_vreg_indices: HashMap::new(),
+        ty_to_offsets: HashMap::new(),
         abi,
+        current_bb_idx: 0,
     };
 
-    for bb in &func.blocks {
-        let mut lowered_bb = mir::BasicBlock {
+    for (idx, bb) in func.blocks.iter().enumerate() {
+        lowering.current_bb_idx = idx;
+        lowering.mir_function.blocks.push(mir::BasicBlock {
             name: &bb.name,
             instructions: Vec::new(),
-        };
+        });
 
         for instr in &bb.instructions {
-            lowering.lower_instruction(&mut lowered_bb, instr);
+            lowering.lower_instruction(instr);
         }
-
-        lowering.mir_function.blocks.push(lowered_bb);
     }
 
     lowering.mir_function
