@@ -76,7 +76,7 @@ impl Function<'_> {
                 });
             }
 
-            basic_block_to_def_use_block.insert(i, blocks.len() - 1);
+            basic_block_to_def_use_block.insert(i, last_blocks_len);
         }
 
         let len = blocks.len();
