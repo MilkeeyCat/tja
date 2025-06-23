@@ -43,114 +43,120 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
         for func in &mut module.functions {
             for bb in &mut func.blocks {
                 for instr in &mut bb.instructions {
-                    match GenericOpcode::from(instr.opcode) {
-                        GenericOpcode::Add => {
-                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = func.vreg_types[vreg_idx];
-                            let size = abi.ty_size(ty_storage, ty);
+                    match GenericOpcode::try_from(instr.opcode) {
+                        Ok(opcode) => match opcode {
+                            GenericOpcode::Add => {
+                                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                                let ty = func.vreg_types[vreg_idx];
+                                let size = abi.ty_size(ty_storage, ty);
 
-                            instr.opcode = get_add_op(
-                                (&instr.operands[0]).into(),
-                                (&instr.operands[1]).into(),
-                                size,
-                            );
-                            instr.tied_operands = Some((0, 1));
-                        }
-                        GenericOpcode::Sub => unimplemented!(),
-                        GenericOpcode::Mul => unimplemented!(),
-                        GenericOpcode::SDiv => unimplemented!(),
-                        GenericOpcode::UDiv => unimplemented!(),
-                        GenericOpcode::FrameIndex => {
-                            let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Frame(idx) => Base::Frame(*idx),
+                                instr.opcode = get_add_op(
+                                    (&instr.operands[0]).into(),
+                                    (&instr.operands[1]).into(),
+                                    size,
+                                );
+                                instr.tied_operands = Some((0, 1));
+                            }
+                            GenericOpcode::Sub => unimplemented!(),
+                            GenericOpcode::Mul => unimplemented!(),
+                            GenericOpcode::SDiv => unimplemented!(),
+                            GenericOpcode::UDiv => unimplemented!(),
+                            GenericOpcode::FrameIndex => {
+                                let address_mode = AddressMode {
+                                    base: match &instr.operands[1] {
+                                        Operand::Frame(idx) => Base::Frame(*idx),
+                                        _ => unreachable!(),
+                                    },
+                                    index: None,
+                                    scale: None,
+                                    displacement: None,
+                                };
+
+                                instr.opcode = super::Opcode::Lea64 as Opcode;
+                                instr.operands.remove(1);
+                                address_mode.write(&mut instr.operands, 1);
+                            }
+                            GenericOpcode::PtrAdd => {
+                                let displacement = match &instr.operands[2] {
+                                    Operand::Immediate(value) => *value,
                                     _ => unreachable!(),
-                                },
-                                index: None,
-                                scale: None,
-                                displacement: None,
-                            };
+                                };
+                                let address_mode = AddressMode {
+                                    base: match &instr.operands[1] {
+                                        Operand::Register(r, _) => Base::Register(r.clone()),
+                                        _ => unreachable!(),
+                                    },
+                                    index: None,
+                                    scale: None,
+                                    displacement: Some(displacement as isize),
+                                };
 
-                            instr.opcode = super::Opcode::Lea64 as Opcode;
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 1);
-                        }
-                        GenericOpcode::PtrAdd => {
-                            let displacement = match &instr.operands[2] {
-                                Operand::Immediate(value) => *value,
-                                _ => unreachable!(),
-                            };
-                            let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Register(r, _) => Base::Register(r.clone()),
+                                instr.opcode = super::Opcode::Lea64 as Opcode;
+                                instr.operands.remove(2);
+                                instr.operands.remove(1);
+                                address_mode.write(&mut instr.operands, 1);
+                            }
+                            GenericOpcode::Load => {
+                                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                                let ty = func.vreg_types[vreg_idx];
+                                let size = abi.ty_size(ty_storage, ty);
+                                let address_mode = AddressMode {
+                                    base: match &instr.operands[1] {
+                                        Operand::Register(r, _) => Base::Register(r.clone()),
+                                        _ => unreachable!(),
+                                    },
+                                    index: None,
+                                    scale: None,
+                                    displacement: None,
+                                };
+                                let opcode = match size {
+                                    1 => super::Opcode::Mov8rm,
+                                    2 => super::Opcode::Mov16rm,
+                                    4 => super::Opcode::Mov32rm,
+                                    8 => super::Opcode::Mov64rm,
                                     _ => unreachable!(),
-                                },
-                                index: None,
-                                scale: None,
-                                displacement: Some(displacement as isize),
-                            };
+                                };
 
-                            instr.opcode = super::Opcode::Lea64 as Opcode;
-                            instr.operands.remove(2);
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 1);
-                        }
-                        GenericOpcode::Load => {
-                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = func.vreg_types[vreg_idx];
-                            let size = abi.ty_size(ty_storage, ty);
-                            let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Register(r, _) => Base::Register(r.clone()),
+                                instr.opcode = opcode as Opcode;
+                                instr.operands.remove(1);
+                                address_mode.write(&mut instr.operands, 1);
+                            }
+                            GenericOpcode::Store => {
+                                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                                let ty = func.vreg_types[vreg_idx];
+                                let size = abi.ty_size(ty_storage, ty);
+                                let address_mode = AddressMode {
+                                    base: match &instr.operands[1] {
+                                        Operand::Register(r, _) => Base::Register(r.clone()),
+                                        _ => unreachable!(),
+                                    },
+                                    index: None,
+                                    scale: None,
+                                    displacement: None,
+                                };
+                                let opcode = match size {
+                                    1 => super::Opcode::Mov8mr,
+                                    2 => super::Opcode::Mov16mr,
+                                    4 => super::Opcode::Mov32mr,
+                                    8 => super::Opcode::Mov64mr,
                                     _ => unreachable!(),
-                                },
-                                index: None,
-                                scale: None,
-                                displacement: None,
-                            };
-                            let opcode = match size {
-                                1 => super::Opcode::Mov8rm,
-                                2 => super::Opcode::Mov16rm,
-                                4 => super::Opcode::Mov32rm,
-                                8 => super::Opcode::Mov64rm,
-                                _ => unreachable!(),
-                            };
+                                };
 
-                            instr.opcode = opcode as Opcode;
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 1);
-                        }
-                        GenericOpcode::Store => {
-                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = func.vreg_types[vreg_idx];
-                            let size = abi.ty_size(ty_storage, ty);
-                            let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Register(r, _) => Base::Register(r.clone()),
-                                    _ => unreachable!(),
-                                },
-                                index: None,
-                                scale: None,
-                                displacement: None,
-                            };
-                            let opcode = match size {
-                                1 => super::Opcode::Mov8mr,
-                                2 => super::Opcode::Mov16mr,
-                                4 => super::Opcode::Mov32mr,
-                                8 => super::Opcode::Mov64mr,
-                                _ => unreachable!(),
-                            };
+                                instr.opcode = opcode as Opcode;
+                                instr.operands.remove(1);
+                                address_mode.write(&mut instr.operands, 0);
+                            }
+                            GenericOpcode::Br => {
+                                instr.opcode = super::Opcode::Jmp as Opcode;
+                            }
+                            GenericOpcode::Return => {
+                                instr.opcode = super::Opcode::Ret as Opcode;
+                            }
+                            GenericOpcode::Copy => (), // skip copy instructions at this step
 
-                            instr.opcode = opcode as Opcode;
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 0);
-                        }
-                        GenericOpcode::Br => {
-                            instr.opcode = super::Opcode::Jmp as Opcode;
-                        }
-                        GenericOpcode::Copy => (), // skip copy instructions at this step
-
-                        GenericOpcode::Num => unreachable!(),
+                            GenericOpcode::Num => unreachable!(),
+                        },
+                        Err(_) => (),
                     }
                 }
             }

@@ -5,7 +5,7 @@ use crate::{
         ty::{self, Ty, TyIdx},
     },
     mir::{self, BlockIdx, GenericOpcode, Mir, Opcode, Register, RegisterRole},
-    targets::Abi,
+    targets::{Abi, CallingConvention},
 };
 use std::collections::HashMap;
 
@@ -25,18 +25,18 @@ fn lower_module<'hir, A: Abi>(
     }
 }
 
-struct FnLowering<'a, 'hir, A: Abi> {
-    ty_storage: &'a ty::Storage,
+pub struct FnLowering<'a, 'hir, A: Abi> {
+    pub ty_storage: &'a ty::Storage,
     hir_function: &'a hir::Function,
-    mir_function: mir::Function<'hir>,
+    pub mir_function: mir::Function<'hir>,
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
-    ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
-    abi: &'a A,
+    pub ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
+    pub abi: &'a A,
     current_bb_idx: BlockIdx,
 }
 
 impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
-    fn create_vreg(&mut self, ty: TyIdx) -> mir::VregIdx {
+    pub fn create_vreg(&mut self, ty: TyIdx) -> mir::VregIdx {
         let vreg_idx = self.mir_function.next_vreg_idx;
 
         self.mir_function.next_vreg_idx += 1;
@@ -139,7 +139,7 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
         idx
     }
 
-    fn get_basic_block(&mut self) -> &mut mir::BasicBlock<'hir> {
+    pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock<'hir> {
         &mut self.mir_function.blocks[self.current_bb_idx]
     }
 
@@ -245,7 +245,22 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
 
     fn lower_terminator(&mut self, terminator: &hir::Terminator) {
         match terminator {
-            hir::Terminator::Return(_value) => unimplemented!(),
+            hir::Terminator::Return(value) => {
+                if let Some(value) = value {
+                    let vreg_indices = self.get_or_create_vregs(value.clone()).to_vec();
+
+                    self.abi
+                        .calling_convention()
+                        .lower_ret(self, vreg_indices, value.ty(self));
+                }
+
+                self.get_basic_block()
+                    .instructions
+                    .push(mir::Instruction::new(
+                        GenericOpcode::Return as mir::Opcode,
+                        vec![],
+                    ));
+            }
             hir::Terminator::Br(branch) => match branch {
                 hir::Branch::Conditional {
                     condition: _,

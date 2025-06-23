@@ -52,7 +52,7 @@ pub fn insert_prologue_epilogue(func: &mut Function) {
             },
         );
 
-        for bb in &mut func.blocks {
+        for bb in func.blocks.iter_mut().skip(1) {
             for instr in &mut bb.instructions {
                 for operand in &mut instr.operands {
                     if let Operand::Block(idx) = operand {
@@ -69,7 +69,7 @@ pub fn insert_prologue_epilogue(func: &mut Function) {
                 let mut patch = BasicBlockPatch::new();
 
                 patch.add_instruction(
-                    bb.instructions.len(),
+                    bb.instructions.len() - 1,
                     Instruction::new(Opcode::Leave as mir::Opcode, vec![]),
                 );
 

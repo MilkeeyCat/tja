@@ -1,8 +1,8 @@
 pub mod amd64;
 
-//use super::calling_convention::CallingConvention;
 use crate::hir::ty::{Storage, TyIdx};
-use crate::mir::{PhysicalRegister, RegisterClass};
+use crate::lowering::FnLowering;
+use crate::mir::{PhysicalRegister, RegisterClass, VregIdx};
 
 pub trait RegisterInfo {
     fn get_registers_by_class(&self, class: &RegisterClass) -> &[PhysicalRegister];
@@ -19,9 +19,20 @@ pub trait Target {
     fn register_info(&self) -> &Self::RegisterInfo;
 }
 
+pub trait CallingConvention {
+    fn lower_ret<A: Abi>(
+        &self,
+        lowering: &mut FnLowering<A>,
+        vreg_indices: Vec<VregIdx>,
+        ty: TyIdx,
+    );
+}
+
 pub trait Abi {
+    type CallingConvention: CallingConvention;
+
     fn field_offset(&self, storage: &Storage, fields: &[TyIdx], i: usize) -> usize;
     fn ty_size(&self, storage: &Storage, ty: TyIdx) -> usize;
     fn alignment(&self, storage: &Storage, ty: TyIdx) -> usize;
-    //fn calling_convention(&self) -> &dyn CallingConvention;
+    fn calling_convention(&self) -> &Self::CallingConvention;
 }

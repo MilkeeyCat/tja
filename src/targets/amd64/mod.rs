@@ -8,6 +8,7 @@ mod opcode;
 mod prologue_epilogue_inserter;
 pub mod register;
 mod register_class_selector;
+mod sysv_calling_convention;
 
 use crate::mir::{self, Operand};
 use abi::SysVAmd64;

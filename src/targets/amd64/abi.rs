@@ -1,22 +1,23 @@
 use crate::{
-    //codegen::calling_convention::{self as cc, CallingConvention},
     hir::ty::{self, Ty, TyIdx},
-    targets::Abi,
+    targets::{Abi, amd64::sysv_calling_convention},
 };
 
 pub struct SysVAmd64 {
-    //default_cc: cc::sysv_amd64::SysVAmd64,
+    default_cc: sysv_calling_convention::SysVAmd64,
 }
 
 impl SysVAmd64 {
     pub fn new() -> Self {
         Self {
-            //default_cc: cc::sysv_amd64::SysVAmd64::new(),
+            default_cc: sysv_calling_convention::SysVAmd64::new(),
         }
     }
 }
 
 impl Abi for SysVAmd64 {
+    type CallingConvention = sysv_calling_convention::SysVAmd64;
+
     fn field_offset(&self, storage: &ty::Storage, fields: &[TyIdx], i: usize) -> usize {
         fields
             .iter()
@@ -54,7 +55,7 @@ impl Abi for SysVAmd64 {
         }
     }
 
-    //fn calling_convention(&self) -> &dyn CallingConvention {
-    //    &self.default_cc
-    //}
+    fn calling_convention(&self) -> &Self::CallingConvention {
+        &self.default_cc
+    }
 }

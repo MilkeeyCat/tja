@@ -12,15 +12,20 @@ pub enum GenericOpcode {
     Load,
     Store,
     Br,
+    Return,
     Copy,
 
     Num,
 }
 
-impl From<usize> for GenericOpcode {
-    fn from(value: usize) -> Self {
-        assert!(value < Self::Num as usize);
+impl TryFrom<usize> for GenericOpcode {
+    type Error = ();
 
-        unsafe { std::mem::transmute::<_, Self>(value) }
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        if value < Self::Num as usize {
+            Ok(unsafe { std::mem::transmute::<_, Self>(value) })
+        } else {
+            Err(())
+        }
     }
 }

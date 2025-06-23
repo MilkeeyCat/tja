@@ -1,17 +1,25 @@
 use super::OperandKind;
 use crate::{
     hir::ty,
-    mir::{Function, Opcode},
-    targets::Abi,
+    mir::{Function, Opcode, Operand, Register},
+    targets::{Abi, RegisterInfo, Target},
 };
 
-pub fn materialize_copy<A: Abi>(func: &mut Function, abi: &A, ty_storage: &ty::Storage) {
+pub fn materialize_copy<T: Target>(func: &mut Function, target: &T, ty_storage: &ty::Storage) {
     for bb in &mut func.blocks {
         for instr in &mut bb.instructions {
             if instr.is_copy() {
-                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                let ty = func.vreg_types[vreg_idx];
-                let size = abi.ty_size(ty_storage, ty);
+                let size = match &instr.operands[0] {
+                    Operand::Register(r, _) => match r {
+                        Register::Virtual(idx) => {
+                            let ty = func.vreg_types[idx];
+
+                            target.abi().ty_size(ty_storage, ty)
+                        }
+                        Register::Physical(r) => target.register_info().get_register_size(r),
+                    },
+                    _ => unreachable!(),
+                };
                 let opcode = match (
                     (&instr.operands[0]).into(),
                     (&instr.operands[1]).into(),
