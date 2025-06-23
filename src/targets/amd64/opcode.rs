@@ -322,6 +322,7 @@ opcodes! {
     Lea64 = "lea {lhs}, {rhs}", (lhs = r64, rhs = m64);
 
     Shl64ri = "shl {lhs}, {rhs}", (lhs = r64, rhs = imm);
+    Shr64ri = "shr {lhs}, {rhs}", (lhs = r64, rhs = imm);
 
     Push64r = "push {src}", (src = r64);
 

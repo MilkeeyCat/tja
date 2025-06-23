@@ -11,70 +11,75 @@ pub fn insert_prologue_epilogue(func: &mut Function) {
         .sum::<usize>()
         .next_multiple_of(16);
 
-    if stack_frame_size > 0 {
-        func.blocks.insert(
-            0,
-            BasicBlock {
-                name: "prologue".into(),
-                instructions: vec![
-                    Instruction::new(
-                        Opcode::Push64r as mir::Opcode,
-                        vec![Operand::Register(
+    func.blocks.insert(
+        0,
+        BasicBlock {
+            name: "prologue".into(),
+            instructions: vec![
+                Instruction::new(
+                    Opcode::Push64r as mir::Opcode,
+                    vec![Operand::Register(
+                        mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
+                        RegisterRole::Use,
+                    )],
+                ),
+                Instruction::new(
+                    Opcode::Mov64rr as mir::Opcode,
+                    vec![
+                        Operand::Register(
                             mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
                             RegisterRole::Use,
-                        )],
-                    ),
-                    Instruction::new(
-                        Opcode::Mov64rr as mir::Opcode,
-                        vec![
-                            Operand::Register(
-                                mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
-                                RegisterRole::Use,
-                            ),
-                            Operand::Register(
-                                mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                                RegisterRole::Use,
-                            ),
-                        ],
-                    ),
-                    Instruction::new(
-                        Opcode::Sub64ri as mir::Opcode,
-                        vec![
-                            Operand::Register(
-                                mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                                RegisterRole::Use,
-                            ),
-                            Operand::Immediate(stack_frame_size as u64),
-                        ],
-                    ),
-                    Instruction::new(Opcode::Jmp as mir::Opcode, vec![Operand::Block(1)]),
-                ],
-            },
-        );
+                        ),
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
+                    ],
+                ),
+            ],
+        },
+    );
 
-        for bb in func.blocks.iter_mut().skip(1) {
-            for instr in &mut bb.instructions {
-                for operand in &mut instr.operands {
-                    if let Operand::Block(idx) = operand {
-                        *idx += 1;
-                    }
+    if stack_frame_size > 0 {
+        func.blocks[0].instructions.push(Instruction::new(
+            Opcode::Sub64ri as mir::Opcode,
+            vec![
+                Operand::Register(
+                    mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
+                    RegisterRole::Use,
+                ),
+                Operand::Immediate(stack_frame_size as u64),
+            ],
+        ));
+    }
+
+    func.blocks[0].instructions.push(Instruction::new(
+        Opcode::Jmp as mir::Opcode,
+        vec![Operand::Block(1)],
+    ));
+
+    for bb in func.blocks.iter_mut().skip(1) {
+        for instr in &mut bb.instructions {
+            for operand in &mut instr.operands {
+                if let Operand::Block(idx) = operand {
+                    *idx += 1;
                 }
             }
         }
+    }
 
-        for bb in &mut func.blocks {
-            let terminator = bb.instructions.last().unwrap();
+    for bb in &mut func.blocks {
+        let terminator = bb.instructions.last().unwrap();
 
-            if terminator.opcode == Opcode::Ret as mir::Opcode {
-                let mut patch = BasicBlockPatch::new();
+        if terminator.opcode == Opcode::Ret as mir::Opcode {
+            let mut patch = BasicBlockPatch::new();
 
-                patch.add_instruction(
-                    bb.instructions.len() - 1,
-                    Instruction::new(Opcode::Leave as mir::Opcode, vec![]),
-                );
+            patch.add_instruction(
+                bb.instructions.len() - 1,
+                Instruction::new(Opcode::Leave as mir::Opcode, vec![]),
+            );
 
-                patch.apply(bb);
-            }
+            patch.apply(bb);
         }
     }
 }

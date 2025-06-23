@@ -301,7 +301,10 @@ fn lower_fn<'hir, A: Abi>(
             vreg_types: HashMap::new(),
             next_stack_frame_idx: 0,
             stack_slots: HashMap::new(),
-            blocks: Vec::new(),
+            blocks: vec![mir::BasicBlock {
+                name: "entry",
+                instructions: vec![],
+            }],
         },
         operand_to_vreg_indices: HashMap::new(),
         ty_to_offsets: HashMap::new(),
@@ -309,8 +312,31 @@ fn lower_fn<'hir, A: Abi>(
         current_bb_idx: 0,
     };
 
+    let vreg_indices = (0..lowering.hir_function.params_count)
+        .into_iter()
+        .map(|local_idx| {
+            lowering
+                .get_or_create_vregs(hir::Operand::Local(local_idx))
+                .to_vec()
+        })
+        .collect();
+    let tys = lowering.hir_function.locals[..lowering.hir_function.params_count].to_vec();
+    let ret_ty = lowering.hir_function.ret_ty;
+
+    lowering
+        .abi
+        .calling_convention()
+        .lower_params(&mut lowering, vreg_indices, tys, ret_ty);
+    lowering
+        .get_basic_block()
+        .instructions
+        .push(mir::Instruction::new(
+            GenericOpcode::Br as mir::Opcode,
+            vec![mir::Operand::Block(1)],
+        ));
+
     for (idx, bb) in func.blocks.iter().enumerate() {
-        lowering.current_bb_idx = idx;
+        lowering.current_bb_idx = idx + 1;
         lowering.mir_function.blocks.push(mir::BasicBlock {
             name: &bb.name,
             instructions: Vec::new(),
@@ -321,6 +347,16 @@ fn lower_fn<'hir, A: Abi>(
         }
 
         lowering.lower_terminator(&bb.terminator);
+    }
+
+    for bb in lowering.mir_function.blocks.iter_mut().skip(1) {
+        for instr in &mut bb.instructions {
+            for operand in &mut instr.operands {
+                if let mir::Operand::Block(idx) = operand {
+                    *idx += 1;
+                }
+            }
+        }
     }
 
     lowering.mir_function

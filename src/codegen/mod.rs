@@ -1,5 +1,4 @@
 pub mod allocator;
-//pub mod calling_convention;
 
 use crate::{
     hir,
