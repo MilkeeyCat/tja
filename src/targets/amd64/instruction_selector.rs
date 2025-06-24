@@ -152,6 +152,21 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                             GenericOpcode::Return => {
                                 instr.opcode = super::Opcode::Ret as Opcode;
                             }
+                            GenericOpcode::GlobalValue => match instr.operands[1] {
+                                Operand::Function(idx) => {
+                                    let address_mode = AddressMode {
+                                        base: Base::Function(idx),
+                                        index: None,
+                                        scale: None,
+                                        displacement: None,
+                                    };
+
+                                    instr.opcode = super::Opcode::Lea64 as Opcode;
+                                    instr.operands.remove(1);
+                                    address_mode.write(&mut instr.operands, 1);
+                                }
+                                _ => unreachable!(),
+                            },
                             GenericOpcode::Copy => (), // skip copy instructions at this step
 
                             GenericOpcode::Num => unreachable!(),

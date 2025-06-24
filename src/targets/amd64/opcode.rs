@@ -1,7 +1,6 @@
 use super::{AsmPrinter, Condition};
 use crate::{
-    hir::Global,
-    mir::{GenericOpcode, Operand, Register},
+    mir::{GenericOpcode, Module, Operand, Register},
     targets::{RegisterInfo, Target},
 };
 use std::fmt::Write;
@@ -21,7 +20,7 @@ fn register<T: Target, W: Write>(
 
 fn memory<T: Target, W: Write>(
     printer: &AsmPrinter<T, W>,
-    globals: &[Global],
+    module: &Module,
     operands: &[Operand],
 ) -> Result<String, std::fmt::Error> {
     match operands {
@@ -37,7 +36,8 @@ fn memory<T: Target, W: Write>(
                 Operand::Register(_, _) => {
                     write!(&mut result, "{}", register(printer, &[base.clone()])?)?
                 }
-                Operand::Global(idx) => write!(&mut result, "{}", globals[*idx].name)?,
+                Operand::Global(idx) => write!(&mut result, "{}", module.globals[*idx].name)?,
+                Operand::Function(idx) => write!(&mut result, "{}", module.functions[*idx].name)?,
                 _ => unreachable!(),
             };
 
@@ -80,7 +80,7 @@ impl r8 {
 
     fn from_operands<T: Target, W: Write>(
         printer: &AsmPrinter<T, W>,
-        _globals: &[Global],
+        _module: &Module,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         register(printer, operands)
@@ -106,13 +106,13 @@ macro_rules! mem_operand {
 
             fn from_operands<T: Target, W: Write>(
                 printer: &AsmPrinter<T, W>,
-                globals: &[Global],
+                module: &Module,
                 operands: &[Operand],
             ) -> Result<String, std::fmt::Error> {
                 Ok(format!(
                     "{} ptr {}",
                     $prefix,
-                    memory(printer, globals, operands)?
+                    memory(printer, module, operands)?
                 ))
             }
         }
@@ -132,7 +132,7 @@ impl ccode {
 
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
-        _globals: &[Global],
+        _module: &Module,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
@@ -150,7 +150,7 @@ impl imm {
 
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
-        _globals: &[Global],
+        _module: &Module,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
@@ -168,7 +168,7 @@ impl label {
 
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
-        _globals: &[Global],
+        _module: &Module,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
@@ -191,7 +191,7 @@ macro_rules! opcodes {
         }
 
         impl Opcode {
-            pub fn write_instruction<T: Target, W: Write>(&self, printer: &mut AsmPrinter<T, W>, globals: &[Global], operands: &[Operand]) -> std::fmt::Result {
+            pub fn write_instruction<T: Target, W: Write>(&self, printer: &mut AsmPrinter<T, W>, module: &Module, operands: &[Operand]) -> std::fmt::Result {
                 match self {
                     Self::_Dummy => unreachable!(),
                     $(
@@ -200,7 +200,7 @@ macro_rules! opcodes {
                             #[allow(unused_variables)]
                             let mut start = 0;
                             $(
-                                let $var = <$class>::from_operands(printer, globals, &operands[start..start+<$class>::MIR_LENGTH])?;
+                                let $var = <$class>::from_operands(printer, module, &operands[start..start+<$class>::MIR_LENGTH])?;
                                 #[allow(unused_assignments)]
                                 {
                                     start += <$class>::MIR_LENGTH;

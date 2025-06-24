@@ -13,6 +13,7 @@ pub enum GenericOpcode {
     Store,
     Br,
     Return,
+    GlobalValue,
     Copy,
 
     Num,

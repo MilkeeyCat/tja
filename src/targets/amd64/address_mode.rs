@@ -1,9 +1,13 @@
-use crate::mir::{Operand, PhysicalRegister, Register, RegisterRole, StackFrameIdx};
+use crate::{
+    hir::FunctionIdx,
+    mir::{Operand, PhysicalRegister, Register, RegisterRole, StackFrameIdx},
+};
 
 #[derive(Clone, Debug)]
 pub enum Base {
     Register(Register),
     Frame(StackFrameIdx),
+    Function(FunctionIdx),
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +23,7 @@ impl AddressMode {
         let base = match self.base {
             Base::Register(r) => Operand::Register(r, RegisterRole::Use),
             Base::Frame(stack_frame_idx) => Operand::Frame(stack_frame_idx),
+            Base::Function(idx) => Operand::Function(idx),
         };
 
         operands.insert(idx, base);

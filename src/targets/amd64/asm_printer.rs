@@ -17,13 +17,13 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
 
     pub fn emit(mut self, module: &Module) -> Result<(), std::fmt::Error> {
         for func in &module.functions {
-            self.emit_fn(func, module.globals)?;
+            self.emit_fn(func, module)?;
         }
 
         Ok(())
     }
 
-    fn emit_fn(&mut self, func: &Function, globals: &[Global]) -> Result<(), std::fmt::Error> {
+    fn emit_fn(&mut self, func: &Function, module: &Module) -> Result<(), std::fmt::Error> {
         write!(self.buf, ".global {}\n", func.name)?;
         write!(self.buf, "{}:\n", func.name)?;
 
@@ -34,7 +34,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                 write!(self.buf, "\t")?;
 
                 Opcode::from(instr.opcode)
-                    .write_instruction(self, globals, &instr.operands)
+                    .write_instruction(self, module, &instr.operands)
                     .unwrap();
 
                 write!(self.buf, "\n")?;

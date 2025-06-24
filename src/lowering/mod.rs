@@ -69,18 +69,38 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
             }
             hir::Operand::Const(c, ty) => match c {
                 Const::Global(_global_idx) => unimplemented!(),
-                Const::Function(_fn_idx) => unimplemented!(),
+                Const::Function(idx) => {
+                    let vreg_idx = self.create_vreg(*ty);
+
+                    self.get_basic_block()
+                        .instructions
+                        .push(mir::Instruction::new(
+                            mir::GenericOpcode::GlobalValue as mir::Opcode,
+                            vec![
+                                mir::Operand::Register(
+                                    Register::Virtual(vreg_idx),
+                                    RegisterRole::Def,
+                                ),
+                                mir::Operand::Function(*idx),
+                            ],
+                        ));
+                    vreg_indices.push(vreg_idx);
+                }
                 Const::Int(value) => {
                     let vreg_idx = self.create_vreg(*ty);
-                    let bb = &mut self.mir_function.blocks[self.current_bb_idx];
 
-                    bb.instructions.push(mir::Instruction::new(
-                        mir::GenericOpcode::Copy as mir::Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def),
-                            mir::Operand::Immediate(*value),
-                        ],
-                    ));
+                    self.get_basic_block()
+                        .instructions
+                        .push(mir::Instruction::new(
+                            mir::GenericOpcode::Copy as mir::Opcode,
+                            vec![
+                                mir::Operand::Register(
+                                    Register::Virtual(vreg_idx),
+                                    RegisterRole::Def,
+                                ),
+                                mir::Operand::Immediate(*value),
+                            ],
+                        ));
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Aggregate(consts) => {
