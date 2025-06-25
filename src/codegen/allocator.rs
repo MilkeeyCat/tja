@@ -102,21 +102,20 @@ pub fn allocate<RI: RegisterInfo>(
     function: &mut mir::Function,
 ) {
     let mut allocator = Allocator::new(register_info, spill_mode, function);
-    let locations = allocator.locations.clone();
     let (mut graph, mut node_ids) = allocator.function.interference();
     let mut stack: Vec<((VregIdx, usize), NodeId, HashSet<NodeId>)> = Vec::new();
     let mut redo = false;
 
     while let Some(node_id) = min(&graph, &node_ids) {
         let neighbors_count = graph.neighbors(node_id).len();
-        let vreg_value = match graph.get_node(node_id) {
-            Value::Virtual(idx, def_idx) => (*idx, *def_idx),
+        let vreg_idx = match graph.get_node(node_id) {
+            Value::Virtual(idx, _) => idx,
             Value::Physical(_) => unreachable!(),
         };
         let node_id = if neighbors_count
             < allocator
                 .register_info
-                .get_registers_by_class(&allocator.function.vreg_classes[&vreg_value.0])
+                .get_registers_by_class(&allocator.function.vreg_classes[vreg_idx])
                 .len()
         {
             min(&graph, &node_ids)
@@ -124,6 +123,11 @@ pub fn allocate<RI: RegisterInfo>(
             max(&graph, &node_ids)
         }
         .unwrap();
+        let vreg_value = match graph.get_node(node_id) {
+            Value::Virtual(idx, def_idx) => (*idx, *def_idx),
+            Value::Physical(_) => unreachable!(),
+        };
+
         let neighbors = graph.neighbors(node_id).clone();
         let pos = node_ids.iter().position(|idx| idx == &node_id).unwrap();
 
@@ -160,8 +164,6 @@ pub fn allocate<RI: RegisterInfo>(
     }
 
     if redo {
-        allocator.locations = locations;
-
         allocate(register_info, allocator.spill_mode, function)
     } else {
         let locations = allocator.locations;
