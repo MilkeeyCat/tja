@@ -33,6 +33,15 @@ pub trait CallingConvention {
         tys: Vec<TyIdx>,
         ret_ty: TyIdx,
     );
+    fn lower_call<A: Abi>(
+        &self,
+        lowering: &mut FnLowering<A>,
+        callee_vreg_idx: VregIdx,
+        arg_vreg_indices: Vec<Vec<VregIdx>>,
+        arg_tys: Vec<TyIdx>,
+        ret_vreg_indices: Vec<VregIdx>,
+        ret_ty: TyIdx,
+    );
 }
 
 pub trait Abi {

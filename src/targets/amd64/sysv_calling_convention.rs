@@ -421,6 +421,357 @@ impl CallingConvention for SysVAmd64 {
             }
         }
     }
+
+    fn lower_call<A: Abi>(
+        &self,
+        lowering: &mut FnLowering<A>,
+        callee_vreg_idx: VregIdx,
+        arg_vreg_indices: Vec<Vec<VregIdx>>,
+        arg_tys: Vec<TyIdx>,
+        mut ret_vreg_indices: Vec<VregIdx>,
+        ret_ty: TyIdx,
+    ) {
+        assert!(arg_vreg_indices.len() == arg_tys.len());
+
+        let mut registers = vec![
+            Register::R9,
+            Register::R8,
+            Register::Rcx,
+            Register::Rdx,
+            Register::Rsi,
+            Register::Rdi,
+        ];
+
+        if self
+            .ty_class(lowering.abi, lowering.ty_storage, ret_ty)
+            .contains(&ClassKind::Memory)
+        {
+            registers.retain(|r| r != &Register::Rdi);
+            let frame_idx = lowering.create_frame_idx(ret_ty);
+
+            lowering
+                .get_basic_block()
+                .instructions
+                .push(Instruction::new(
+                    GenericOpcode::FrameIndex as mir::Opcode,
+                    vec![
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rdi as PhysicalRegister),
+                            RegisterRole::Def,
+                        ),
+                        Operand::Frame(frame_idx),
+                    ],
+                ));
+        }
+
+        let adj_stack_pos = lowering.get_basic_block().instructions.len();
+        let mut stack_offset: usize = 0;
+
+        for ((ty, mut classes), mut vreg_indices) in arg_tys
+            .into_iter()
+            .map(|ty| (ty, self.ty_class(lowering.abi, lowering.ty_storage, ty)))
+            .zip(arg_vreg_indices)
+        {
+            if classes.contains(&ClassKind::Integer) && registers.len() < classes.len() {
+                classes = vec![ClassKind::Memory];
+            }
+
+            let mut offsets = lowering.ty_to_offsets[&ty].clone();
+
+            for class in classes {
+                match class {
+                    ClassKind::Memory => {
+                        let base = mir::Register::Physical(Register::Rsp as PhysicalRegister);
+
+                        stack_offset = stack_offset
+                            .next_multiple_of(lowering.abi.alignment(lowering.ty_storage, ty));
+
+                        for (vreg_idx, offset) in std::mem::take(&mut vreg_indices)
+                            .into_iter()
+                            .zip(std::mem::take(&mut offsets))
+                        {
+                            let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                            let bb = lowering.get_basic_block();
+
+                            bb.instructions.push(mir::Instruction::new(
+                                GenericOpcode::PtrAdd as mir::Opcode,
+                                vec![
+                                    mir::Operand::Register(
+                                        mir::Register::Virtual(ptr_add),
+                                        RegisterRole::Def,
+                                    ),
+                                    mir::Operand::Register(base.clone(), RegisterRole::Use),
+                                    mir::Operand::Immediate((stack_offset + offset) as u64),
+                                ],
+                            ));
+                            bb.instructions.push(Instruction::new(
+                                GenericOpcode::Store as mir::Opcode,
+                                vec![
+                                    Operand::Register(
+                                        mir::Register::Virtual(vreg_idx),
+                                        RegisterRole::Use,
+                                    ),
+                                    Operand::Register(
+                                        mir::Register::Virtual(ptr_add),
+                                        RegisterRole::Use,
+                                    ),
+                                ],
+                            ));
+                        }
+
+                        stack_offset += lowering.abi.ty_size(lowering.ty_storage, ty);
+                    }
+                    ClassKind::Integer => {
+                        let r = registers.pop().unwrap();
+                        let (vreg_indices, offsets) =
+                            get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
+                        let mut last_offset = None;
+
+                        for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets).rev() {
+                            let ty = lowering.mir_function.vreg_types[&vreg_idx];
+                            let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
+
+                            if let Some(last_offset) = last_offset {
+                                lowering
+                                    .get_basic_block()
+                                    .instructions
+                                    .push(Instruction::new(
+                                        Opcode::Shl64ri as mir::Opcode,
+                                        vec![
+                                            Operand::Register(
+                                                mir::Register::Physical(r as PhysicalRegister),
+                                                RegisterRole::Use,
+                                            ),
+                                            Operand::Immediate((last_offset - offset) as u64 * 8),
+                                        ],
+                                    ));
+                            }
+
+                            let r = match (r, ty_size) {
+                                (Register::R9, 8) => Register::R9,
+                                (Register::R9, 4) => Register::R9d,
+                                (Register::R9, 2) => Register::R9w,
+                                (Register::R9, 1) => Register::R9b,
+
+                                (Register::R8, 8) => Register::R8,
+                                (Register::R8, 4) => Register::R8d,
+                                (Register::R8, 2) => Register::R8w,
+                                (Register::R8, 1) => Register::R8b,
+
+                                (Register::Rcx, 8) => Register::Rcx,
+                                (Register::Rcx, 4) => Register::Ecx,
+                                (Register::Rcx, 2) => Register::Cx,
+                                (Register::Rcx, 1) => Register::Cl,
+
+                                (Register::Rdx, 8) => Register::Rdx,
+                                (Register::Rdx, 4) => Register::Edx,
+                                (Register::Rdx, 2) => Register::Dx,
+                                (Register::Rdx, 1) => Register::Dl,
+
+                                (Register::Rsi, 8) => Register::Rsi,
+                                (Register::Rsi, 4) => Register::Esi,
+                                (Register::Rsi, 2) => Register::Si,
+                                (Register::Rsi, 1) => Register::Sil,
+
+                                (Register::Rdi, 8) => Register::Rdi,
+                                (Register::Rdi, 4) => Register::Edi,
+                                (Register::Rdi, 2) => Register::Di,
+                                (Register::Rdi, 1) => Register::Dil,
+
+                                _ => unreachable!(),
+                            };
+
+                            lowering
+                                .get_basic_block()
+                                .instructions
+                                .push(Instruction::new(
+                                    GenericOpcode::Copy as mir::Opcode,
+                                    vec![
+                                        Operand::Register(
+                                            mir::Register::Physical(r as PhysicalRegister),
+                                            RegisterRole::Def,
+                                        ),
+                                        Operand::Register(
+                                            mir::Register::Virtual(vreg_idx),
+                                            RegisterRole::Use,
+                                        ),
+                                    ],
+                                ));
+                            last_offset = Some(offset);
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+        }
+
+        if stack_offset > 0 {
+            lowering.get_basic_block().instructions.insert(
+                adj_stack_pos,
+                Instruction::new(
+                    Opcode::Sub64ri as mir::Opcode,
+                    vec![
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rsp as PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
+                        Operand::Immediate(stack_offset as u64),
+                    ],
+                ),
+            );
+        }
+
+        lowering
+            .get_basic_block()
+            .instructions
+            .push(Instruction::new(
+                Opcode::Call64r as mir::Opcode,
+                vec![
+                    Operand::Register(mir::Register::Virtual(callee_vreg_idx), RegisterRole::Use),
+                    Operand::Immediate(stack_offset as u64),
+                ],
+            ));
+
+        if stack_offset > 0 {
+            lowering
+                .get_basic_block()
+                .instructions
+                .push(Instruction::new(
+                    Opcode::Add64ri as mir::Opcode,
+                    vec![
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rsp as PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
+                        Operand::Immediate(stack_offset as u64),
+                    ],
+                ));
+        }
+
+        let mut registers = vec![Register::Rdx, Register::Rax];
+        let mut offsets = lowering.ty_to_offsets[&ret_ty].clone();
+
+        for class in self.ty_class(lowering.abi, lowering.ty_storage, ret_ty) {
+            match class {
+                ClassKind::Memory => {
+                    let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                    let address_mode = AddressMode {
+                        base: Base::Register(mir::Register::Physical(
+                            Register::Rdi as PhysicalRegister,
+                        )),
+                        index: None,
+                        scale: None,
+                        displacement: None,
+                    };
+                    let mut operands = vec![mir::Operand::Register(
+                        mir::Register::Virtual(base),
+                        RegisterRole::Def,
+                    )];
+
+                    address_mode.write(&mut operands, 1);
+                    lowering
+                        .get_basic_block()
+                        .instructions
+                        .push(mir::Instruction::new(
+                            Opcode::Lea64 as mir::Opcode,
+                            operands,
+                        ));
+
+                    for (vreg_idx, offset) in std::mem::take(&mut ret_vreg_indices)
+                        .into_iter()
+                        .zip(std::mem::take(&mut offsets))
+                    {
+                        let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                        let bb = lowering.get_basic_block();
+
+                        bb.instructions.push(mir::Instruction::new(
+                            GenericOpcode::PtrAdd as mir::Opcode,
+                            vec![
+                                mir::Operand::Register(
+                                    mir::Register::Virtual(ptr_add),
+                                    RegisterRole::Def,
+                                ),
+                                mir::Operand::Register(
+                                    mir::Register::Virtual(base),
+                                    RegisterRole::Use,
+                                ),
+                                mir::Operand::Immediate(offset as u64),
+                            ],
+                        ));
+                        bb.instructions.push(Instruction::new(
+                            GenericOpcode::Load as mir::Opcode,
+                            vec![
+                                Operand::Register(
+                                    mir::Register::Virtual(vreg_idx),
+                                    RegisterRole::Def,
+                                ),
+                                Operand::Register(
+                                    mir::Register::Virtual(ptr_add),
+                                    RegisterRole::Use,
+                                ),
+                            ],
+                        ));
+                    }
+                }
+                ClassKind::Integer => {
+                    let r = registers.pop().unwrap();
+                    let (vreg_indices, offsets) =
+                        get_vregs_for_one_reg(lowering, &mut ret_vreg_indices, &mut offsets);
+                    let mut last_offset = None;
+
+                    for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets) {
+                        let ty = lowering.mir_function.vreg_types[&vreg_idx];
+                        let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
+                        let bb = lowering.get_basic_block();
+
+                        if let Some(last_offset) = last_offset {
+                            bb.instructions.push(Instruction::new(
+                                Opcode::Shr64ri as mir::Opcode,
+                                vec![
+                                    Operand::Register(
+                                        mir::Register::Physical(r as PhysicalRegister),
+                                        RegisterRole::Use,
+                                    ),
+                                    Operand::Immediate((offset - last_offset) as u64 * 8),
+                                ],
+                            ));
+                        }
+
+                        let r = match (r, ty_size) {
+                            (Register::Rax, 8) => Register::Rax,
+                            (Register::Rax, 4) => Register::Eax,
+                            (Register::Rax, 2) => Register::Ax,
+                            (Register::Rax, 1) => Register::Al,
+
+                            (Register::Rdx, 8) => Register::Rdx,
+                            (Register::Rdx, 4) => Register::Edx,
+                            (Register::Rdx, 2) => Register::Dx,
+                            (Register::Rdx, 1) => Register::Dl,
+
+                            _ => unreachable!(),
+                        };
+
+                        bb.instructions.push(Instruction::new(
+                            GenericOpcode::Copy as mir::Opcode,
+                            vec![
+                                Operand::Register(
+                                    mir::Register::Virtual(vreg_idx),
+                                    RegisterRole::Def,
+                                ),
+                                Operand::Register(
+                                    mir::Register::Physical(r as PhysicalRegister),
+                                    RegisterRole::Use,
+                                ),
+                            ],
+                        ));
+
+                        last_offset = Some(offset);
+                    }
+                }
+                _ => unimplemented!(),
+            }
+        }
+    }
 }
 
 fn get_vregs_for_one_reg<A: Abi>(

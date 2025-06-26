@@ -1,5 +1,4 @@
 use crate::{
-    hir::Global,
     mir::{Function, Module},
     targets::{Target, amd64::Opcode},
 };

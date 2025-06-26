@@ -326,6 +326,8 @@ opcodes! {
 
     Push64r = "push {src}", (src = r64);
 
+    Call64r = "call {src}", (src = r64);
+
     Jmp = "jmp {dest}", (dest = label);
 
     Jcc = "j{cc} {dest}", (dest = label, cc = ccode);
