@@ -13,17 +13,20 @@ pub fn lower_stack_slots(func: &mut Function) {
 
                 for (i, operand) in instr.operands.iter_mut().enumerate() {
                     if let Operand::Frame(idx) = operand {
-                        stack_offset += func.stack_slots[idx] as isize;
                         address_mode = Some((
                             locations
                                 .entry(*idx)
-                                .or_insert(AddressMode {
-                                    base: Base::Register(Register::Physical(
-                                        super::Register::Rbp as PhysicalRegister,
-                                    )),
-                                    index: None,
-                                    scale: None,
-                                    displacement: Some(-stack_offset),
+                                .or_insert_with(|| {
+                                    stack_offset += func.stack_slots[idx] as isize;
+
+                                    AddressMode {
+                                        base: Base::Register(Register::Physical(
+                                            super::Register::Rbp as PhysicalRegister,
+                                        )),
+                                        index: None,
+                                        scale: None,
+                                        displacement: Some(-stack_offset),
+                                    }
                                 })
                                 .clone(),
                             i,
@@ -35,7 +38,11 @@ pub fn lower_stack_slots(func: &mut Function) {
 
                 match address_mode {
                     Some((address_mode, idx)) => {
+                        instr.operands.remove(idx + 3);
+                        instr.operands.remove(idx + 2);
+                        instr.operands.remove(idx + 1);
                         instr.operands.remove(idx);
+
                         address_mode.write(&mut instr.operands, idx);
                     }
                     None => break,

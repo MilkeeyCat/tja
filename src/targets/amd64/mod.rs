@@ -10,7 +10,16 @@ pub mod register;
 mod register_class_selector;
 mod sysv_calling_convention;
 
-use crate::mir::{self, Operand};
+use crate::{
+    mir::{
+        self, BasicBlockPatch, Instruction, InstructionIdx, Operand, PhysicalRegister,
+        RegisterRole, StackFrameIdx,
+    },
+    targets::amd64::{
+        address_mode::{AddressMode, Base},
+        opcode::{get_load_op, get_store_op},
+    },
+};
 use abi::SysVAmd64;
 pub use asm_printer::AsmPrinter;
 use derive_more::Display;
@@ -220,5 +229,57 @@ impl super::Target for Target {
 
     fn abi(&self) -> &Self::Abi {
         &self.abi
+    }
+
+    fn store_reg_to_stack_slot(
+        &self,
+        patch: &mut BasicBlockPatch,
+        idx: InstructionIdx,
+        r: PhysicalRegister,
+        frame_idx: StackFrameIdx,
+        size: usize,
+    ) {
+        let address_mode = AddressMode {
+            base: Base::Frame(frame_idx),
+            index: None,
+            scale: None,
+            displacement: None,
+        };
+        let mut operands = vec![Operand::Register(
+            mir::Register::Physical(r),
+            RegisterRole::Use,
+        )];
+
+        address_mode.write(&mut operands, 0);
+        patch.add_instruction(
+            idx,
+            Instruction::new(get_store_op(size) as mir::Opcode, operands),
+        );
+    }
+
+    fn load_reg_from_stack_slot(
+        &self,
+        patch: &mut BasicBlockPatch,
+        idx: InstructionIdx,
+        r: PhysicalRegister,
+        frame_idx: StackFrameIdx,
+        size: usize,
+    ) {
+        let address_mode = AddressMode {
+            base: Base::Frame(frame_idx),
+            index: None,
+            scale: None,
+            displacement: None,
+        };
+        let mut operands = vec![Operand::Register(
+            mir::Register::Physical(r),
+            RegisterRole::Use,
+        )];
+
+        address_mode.write(&mut operands, 1);
+        patch.add_instruction(
+            idx,
+            Instruction::new(get_load_op(size) as mir::Opcode, operands),
+        );
     }
 }

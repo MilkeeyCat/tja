@@ -180,6 +180,7 @@ impl label {
 
 macro_rules! opcodes {
     ($($variant: ident = $asm: literal, ($($var: ident = $class: ty),*);)+) => {
+        #[derive(Debug)]
         #[repr(usize)]
         pub enum Opcode {
             _Dummy = GenericOpcode::Num as usize - 1,
@@ -334,4 +335,24 @@ opcodes! {
 
     Leave = "leave", ();
     Ret = "ret", ();
+}
+
+pub fn get_load_op(size: usize) -> Opcode {
+    match size {
+        1 => super::Opcode::Mov8rm,
+        2 => super::Opcode::Mov16rm,
+        4 => super::Opcode::Mov32rm,
+        8 => super::Opcode::Mov64rm,
+        _ => unreachable!(),
+    }
+}
+
+pub fn get_store_op(size: usize) -> Opcode {
+    match size {
+        1 => super::Opcode::Mov8mr,
+        2 => super::Opcode::Mov16mr,
+        4 => super::Opcode::Mov32mr,
+        8 => super::Opcode::Mov64mr,
+        _ => unreachable!(),
+    }
 }

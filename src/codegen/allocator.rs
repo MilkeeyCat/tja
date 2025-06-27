@@ -1,10 +1,11 @@
 use crate::{
+    hir::ty,
     mir::{
-        self, Operand, Register, RegisterRole, StackFrameIdx, VregIdx,
+        self, BasicBlockPatch, Operand, Register, RegisterRole, StackFrameIdx, VregIdx,
         function::Value,
         interference_graph::{InterferenceGraph, NodeId},
     },
-    targets::RegisterInfo,
+    targets::{Abi, RegisterInfo, Target},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -15,21 +16,17 @@ pub enum Location {
 }
 
 /// A weird looking graph coloring by simplification register allocator
-struct Allocator<'a, 'mir, 'hir, RI: RegisterInfo> {
-    register_info: &'a RI,
+struct Allocator<'a, 'hir, T: Target> {
+    target: &'a T,
     locations: HashMap<(VregIdx, usize), Location>,
     spill_mode: bool,
-    function: &'mir mut mir::Function<'hir>,
+    function: &'a mut mir::Function<'hir>,
 }
 
-impl<'a, 'mir, 'hir, RI: RegisterInfo> Allocator<'a, 'mir, 'hir, RI> {
-    fn new(
-        register_info: &'a RI,
-        spill_mode: bool,
-        function: &'mir mut mir::Function<'hir>,
-    ) -> Self {
+impl<'a, 'hir, T: Target> Allocator<'a, 'hir, T> {
+    fn new(target: &'a T, spill_mode: bool, function: &'a mut mir::Function<'hir>) -> Self {
         Self {
-            register_info,
+            target,
             locations: HashMap::new(),
             spill_mode,
             function,
@@ -47,8 +44,11 @@ impl<'a, 'mir, 'hir, RI: RegisterInfo> Allocator<'a, 'mir, 'hir, RI> {
         };
 
         for r in self
-            .register_info
+            .target
+            .register_info()
             .get_registers_by_class(&self.function.vreg_classes[&vreg_idx])
+            .iter()
+            .skip(self.spill_mode as usize)
         {
             let mut found = true;
 
@@ -56,7 +56,7 @@ impl<'a, 'mir, 'hir, RI: RegisterInfo> Allocator<'a, 'mir, 'hir, RI> {
                 match graph.get_node(*neighbor) {
                     Value::Virtual(idx, def_idx) => {
                         if let Location::Register(neighbor_r) = &self.locations[&(*idx, *def_idx)] {
-                            if self.register_info.overlaps(r, neighbor_r) {
+                            if self.target.register_info().overlaps(r, neighbor_r) {
                                 found = false;
 
                                 break;
@@ -64,7 +64,7 @@ impl<'a, 'mir, 'hir, RI: RegisterInfo> Allocator<'a, 'mir, 'hir, RI> {
                         }
                     }
                     Value::Physical(neighbor_r) => {
-                        if self.register_info.overlaps(r, neighbor_r) {
+                        if self.target.register_info().overlaps(r, neighbor_r) {
                             found = false;
 
                             break;
@@ -96,12 +96,13 @@ fn max(graph: &InterferenceGraph, nodes_ids: &[NodeId]) -> Option<NodeId> {
         .cloned()
 }
 
-pub fn allocate<RI: RegisterInfo>(
-    register_info: &RI,
+pub fn allocate<T: Target>(
+    target: &T,
     spill_mode: bool,
     function: &mut mir::Function,
+    ty_storage: &ty::Storage,
 ) {
-    let mut allocator = Allocator::new(register_info, spill_mode, function);
+    let mut allocator = Allocator::new(target, spill_mode, function);
     let (mut graph, mut node_ids) = allocator.function.interference();
     let mut stack: Vec<((VregIdx, usize), NodeId, HashSet<NodeId>)> = Vec::new();
     let mut redo = false;
@@ -114,7 +115,8 @@ pub fn allocate<RI: RegisterInfo>(
         };
         let node_id = if neighbors_count
             < allocator
-                .register_info
+                .target
+                .register_info()
                 .get_registers_by_class(&allocator.function.vreg_classes[vreg_idx])
                 .len()
         {
@@ -151,6 +153,13 @@ pub fn allocate<RI: RegisterInfo>(
             if allocator.spill_mode {
                 let idx = allocator.function.next_stack_frame_idx;
                 allocator.function.next_stack_frame_idx += 1;
+                allocator.function.stack_slots.insert(
+                    idx,
+                    allocator
+                        .target
+                        .abi()
+                        .ty_size(ty_storage, allocator.function.vreg_types[&vreg_idx]),
+                );
 
                 allocator
                     .locations
@@ -164,13 +173,15 @@ pub fn allocate<RI: RegisterInfo>(
     }
 
     if redo {
-        allocate(register_info, allocator.spill_mode, function)
+        allocate(target, allocator.spill_mode, function, ty_storage)
     } else {
         let locations = allocator.locations;
         let mut vregs_occurences: HashMap<VregIdx, usize> = HashMap::new();
 
         for bb in &mut function.blocks {
-            for instr in &mut bb.instructions {
+            let mut patch = BasicBlockPatch::new();
+
+            for (instr_idx, instr) in bb.instructions.iter_mut().enumerate() {
                 for operand in &mut instr.operands {
                     if let Operand::Register(Register::Virtual(idx), role) = operand {
                         let def_idx = vregs_occurences
@@ -186,11 +197,31 @@ pub fn allocate<RI: RegisterInfo>(
                             Location::Register(r) => {
                                 *operand = Operand::Register(Register::Physical(r), role.clone());
                             }
-                            Location::Spill(_stack_frame_idx) => unimplemented!(),
+                            Location::Spill(frame_idx) => {
+                                let r = target
+                                    .register_info()
+                                    .get_registers_by_class(&function.vreg_classes[idx])[0];
+                                let size =
+                                    target.abi().ty_size(ty_storage, function.vreg_types[idx]);
+
+                                target.load_reg_from_stack_slot(
+                                    &mut patch, instr_idx, r, frame_idx, size,
+                                );
+                                *operand = Operand::Register(Register::Physical(r), role.clone());
+                                target.store_reg_to_stack_slot(
+                                    &mut patch,
+                                    instr_idx + 1,
+                                    r,
+                                    frame_idx,
+                                    size,
+                                );
+                            }
                         };
                     }
                 }
             }
+
+            patch.apply(bb);
         }
     }
 }

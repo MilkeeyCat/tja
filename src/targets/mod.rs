@@ -2,7 +2,9 @@ pub mod amd64;
 
 use crate::hir::ty::{Storage, TyIdx};
 use crate::lowering::FnLowering;
-use crate::mir::{PhysicalRegister, RegisterClass, VregIdx};
+use crate::mir::{
+    BasicBlockPatch, InstructionIdx, PhysicalRegister, RegisterClass, StackFrameIdx, VregIdx,
+};
 
 pub trait RegisterInfo {
     fn get_registers_by_class(&self, class: &RegisterClass) -> &[PhysicalRegister];
@@ -17,6 +19,23 @@ pub trait Target {
 
     fn abi(&self) -> &Self::Abi;
     fn register_info(&self) -> &Self::RegisterInfo;
+
+    fn store_reg_to_stack_slot(
+        &self,
+        patch: &mut BasicBlockPatch,
+        idx: InstructionIdx,
+        r: PhysicalRegister,
+        frame_idx: StackFrameIdx,
+        size: usize,
+    );
+    fn load_reg_from_stack_slot(
+        &self,
+        patch: &mut BasicBlockPatch,
+        idx: InstructionIdx,
+        r: PhysicalRegister,
+        frame_idx: StackFrameIdx,
+        size: usize,
+    );
 }
 
 pub trait CallingConvention {

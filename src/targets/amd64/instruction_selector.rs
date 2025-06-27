@@ -4,7 +4,10 @@ use crate::{
     mir::{GenericOpcode, Mir, Opcode, Operand},
     targets::{
         Abi,
-        amd64::address_mode::{AddressMode, Base},
+        amd64::{
+            address_mode::{AddressMode, Base},
+            opcode::{get_load_op, get_store_op},
+        },
     },
 };
 
@@ -109,15 +112,8 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                     scale: None,
                                     displacement: None,
                                 };
-                                let opcode = match size {
-                                    1 => super::Opcode::Mov8rm,
-                                    2 => super::Opcode::Mov16rm,
-                                    4 => super::Opcode::Mov32rm,
-                                    8 => super::Opcode::Mov64rm,
-                                    _ => unreachable!(),
-                                };
 
-                                instr.opcode = opcode as Opcode;
+                                instr.opcode = get_load_op(size) as Opcode;
                                 instr.operands.remove(1);
                                 address_mode.write(&mut instr.operands, 1);
                             }
@@ -134,15 +130,8 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                     scale: None,
                                     displacement: None,
                                 };
-                                let opcode = match size {
-                                    1 => super::Opcode::Mov8mr,
-                                    2 => super::Opcode::Mov16mr,
-                                    4 => super::Opcode::Mov32mr,
-                                    8 => super::Opcode::Mov64mr,
-                                    _ => unreachable!(),
-                                };
 
-                                instr.opcode = opcode as Opcode;
+                                instr.opcode = get_store_op(size) as Opcode;
                                 instr.operands.remove(1);
                                 address_mode.write(&mut instr.operands, 0);
                             }
