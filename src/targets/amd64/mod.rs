@@ -1,6 +1,7 @@
 mod abi;
 mod address_mode;
 mod asm_printer;
+pub mod emit_binary;
 mod instruction_selector;
 mod lower_stack_slots;
 mod materialize_copy;
