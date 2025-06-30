@@ -14,7 +14,7 @@ pub enum Base {
 pub struct AddressMode {
     pub base: Base,
     pub index: Option<PhysicalRegister>,
-    pub scale: Option<usize>,
+    pub scale: usize,
     pub displacement: Option<isize>,
 }
 
@@ -36,7 +36,8 @@ impl AddressMode {
             None => operands.insert(idx + 1, Operand::Immediate(0)),
         }
 
-        operands.insert(idx + 2, Operand::Immediate(self.scale.unwrap_or(0) as u64));
+        assert!(self.scale == 1 || self.scale == 2 || self.scale == 4 || self.scale == 8);
+        operands.insert(idx + 2, Operand::Immediate(self.scale as u64));
         operands.insert(
             idx + 3,
             Operand::Immediate(self.displacement.unwrap_or(0) as u64),

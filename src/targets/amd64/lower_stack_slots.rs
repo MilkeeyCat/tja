@@ -24,7 +24,7 @@ pub fn lower_stack_slots(func: &mut Function) {
                                             super::Register::Rbp as PhysicalRegister,
                                         )),
                                         index: None,
-                                        scale: None,
+                                        scale: 1,
                                         displacement: Some(-stack_offset),
                                     }
                                 })

@@ -49,7 +49,7 @@ fn memory<T: Target, W: Write>(
                 _ => unreachable!(),
             };
 
-            if *scale > 0 {
+            if *scale > 1 {
                 write!(&mut result, "* {}", *scale)?;
             }
 

@@ -71,7 +71,7 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                         _ => unreachable!(),
                                     },
                                     index: None,
-                                    scale: None,
+                                    scale: 1,
                                     displacement: None,
                                 };
 
@@ -90,7 +90,7 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                         _ => unreachable!(),
                                     },
                                     index: None,
-                                    scale: None,
+                                    scale: 1,
                                     displacement: Some(displacement as isize),
                                 };
 
@@ -109,7 +109,7 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                         _ => unreachable!(),
                                     },
                                     index: None,
-                                    scale: None,
+                                    scale: 1,
                                     displacement: None,
                                 };
 
@@ -127,7 +127,7 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                         _ => unreachable!(),
                                     },
                                     index: None,
-                                    scale: None,
+                                    scale: 1,
                                     displacement: None,
                                 };
 
@@ -146,7 +146,7 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                     let address_mode = AddressMode {
                                         base: Base::Function(idx),
                                         index: None,
-                                        scale: None,
+                                        scale: 1,
                                         displacement: None,
                                     };
 

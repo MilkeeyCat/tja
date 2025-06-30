@@ -243,7 +243,7 @@ impl super::Target for Target {
         let address_mode = AddressMode {
             base: Base::Frame(frame_idx),
             index: None,
-            scale: None,
+            scale: 1,
             displacement: None,
         };
         let mut operands = vec![Operand::Register(
@@ -269,7 +269,7 @@ impl super::Target for Target {
         let address_mode = AddressMode {
             base: Base::Frame(frame_idx),
             index: None,
-            scale: None,
+            scale: 1,
             displacement: None,
         };
         let mut operands = vec![Operand::Register(

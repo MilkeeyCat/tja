@@ -122,7 +122,7 @@ impl CallingConvention for SysVAmd64 {
                             Register::Rdi as PhysicalRegister,
                         )),
                         index: None,
-                        scale: None,
+                        scale: 1,
                         displacement: None,
                     };
                     let mut operands = vec![mir::Operand::Register(
@@ -286,7 +286,7 @@ impl CallingConvention for SysVAmd64 {
                                 Register::Rbp as PhysicalRegister,
                             )),
                             index: None,
-                            scale: None,
+                            scale: 1,
                             displacement: Some(16), // return address & rbp
                         };
                         let mut operands = vec![mir::Operand::Register(
@@ -660,7 +660,7 @@ impl CallingConvention for SysVAmd64 {
                             Register::Rdi as PhysicalRegister,
                         )),
                         index: None,
-                        scale: None,
+                        scale: 1,
                         displacement: None,
                     };
                     let mut operands = vec![mir::Operand::Register(
