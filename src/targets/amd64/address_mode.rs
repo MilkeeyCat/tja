@@ -1,6 +1,6 @@
 use crate::{
     hir::FunctionIdx,
-    mir::{Operand, PhysicalRegister, Register, RegisterRole, StackFrameIdx},
+    mir::{Operand, Register, RegisterRole, StackFrameIdx},
 };
 
 #[derive(Clone, Debug)]
@@ -13,7 +13,7 @@ pub enum Base {
 #[derive(Clone, Debug)]
 pub struct AddressMode {
     pub base: Base,
-    pub index: Option<PhysicalRegister>,
+    pub index: Option<Register>,
     pub scale: usize,
     pub displacement: Option<isize>,
 }
@@ -29,10 +29,7 @@ impl AddressMode {
         operands.insert(idx, base);
 
         match self.index {
-            Some(r) => operands.insert(
-                idx + 1,
-                Operand::Register(Register::Physical(r), RegisterRole::Use),
-            ),
+            Some(r) => operands.insert(idx + 1, Operand::Register(r, RegisterRole::Use)),
             None => operands.insert(idx + 1, Operand::Immediate(0)),
         }
 

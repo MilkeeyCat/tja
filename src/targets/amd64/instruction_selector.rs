@@ -1,7 +1,7 @@
 use super::OperandKind;
 use crate::{
     hir::ty,
-    mir::{GenericOpcode, Mir, Opcode, Operand},
+    mir::{GenericOpcode, Mir, Opcode, Operand, RegisterRole},
     targets::{
         Abi,
         amd64::{
@@ -80,18 +80,24 @@ pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Stor
                                 address_mode.write(&mut instr.operands, 1);
                             }
                             GenericOpcode::PtrAdd => {
-                                let displacement = match &instr.operands[2] {
-                                    Operand::Immediate(value) => *value,
+                                let base = match &instr.operands[1] {
+                                    Operand::Register(r, _) => Base::Register(r.clone()),
                                     _ => unreachable!(),
                                 };
-                                let address_mode = AddressMode {
-                                    base: match &instr.operands[1] {
-                                        Operand::Register(r, _) => Base::Register(r.clone()),
-                                        _ => unreachable!(),
+                                let address_mode = match &instr.operands[2] {
+                                    Operand::Immediate(offset) => AddressMode {
+                                        base: base,
+                                        index: None,
+                                        scale: 1,
+                                        displacement: Some(*offset as isize),
                                     },
-                                    index: None,
-                                    scale: 1,
-                                    displacement: Some(displacement as isize),
+                                    Operand::Register(r, RegisterRole::Use) => AddressMode {
+                                        base: base,
+                                        index: Some(r.clone()),
+                                        scale: 1,
+                                        displacement: None,
+                                    },
+                                    _ => unreachable!(),
                                 };
 
                                 instr.opcode = super::Opcode::Lea64 as Opcode;
