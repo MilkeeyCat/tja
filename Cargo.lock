@@ -24,12 +24,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "impl_ops"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90f97a5f38dd3ccfbe7aa80f4a0c00930f21b922c74195be0201c51028f22dcf"
-
-[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,7 +63,6 @@ name = "tja"
 version = "0.1.0"
 dependencies = [
  "derive_more",
- "impl_ops",
  "paste",
 ]
 
