@@ -1,4 +1,5 @@
 use crate::{
+    hir::FunctionIdx,
     mir::{Function, Module},
     targets::{Target, amd64::Opcode},
 };
@@ -15,26 +16,34 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
     }
 
     pub fn emit(mut self, module: &Module) -> Result<(), std::fmt::Error> {
-        for func in &module.functions {
-            self.emit_fn(func, module)?;
+        for (idx, func) in module.functions.iter().enumerate() {
+            self.emit_fn(func, idx, module)?;
         }
 
         Ok(())
     }
 
-    fn emit_fn(&mut self, func: &Function, module: &Module) -> Result<(), std::fmt::Error> {
+    fn emit_fn(
+        &mut self,
+        func: &Function,
+        fn_idx: FunctionIdx,
+        module: &Module,
+    ) -> Result<(), std::fmt::Error> {
         write!(self.buf, ".global {}\n", func.name)?;
         write!(self.buf, "{}:\n", func.name)?;
 
-        for (idx, bb) in func.blocks.iter().enumerate() {
-            write!(self.buf, ".L{idx}:\n")?;
+        for (bb_idx, bb) in func.blocks.iter().enumerate() {
+            write!(self.buf, ".L{fn_idx}_{bb_idx}:\n")?;
 
             for instr in &bb.instructions {
                 write!(self.buf, "\t")?;
 
-                Opcode::from(instr.opcode)
-                    .write_instruction(self, module, &instr.operands)
-                    .unwrap();
+                Opcode::from(instr.opcode).write_instruction(
+                    self,
+                    module,
+                    fn_idx,
+                    &instr.operands,
+                )?;
 
                 write!(self.buf, "\n")?;
             }

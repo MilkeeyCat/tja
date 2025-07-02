@@ -1,5 +1,6 @@
 use super::{AsmPrinter, Condition};
 use crate::{
+    hir::FunctionIdx,
     mir::{GenericOpcode, Module, Operand, Register},
     targets::{RegisterInfo, Target},
 };
@@ -81,6 +82,7 @@ impl r8 {
     fn from_operands<T: Target, W: Write>(
         printer: &AsmPrinter<T, W>,
         _module: &Module,
+        _fn_idx: FunctionIdx,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         register(printer, operands)
@@ -107,6 +109,7 @@ macro_rules! mem_operand {
             fn from_operands<T: Target, W: Write>(
                 printer: &AsmPrinter<T, W>,
                 module: &Module,
+                _fn_idx: FunctionIdx,
                 operands: &[Operand],
             ) -> Result<String, std::fmt::Error> {
                 Ok(format!(
@@ -133,6 +136,7 @@ impl ccode {
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
         _module: &Module,
+        _fn_idx: FunctionIdx,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
@@ -151,6 +155,7 @@ impl imm {
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
         _module: &Module,
+        _fn_idx: FunctionIdx,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
@@ -169,10 +174,11 @@ impl label {
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
         _module: &Module,
+        fn_idx: FunctionIdx,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
-            [Operand::Block(idx)] => Ok(format!(".L{idx}")),
+            [Operand::Block(idx)] => Ok(format!(".L{fn_idx}_{idx}")),
             _ => unreachable!(),
         }
     }
@@ -192,7 +198,13 @@ macro_rules! opcodes {
         }
 
         impl Opcode {
-            pub fn write_instruction<T: Target, W: Write>(&self, printer: &mut AsmPrinter<T, W>, module: &Module, operands: &[Operand]) -> std::fmt::Result {
+            pub fn write_instruction<T: Target, W: Write>(
+                &self,
+                printer: &mut AsmPrinter<T, W>,
+                module: &Module,
+                fn_idx: FunctionIdx,
+                operands: &[Operand],
+            ) -> Result<(), std::fmt::Error> {
                 match self {
                     Self::_Dummy => unreachable!(),
                     $(
@@ -201,7 +213,12 @@ macro_rules! opcodes {
                             #[allow(unused_variables)]
                             let mut start = 0;
                             $(
-                                let $var = <$class>::from_operands(printer, module, &operands[start..start+<$class>::MIR_LENGTH])?;
+                                let $var = <$class>::from_operands(
+                                    printer,
+                                    module,
+                                    fn_idx,
+                                    &operands[start..start+<$class>::MIR_LENGTH],
+                                )?;
                                 #[allow(unused_assignments)]
                                 {
                                     start += <$class>::MIR_LENGTH;
