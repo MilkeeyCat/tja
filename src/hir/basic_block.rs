@@ -85,15 +85,6 @@ impl<'ctx> Wrapper<'ctx> {
         Operand::Local(idx)
     }
 
-    pub fn create_copy(&mut self, operand: Operand) -> Operand {
-        let idx = self.create_local(operand.ty(self));
-        self.block
-            .instructions
-            .push(Instruction::Copy { operand, out: idx });
-
-        Operand::Local(idx)
-    }
-
     pub fn create_alloca(&mut self, ty: TyIdx) -> Operand {
         let idx = self.create_local(self.ty_storage.ptr_ty);
         self.block

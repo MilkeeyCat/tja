@@ -112,10 +112,6 @@ pub enum Instruction {
         operand: Operand,
         out: LocalIdx,
     },
-    Copy {
-        operand: Operand,
-        out: LocalIdx,
-    },
     Alloca {
         ty: TyIdx,
         out: LocalIdx,
@@ -151,7 +147,6 @@ impl Instruction {
     pub fn def(&self) -> Option<LocalIdx> {
         match self {
             Self::Binary { out, .. } => Some(*out),
-            Self::Copy { out, .. } => Some(*out),
             Self::Sext { out, .. } => Some(*out),
             Self::Zext { out, .. } => Some(*out),
             Self::Alloca { out, .. } => Some(*out),
@@ -166,7 +161,6 @@ impl Instruction {
     pub fn uses(&self) -> HashSet<LocalIdx> {
         match self {
             Self::Binary { lhs, rhs, .. } => vec![lhs.local_idx(), rhs.local_idx()],
-            Self::Copy { operand, .. } => vec![operand.local_idx()],
             Self::Sext { operand, .. } => vec![operand.local_idx()],
             Self::Zext { operand, .. } => vec![operand.local_idx()],
             Self::Alloca { .. } => Vec::new(),
