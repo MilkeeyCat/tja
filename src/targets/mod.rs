@@ -58,8 +58,7 @@ pub trait CallingConvention {
         callee_vreg_idx: VregIdx,
         arg_vreg_indices: Vec<Vec<VregIdx>>,
         arg_tys: Vec<TyIdx>,
-        ret_vreg_indices: Vec<VregIdx>,
-        ret_ty: TyIdx,
+        ret: Option<(Vec<VregIdx>, TyIdx)>,
     );
 }
 

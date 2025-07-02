@@ -365,21 +365,19 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                     .map(|operand| self.get_or_create_vregs(operand.clone()).to_vec())
                     .collect();
                 let arg_tys = arguments.iter().map(|operand| operand.ty(self)).collect();
-                let ret_vreg_indices = out
-                    .map(|out| self.get_or_create_vregs(hir::Operand::Local(out)))
-                    .unwrap_or_default()
-                    .to_vec();
-                let ret_ty = out
-                    .map(|out| self.hir_function.locals[out])
-                    .unwrap_or_else(|| self.ty_storage.void_ty);
+                let ret = out.map(|out| {
+                    (
+                        self.get_or_create_vregs(hir::Operand::Local(out)).to_vec(),
+                        self.hir_function.locals[out],
+                    )
+                });
 
                 self.abi.calling_convention().lower_call(
                     self,
                     callee_vreg_idx,
                     arg_vreg_indices,
                     arg_tys,
-                    ret_vreg_indices,
-                    ret_ty,
+                    ret,
                 );
             }
             _ => todo!(),
