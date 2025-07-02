@@ -213,17 +213,12 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                 let offsets = self.ty_to_offsets[&value.ty(self)].to_vec();
 
                 for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
-                    let ptr_add = self.create_vreg(self.ty_storage.ptr_ty);
+                    let ptr_add = self.ptr_add(
+                        mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
+                        mir::Operand::Immediate(offset as u64),
+                    );
                     let bb = self.get_basic_block();
 
-                    bb.instructions.push(mir::Instruction::new(
-                        GenericOpcode::PtrAdd as Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Def),
-                            mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
-                            mir::Operand::Immediate(offset as u64),
-                        ],
-                    ));
                     bb.instructions.push(mir::Instruction::new(
                         GenericOpcode::Store as Opcode,
                         vec![
@@ -239,17 +234,12 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                 let offsets = self.ty_to_offsets[&self.hir_function.locals[*out]].to_vec();
 
                 for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
-                    let ptr_add = self.create_vreg(self.ty_storage.ptr_ty);
+                    let ptr_add = self.ptr_add(
+                        mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
+                        mir::Operand::Immediate(offset as u64),
+                    );
                     let bb = self.get_basic_block();
 
-                    bb.instructions.push(mir::Instruction::new(
-                        GenericOpcode::PtrAdd as Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Def),
-                            mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
-                            mir::Operand::Immediate(offset as u64),
-                        ],
-                    ));
                     bb.instructions.push(mir::Instruction::new(
                         GenericOpcode::Load as Opcode,
                         vec![
@@ -258,6 +248,111 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                         ],
                     ));
                 }
+            }
+            hir::Instruction::GetElementPtr {
+                ptr,
+                ptr_ty,
+                indices,
+                out,
+            } => {
+                let mut ty = *ptr_ty;
+                let mut offset = 0;
+                let mut base = self.get_or_create_vreg(ptr.clone());
+
+                for (i, idx) in indices.iter().enumerate() {
+                    match self.ty_storage.get_ty(ty) {
+                        Ty::Struct(fields) if i > 0 => {
+                            let idx = match idx {
+                                hir::Operand::Const(Const::Int(idx), _) => *idx as usize,
+                                _ => unreachable!(),
+                            };
+
+                            ty = fields[idx];
+                            offset += self.abi.field_offset(self.ty_storage, fields, idx);
+                        }
+                        _ => {
+                            let size = self.abi.ty_size(self.ty_storage, ty);
+
+                            match idx {
+                                hir::Operand::Local(_) => {
+                                    if offset != 0 {
+                                        base = self.ptr_add(
+                                            mir::Operand::Register(
+                                                Register::Virtual(base),
+                                                RegisterRole::Use,
+                                            ),
+                                            mir::Operand::Immediate(offset as u64),
+                                        );
+                                        offset = 0;
+                                    }
+
+                                    let vreg_idx = if size == 1 {
+                                        self.get_or_create_vreg(idx.clone())
+                                    } else {
+                                        let def_vreg_idx = self.create_vreg(self.ty_storage.ptr_ty);
+                                        let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
+
+                                        self.get_basic_block().instructions.push(
+                                            mir::Instruction::new(
+                                                GenericOpcode::Mul as Opcode,
+                                                vec![
+                                                    mir::Operand::Register(
+                                                        Register::Virtual(def_vreg_idx),
+                                                        RegisterRole::Def,
+                                                    ),
+                                                    mir::Operand::Register(
+                                                        Register::Virtual(lhs_vreg_idx),
+                                                        RegisterRole::Use,
+                                                    ),
+                                                    mir::Operand::Immediate(size as u64),
+                                                ],
+                                            ),
+                                        );
+
+                                        def_vreg_idx
+                                    };
+
+                                    base = self.ptr_add(
+                                        mir::Operand::Register(
+                                            Register::Virtual(base),
+                                            RegisterRole::Use,
+                                        ),
+                                        mir::Operand::Register(
+                                            Register::Virtual(vreg_idx),
+                                            RegisterRole::Use,
+                                        ),
+                                    );
+                                }
+                                hir::Operand::Const(hir::Const::Int(value), _) => {
+                                    offset += size * (*value as usize);
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                    }
+                }
+
+                if offset != 0 {
+                    base = self.ptr_add(
+                        mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
+                        mir::Operand::Immediate(offset as u64),
+                    );
+                }
+
+                let def_vreg_idx = self.get_or_create_vreg(hir::Operand::Local(*out));
+
+                self.get_basic_block()
+                    .instructions
+                    .push(mir::Instruction::new(
+                        GenericOpcode::Copy as Opcode,
+                        vec![
+                            mir::Operand::Register(
+                                Register::Virtual(def_vreg_idx),
+                                RegisterRole::Def,
+                            ),
+                            mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
+                        ],
+                    ));
             }
             hir::Instruction::Call {
                 operand,
@@ -325,6 +420,27 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                 }
             },
         }
+    }
+
+    fn ptr_add(&mut self, base: mir::Operand, offset: mir::Operand) -> mir::VregIdx {
+        assert!(matches!(
+            offset,
+            mir::Operand::Register(_, _) | mir::Operand::Immediate(_)
+        ));
+        let vreg_idx = self.create_vreg(self.ty_storage.ptr_ty);
+
+        self.get_basic_block()
+            .instructions
+            .push(mir::Instruction::new(
+                GenericOpcode::PtrAdd as Opcode,
+                vec![
+                    mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def),
+                    base,
+                    offset,
+                ],
+            ));
+
+        vreg_idx
     }
 }
 
