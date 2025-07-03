@@ -104,18 +104,29 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Aggregate(consts) => {
-                    let tys = match self.ty_storage.get_ty(*ty) {
-                        Ty::Struct(tys) => tys,
+                    match self.ty_storage.get_ty(*ty) {
+                        Ty::Struct(tys) => {
+                            assert_eq!(consts.len(), tys.len());
+
+                            for (c, ty) in consts.iter().zip(tys) {
+                                let tmp =
+                                    self.get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
+
+                                vreg_indices.extend_from_slice(tmp);
+                            }
+                        }
+                        Ty::Array { ty, len } => {
+                            assert_eq!(consts.len(), *len);
+
+                            for c in consts.iter() {
+                                let tmp =
+                                    self.get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
+
+                                vreg_indices.extend_from_slice(tmp);
+                            }
+                        }
                         _ => unreachable!(),
                     };
-
-                    assert_eq!(consts.len(), tys.len());
-
-                    for (c, ty) in consts.iter().zip(tys) {
-                        let tmp = self.get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
-
-                        vreg_indices.extend_from_slice(tmp);
-                    }
                 }
             },
         }
@@ -139,6 +150,16 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                 for (i, &ty) in tys.iter().enumerate() {
                     let field_offset = self.abi.field_offset(self.ty_storage, &tys, i);
                     self.lower_ty(ty, types, offsets, offset + field_offset);
+                }
+            }
+            Ty::Array { ty, len } => {
+                for i in 0..*len {
+                    self.lower_ty(
+                        *ty,
+                        types,
+                        offsets,
+                        offset + (self.abi.ty_size(self.ty_storage, *ty) * i),
+                    );
                 }
             }
             _ => {
@@ -255,23 +276,28 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
                 indices,
                 out,
             } => {
-                let mut ty = *ptr_ty;
+                let mut ty_idx = *ptr_ty;
                 let mut offset = 0;
                 let mut base = self.get_or_create_vreg(ptr.clone());
 
                 for (i, idx) in indices.iter().enumerate() {
-                    match self.ty_storage.get_ty(ty) {
+                    match self.ty_storage.get_ty(ty_idx) {
                         Ty::Struct(fields) if i > 0 => {
                             let idx = match idx {
                                 hir::Operand::Const(Const::Int(idx), _) => *idx as usize,
                                 _ => unreachable!(),
                             };
 
-                            ty = fields[idx];
+                            ty_idx = fields[idx];
                             offset += self.abi.field_offset(self.ty_storage, fields, idx);
                         }
-                        _ => {
-                            let size = self.abi.ty_size(self.ty_storage, ty);
+                        ty => {
+                            let size = match ty {
+                                Ty::Array { ty, .. } if i > 0 => {
+                                    self.abi.ty_size(self.ty_storage, *ty)
+                                }
+                                _ => self.abi.ty_size(self.ty_storage, ty_idx),
+                            };
 
                             match idx {
                                 hir::Operand::Local(_) => {

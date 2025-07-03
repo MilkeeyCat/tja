@@ -53,6 +53,17 @@ impl SysVAmd64 {
                     );
                 }
             }
+            Ty::Array { ty, len } => {
+                for i in 0..*len {
+                    self.classify(
+                        abi,
+                        ty_storage,
+                        *ty,
+                        abi.ty_size(ty_storage, *ty) * i,
+                        eightbytes,
+                    );
+                }
+            }
         };
     }
 

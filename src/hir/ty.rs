@@ -9,6 +9,7 @@ pub enum Ty {
     I64,
     Ptr,
     Struct(Vec<TyIdx>),
+    Array { ty: TyIdx, len: usize },
 }
 
 impl Ty {
@@ -20,7 +21,7 @@ impl Ty {
             Self::I32 => 4,
             Self::I64 | Self::Ptr => 8,
             // aggregate types size is determined by abi
-            Self::Struct(_) => unreachable!(),
+            Self::Struct(_) | Self::Array { .. } => unreachable!(),
         }
     }
 }

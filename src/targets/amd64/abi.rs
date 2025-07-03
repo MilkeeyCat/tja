@@ -40,6 +40,7 @@ impl Abi for SysVAmd64 {
                     .next_multiple_of(self.alignment(storage, ty))
                 }
             }
+            Ty::Array { ty, len } => self.ty_size(storage, *ty) * len,
             _ => storage.get_ty(ty).size(),
         }
     }

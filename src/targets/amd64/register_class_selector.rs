@@ -19,8 +19,10 @@ pub fn select_register_class(mir: &mut Mir, ty_storage: &ty::Storage) {
                                     Ty::I32 => RegisterClass::Gpr32,
                                     Ty::I64 => RegisterClass::Gpr64,
                                     Ty::Ptr => RegisterClass::Gpr64,
-                                    Ty::Struct(_) => {
-                                        unreachable!("struct type should've been already lowered")
+                                    Ty::Struct(_) | Ty::Array { .. } => {
+                                        unreachable!(
+                                            "aggregate type should've been already lowered"
+                                        )
                                     }
                                 };
 
