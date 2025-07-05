@@ -12,6 +12,7 @@ mod register_class_selector;
 mod sysv_calling_convention;
 
 use crate::{
+    hir,
     mir::{
         self, BasicBlockPatch, Instruction, InstructionIdx, Operand, PhysicalRegister,
         RegisterRole, StackFrameIdx,
@@ -217,6 +218,10 @@ impl Target {
             register_info: RegisterInfo::new(),
             abi: SysVAmd64::new(),
         }
+    }
+
+    pub fn add_hir_passes(&self, pass_manager: &mut hir::pass::ModulePassManager<'_, Self>) {
+        pass_manager.add_pass::<hir::passes::lower::LowerFunctionToModuleAdaptor>();
     }
 }
 

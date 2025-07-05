@@ -2,6 +2,8 @@ pub mod basic_block;
 mod function;
 mod module;
 pub mod op;
+pub mod pass;
+pub mod passes;
 pub mod ty;
 
 pub use basic_block::{BasicBlock, BlockIdx};

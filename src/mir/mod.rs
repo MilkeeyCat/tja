@@ -1,6 +1,7 @@
 pub mod function;
 pub mod interference_graph;
 mod opcode;
+pub mod pass;
 pub mod passes;
 
 use crate::hir::{self, FunctionIdx};

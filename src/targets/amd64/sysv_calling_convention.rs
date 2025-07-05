@@ -1,6 +1,8 @@
 use crate::{
-    hir::ty::{self, Ty, TyIdx},
-    lowering::FnLowering,
+    hir::{
+        passes::lower::FnLowering,
+        ty::{self, Ty, TyIdx},
+    },
     mir::{self, GenericOpcode, Instruction, Operand, PhysicalRegister, RegisterRole, VregIdx},
     targets::{
         Abi, CallingConvention,

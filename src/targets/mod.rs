@@ -1,7 +1,7 @@
 pub mod amd64;
 
+use crate::hir::passes::lower::FnLowering;
 use crate::hir::ty::{Storage, TyIdx};
-use crate::lowering::FnLowering;
 use crate::mir::{
     BasicBlockPatch, InstructionIdx, PhysicalRegister, RegisterClass, StackFrameIdx, VregIdx,
 };
