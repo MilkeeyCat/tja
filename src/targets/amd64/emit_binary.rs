@@ -27,7 +27,7 @@ pub fn emit_binary<T: Target>(
     let printer = AsmPrinter::new(target, &mut buf);
     printer.emit(module)?;
 
-    let name = module.name;
+    let name = &module.name;
 
     if options.assembly_only {
         let asm_filename = PathBuf::from(&name).with_extension("s");

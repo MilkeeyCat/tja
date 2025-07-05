@@ -20,17 +20,17 @@ struct DefUseBlock {
 }
 
 #[derive(Debug)]
-pub struct Function<'hir> {
-    pub name: &'hir str,
+pub struct Function {
+    pub name: String,
     pub next_vreg_idx: VregIdx,
     pub vreg_classes: HashMap<VregIdx, RegisterClass>,
     pub vreg_types: HashMap<VregIdx, TyIdx>,
     pub next_stack_frame_idx: StackFrameIdx,
     pub stack_slots: HashMap<StackFrameIdx, usize>,
-    pub blocks: Vec<BasicBlock<'hir>>,
+    pub blocks: Vec<BasicBlock>,
 }
 
-impl Function<'_> {
+impl Function {
     fn defs_uses(&self) -> Vec<DefUseBlock> {
         let mut basic_block_to_def_use_block = HashMap::new();
         let mut blocks = Vec::new();

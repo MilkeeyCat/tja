@@ -16,15 +16,15 @@ pub enum Location {
 }
 
 /// A weird looking graph coloring by simplification register allocator
-struct Allocator<'a, 'hir, T: Target> {
+struct Allocator<'a, T: Target> {
     target: &'a T,
     locations: HashMap<(VregIdx, usize), Location>,
     spill_mode: bool,
-    function: &'a mut mir::Function<'hir>,
+    function: &'a mut mir::Function,
 }
 
-impl<'a, 'hir, T: Target> Allocator<'a, 'hir, T> {
-    fn new(target: &'a T, spill_mode: bool, function: &'a mut mir::Function<'hir>) -> Self {
+impl<'a, T: Target> Allocator<'a, T> {
+    fn new(target: &'a T, spill_mode: bool, function: &'a mut mir::Function) -> Self {
         Self {
             target,
             locations: HashMap::new(),

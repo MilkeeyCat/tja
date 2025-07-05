@@ -124,7 +124,7 @@ pub fn generate<T: Target>(
     module: &mut Module,
     target: &T,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let mut codegen = ModuleCodeGen::new(target, module.globals);
+    let mut codegen = ModuleCodeGen::new(target, &module.globals);
 
     //TODO: globals
 

@@ -1,6 +1,7 @@
 pub mod function;
 pub mod interference_graph;
 mod opcode;
+pub mod pass;
 pub mod passes;
 
 use crate::hir::{self, FunctionIdx};
@@ -17,18 +18,18 @@ pub type InstructionIdx = hir::InstructionIdx;
 pub type OperandIdx = usize;
 
 #[derive(Debug)]
-pub struct Mir<'hir>(pub Vec<Module<'hir>>);
+pub struct Mir(pub Vec<Module>);
 
 #[derive(Debug)]
-pub struct Module<'hir> {
-    pub name: &'hir str,
-    pub globals: &'hir [hir::Global],
-    pub functions: Vec<Function<'hir>>,
+pub struct Module {
+    pub name: String,
+    pub globals: Vec<hir::Global>,
+    pub functions: Vec<Function>,
 }
 
 #[derive(Debug)]
-pub struct BasicBlock<'hir> {
-    pub name: &'hir str,
+pub struct BasicBlock {
+    pub name: String,
     pub instructions: Vec<Instruction>,
 }
 

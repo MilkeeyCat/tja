@@ -1,41 +1,103 @@
 use crate::{
     hir::{
-        self, Const, Hir, LocalStorage,
+        self, Const, LocalStorage,
         op::BinOp,
         ty::{self, Ty, TyIdx},
     },
-    mir::{self, BlockIdx, GenericOpcode, Mir, Opcode, Register, RegisterRole},
-    targets::{Abi, CallingConvention},
+    mir::{self, BlockIdx, GenericOpcode, Opcode, Register, RegisterRole},
+    pass::{Context, Pass},
+    targets::{Abi, CallingConvention, Target},
 };
 use std::collections::HashMap;
 
-fn lower_module<'hir, A: Abi>(
-    module: &'hir hir::Module,
-    ty_storage: &ty::Storage,
-    abi: &A,
-) -> mir::Module<'hir> {
-    mir::Module {
-        name: &module.name,
-        globals: &module.globals,
-        functions: module
-            .functions
-            .iter()
-            .map(|func| lower_fn(func, ty_storage, abi))
-            .collect(),
+#[derive(Default)]
+pub struct Lower;
+
+impl<'hir, T: Target> Pass<'hir, hir::Function, T> for Lower {
+    fn run(&self, function: &mut hir::Function, ctx: &mut Context<'hir, T>) {
+        let mut lowering = FnLowering {
+            ty_storage: ctx.ty_storage,
+            hir_function: function,
+            mir_function: mir::Function {
+                name: function.name.clone(),
+                next_vreg_idx: 0,
+                vreg_classes: HashMap::new(),
+                vreg_types: HashMap::new(),
+                next_stack_frame_idx: 0,
+                stack_slots: HashMap::new(),
+                blocks: vec![mir::BasicBlock {
+                    name: "entry".into(),
+                    instructions: vec![],
+                }],
+            },
+            operand_to_vreg_indices: HashMap::new(),
+            ty_to_offsets: HashMap::new(),
+            abi: ctx.target.abi(),
+            current_bb_idx: 0,
+        };
+
+        let vreg_indices = (0..lowering.hir_function.params_count)
+            .into_iter()
+            .map(|local_idx| {
+                lowering
+                    .get_or_create_vregs(hir::Operand::Local(local_idx))
+                    .to_vec()
+            })
+            .collect();
+        let tys = lowering.hir_function.locals[..lowering.hir_function.params_count].to_vec();
+        let ret_ty = lowering.hir_function.ret_ty;
+
+        lowering
+            .abi
+            .calling_convention()
+            .lower_params(&mut lowering, vreg_indices, tys, ret_ty);
+        lowering
+            .get_basic_block()
+            .instructions
+            .push(mir::Instruction::new(
+                GenericOpcode::Br as mir::Opcode,
+                vec![mir::Operand::Block(1)],
+            ));
+
+        for (idx, bb) in function.blocks.iter().enumerate() {
+            lowering.current_bb_idx = idx + 1;
+            lowering.mir_function.blocks.push(mir::BasicBlock {
+                name: bb.name.clone(),
+                instructions: Vec::new(),
+            });
+
+            for instr in &bb.instructions {
+                lowering.lower_instruction(instr);
+            }
+
+            lowering.lower_terminator(&bb.terminator);
+        }
+
+        for bb in lowering.mir_function.blocks.iter_mut().skip(1) {
+            for instr in &mut bb.instructions {
+                for operand in &mut instr.operands {
+                    if let mir::Operand::Block(idx) = operand {
+                        *idx += 1;
+                    }
+                }
+            }
+        }
+
+        //ctx.mir_function = Some(lowering.mir_function);
     }
 }
 
-pub struct FnLowering<'a, 'hir, A: Abi> {
+pub struct FnLowering<'a, A: Abi> {
     pub ty_storage: &'a ty::Storage,
     hir_function: &'a hir::Function,
-    pub mir_function: mir::Function<'hir>,
+    pub mir_function: mir::Function,
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
     pub ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
     pub abi: &'a A,
     current_bb_idx: BlockIdx,
 }
 
-impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
+impl<'a, A: Abi> FnLowering<'a, A> {
     pub fn create_vreg(&mut self, ty: TyIdx) -> mir::VregIdx {
         let vreg_idx = self.mir_function.next_vreg_idx;
 
@@ -180,7 +242,7 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
         idx
     }
 
-    pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock<'hir> {
+    pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock {
         &mut self.mir_function.blocks[self.current_bb_idx]
     }
 
@@ -468,93 +530,31 @@ impl<'a, 'hir, A: Abi> FnLowering<'a, 'hir, A> {
     }
 }
 
-impl<A: Abi> LocalStorage for FnLowering<'_, '_, A> {
+impl<A: Abi> LocalStorage for FnLowering<'_, A> {
     fn get_local_ty(&self, idx: hir::LocalIdx) -> TyIdx {
         self.hir_function.locals[idx]
     }
 }
 
-fn lower_fn<'hir, A: Abi>(
-    func: &'hir hir::Function,
-    ty_storage: &ty::Storage,
-    abi: &A,
-) -> mir::Function<'hir> {
-    let mut lowering = FnLowering {
-        ty_storage,
-        hir_function: func,
-        mir_function: mir::Function {
-            name: &func.name,
-            next_vreg_idx: 0,
-            vreg_classes: HashMap::new(),
-            vreg_types: HashMap::new(),
-            next_stack_frame_idx: 0,
-            stack_slots: HashMap::new(),
-            blocks: vec![mir::BasicBlock {
-                name: "entry",
-                instructions: vec![],
-            }],
-        },
-        operand_to_vreg_indices: HashMap::new(),
-        ty_to_offsets: HashMap::new(),
-        abi,
-        current_bb_idx: 0,
-    };
+#[derive(Default)]
+pub struct LowerFunctionToModuleAdaptor;
 
-    let vreg_indices = (0..lowering.hir_function.params_count)
-        .into_iter()
-        .map(|local_idx| {
-            lowering
-                .get_or_create_vregs(hir::Operand::Local(local_idx))
-                .to_vec()
-        })
-        .collect();
-    let tys = lowering.hir_function.locals[..lowering.hir_function.params_count].to_vec();
-    let ret_ty = lowering.hir_function.ret_ty;
-
-    lowering
-        .abi
-        .calling_convention()
-        .lower_params(&mut lowering, vreg_indices, tys, ret_ty);
-    lowering
-        .get_basic_block()
-        .instructions
-        .push(mir::Instruction::new(
-            GenericOpcode::Br as mir::Opcode,
-            vec![mir::Operand::Block(1)],
-        ));
-
-    for (idx, bb) in func.blocks.iter().enumerate() {
-        lowering.current_bb_idx = idx + 1;
-        lowering.mir_function.blocks.push(mir::BasicBlock {
-            name: &bb.name,
-            instructions: Vec::new(),
+impl<'hir, T: Target> Pass<'hir, hir::Module, T> for LowerFunctionToModuleAdaptor {
+    fn run(&self, module: &mut hir::Module, ctx: &mut Context<'hir, T>) {
+        ctx.mir_module = Some(mir::Module {
+            name: module.name.clone(),
+            globals: module.globals.clone(),
+            functions: Vec::new(),
         });
 
-        for instr in &bb.instructions {
-            lowering.lower_instruction(instr);
-        }
+        for function in &mut module.functions {
+            Lower::default().run(function, ctx);
 
-        lowering.lower_terminator(&bb.terminator);
-    }
-
-    for bb in lowering.mir_function.blocks.iter_mut().skip(1) {
-        for instr in &mut bb.instructions {
-            for operand in &mut instr.operands {
-                if let mir::Operand::Block(idx) = operand {
-                    *idx += 1;
-                }
-            }
+            ctx.mir_module
+                .as_mut()
+                .unwrap()
+                .functions
+                .push(ctx.mir_function.take().unwrap());
         }
     }
-
-    lowering.mir_function
-}
-
-/// Lowers hir into generic mir
-pub fn lower<'hir, A: Abi>(hir: &'hir Hir, abi: &A) -> Mir<'hir> {
-    Mir(hir
-        .modules
-        .iter()
-        .map(|module| lower_module(module, &hir.ty_storage, abi))
-        .collect())
 }
