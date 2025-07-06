@@ -1,9 +1,9 @@
 use super::OperandKind;
 use crate::{
-    hir::ty,
-    mir::{GenericOpcode, Mir, Opcode, Operand, RegisterRole},
+    mir::{Function, GenericOpcode, Opcode, Operand, RegisterRole},
+    pass::{Context, Pass},
     targets::{
-        Abi,
+        Abi, Target,
         amd64::{
             address_mode::{AddressMode, Base},
             opcode::{get_load_op, get_store_op},
@@ -41,133 +41,134 @@ fn get_add_op(dest: OperandKind, src: OperandKind, size: usize) -> Opcode {
     }) as Opcode
 }
 
-pub fn select_instructions<A: Abi>(mir: &mut Mir, abi: &A, ty_storage: &ty::Storage) {
-    for module in &mut mir.0 {
-        for func in &mut module.functions {
-            for bb in &mut func.blocks {
-                for instr in &mut bb.instructions {
-                    match GenericOpcode::try_from(instr.opcode) {
-                        Ok(opcode) => match opcode {
-                            GenericOpcode::Add => {
-                                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                                let ty = func.vreg_types[vreg_idx];
-                                let size = abi.ty_size(ty_storage, ty);
+#[derive(Default)]
+pub struct InstructionSelection;
 
-                                instr.opcode = get_add_op(
-                                    (&instr.operands[0]).into(),
-                                    (&instr.operands[1]).into(),
-                                    size,
-                                );
-                                instr.tied_operands = Some((0, 1));
-                            }
-                            GenericOpcode::Sub => unimplemented!(),
-                            GenericOpcode::Mul => unimplemented!(),
-                            GenericOpcode::SDiv => unimplemented!(),
-                            GenericOpcode::UDiv => unimplemented!(),
-                            GenericOpcode::FrameIndex => {
-                                let address_mode = AddressMode {
-                                    base: match &instr.operands[1] {
-                                        Operand::Frame(idx) => Base::Frame(*idx),
-                                        _ => unreachable!(),
-                                    },
+impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
+    fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        for bb in &mut func.blocks {
+            for instr in &mut bb.instructions {
+                match GenericOpcode::try_from(instr.opcode) {
+                    Ok(opcode) => match opcode {
+                        GenericOpcode::Add => {
+                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                            let ty = func.vreg_types[vreg_idx];
+                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
+
+                            instr.opcode = get_add_op(
+                                (&instr.operands[0]).into(),
+                                (&instr.operands[1]).into(),
+                                size,
+                            );
+                            instr.tied_operands = Some((0, 1));
+                        }
+                        GenericOpcode::Sub => unimplemented!(),
+                        GenericOpcode::Mul => unimplemented!(),
+                        GenericOpcode::SDiv => unimplemented!(),
+                        GenericOpcode::UDiv => unimplemented!(),
+                        GenericOpcode::FrameIndex => {
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
+                                    Operand::Frame(idx) => Base::Frame(*idx),
+                                    _ => unreachable!(),
+                                },
+                                index: None,
+                                scale: 1,
+                                displacement: None,
+                            };
+
+                            instr.opcode = super::Opcode::Lea64 as Opcode;
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 1);
+                        }
+                        GenericOpcode::PtrAdd => {
+                            let base = match &instr.operands[1] {
+                                Operand::Register(r, _) => Base::Register(r.clone()),
+                                _ => unreachable!(),
+                            };
+                            let address_mode = match &instr.operands[2] {
+                                Operand::Immediate(offset) => AddressMode {
+                                    base: base,
                                     index: None,
                                     scale: 1,
+                                    displacement: Some(*offset as isize),
+                                },
+                                Operand::Register(r, RegisterRole::Use) => AddressMode {
+                                    base: base,
+                                    index: Some(r.clone()),
+                                    scale: 1,
                                     displacement: None,
-                                };
+                                },
+                                _ => unreachable!(),
+                            };
 
-                                instr.opcode = super::Opcode::Lea64 as Opcode;
-                                instr.operands.remove(1);
-                                address_mode.write(&mut instr.operands, 1);
-                            }
-                            GenericOpcode::PtrAdd => {
-                                let base = match &instr.operands[1] {
+                            instr.opcode = super::Opcode::Lea64 as Opcode;
+                            instr.operands.remove(2);
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 1);
+                        }
+                        GenericOpcode::Load => {
+                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                            let ty = func.vreg_types[vreg_idx];
+                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
                                     Operand::Register(r, _) => Base::Register(r.clone()),
                                     _ => unreachable!(),
-                                };
-                                let address_mode = match &instr.operands[2] {
-                                    Operand::Immediate(offset) => AddressMode {
-                                        base: base,
-                                        index: None,
-                                        scale: 1,
-                                        displacement: Some(*offset as isize),
-                                    },
-                                    Operand::Register(r, RegisterRole::Use) => AddressMode {
-                                        base: base,
-                                        index: Some(r.clone()),
-                                        scale: 1,
-                                        displacement: None,
-                                    },
+                                },
+                                index: None,
+                                scale: 1,
+                                displacement: None,
+                            };
+
+                            instr.opcode = get_load_op(size) as Opcode;
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 1);
+                        }
+                        GenericOpcode::Store => {
+                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
+                            let ty = func.vreg_types[vreg_idx];
+                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
+                            let address_mode = AddressMode {
+                                base: match &instr.operands[1] {
+                                    Operand::Register(r, _) => Base::Register(r.clone()),
                                     _ => unreachable!(),
+                                },
+                                index: None,
+                                scale: 1,
+                                displacement: None,
+                            };
+
+                            instr.opcode = get_store_op(size) as Opcode;
+                            instr.operands.remove(1);
+                            address_mode.write(&mut instr.operands, 0);
+                        }
+                        GenericOpcode::Br => {
+                            instr.opcode = super::Opcode::Jmp as Opcode;
+                        }
+                        GenericOpcode::Return => {
+                            instr.opcode = super::Opcode::Ret as Opcode;
+                        }
+                        GenericOpcode::GlobalValue => match instr.operands[1] {
+                            Operand::Function(idx) => {
+                                let address_mode = AddressMode {
+                                    base: Base::Function(idx),
+                                    index: None,
+                                    scale: 1,
+                                    displacement: None,
                                 };
 
                                 instr.opcode = super::Opcode::Lea64 as Opcode;
-                                instr.operands.remove(2);
                                 instr.operands.remove(1);
                                 address_mode.write(&mut instr.operands, 1);
                             }
-                            GenericOpcode::Load => {
-                                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                                let ty = func.vreg_types[vreg_idx];
-                                let size = abi.ty_size(ty_storage, ty);
-                                let address_mode = AddressMode {
-                                    base: match &instr.operands[1] {
-                                        Operand::Register(r, _) => Base::Register(r.clone()),
-                                        _ => unreachable!(),
-                                    },
-                                    index: None,
-                                    scale: 1,
-                                    displacement: None,
-                                };
-
-                                instr.opcode = get_load_op(size) as Opcode;
-                                instr.operands.remove(1);
-                                address_mode.write(&mut instr.operands, 1);
-                            }
-                            GenericOpcode::Store => {
-                                let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                                let ty = func.vreg_types[vreg_idx];
-                                let size = abi.ty_size(ty_storage, ty);
-                                let address_mode = AddressMode {
-                                    base: match &instr.operands[1] {
-                                        Operand::Register(r, _) => Base::Register(r.clone()),
-                                        _ => unreachable!(),
-                                    },
-                                    index: None,
-                                    scale: 1,
-                                    displacement: None,
-                                };
-
-                                instr.opcode = get_store_op(size) as Opcode;
-                                instr.operands.remove(1);
-                                address_mode.write(&mut instr.operands, 0);
-                            }
-                            GenericOpcode::Br => {
-                                instr.opcode = super::Opcode::Jmp as Opcode;
-                            }
-                            GenericOpcode::Return => {
-                                instr.opcode = super::Opcode::Ret as Opcode;
-                            }
-                            GenericOpcode::GlobalValue => match instr.operands[1] {
-                                Operand::Function(idx) => {
-                                    let address_mode = AddressMode {
-                                        base: Base::Function(idx),
-                                        index: None,
-                                        scale: 1,
-                                        displacement: None,
-                                    };
-
-                                    instr.opcode = super::Opcode::Lea64 as Opcode;
-                                    instr.operands.remove(1);
-                                    address_mode.write(&mut instr.operands, 1);
-                                }
-                                _ => unreachable!(),
-                            },
-                            GenericOpcode::Copy => (), // skip copy instructions at this step
-
-                            GenericOpcode::Num => unreachable!(),
+                            _ => unreachable!(),
                         },
-                        Err(_) => (),
-                    }
+                        GenericOpcode::Copy => (), // skip copy instructions at this step
+
+                        GenericOpcode::Num => unreachable!(),
+                    },
+                    Err(_) => (),
                 }
             }
         }

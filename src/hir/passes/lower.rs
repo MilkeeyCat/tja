@@ -13,8 +13,8 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct Lower;
 
-impl<'hir, T: Target> Pass<'hir, hir::Function, T> for Lower {
-    fn run(&self, function: &mut hir::Function, ctx: &mut Context<'hir, T>) {
+impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
+    fn run(&self, function: &mut hir::Function, ctx: &mut Context<'a, T>) {
         let mut lowering = FnLowering {
             ty_storage: ctx.ty_storage,
             hir_function: function,
@@ -83,7 +83,7 @@ impl<'hir, T: Target> Pass<'hir, hir::Function, T> for Lower {
             }
         }
 
-        //ctx.mir_function = Some(lowering.mir_function);
+        ctx.mir_function = Some(lowering.mir_function);
     }
 }
 
@@ -539,8 +539,8 @@ impl<A: Abi> LocalStorage for FnLowering<'_, A> {
 #[derive(Default)]
 pub struct LowerFunctionToModuleAdaptor;
 
-impl<'hir, T: Target> Pass<'hir, hir::Module, T> for LowerFunctionToModuleAdaptor {
-    fn run(&self, module: &mut hir::Module, ctx: &mut Context<'hir, T>) {
+impl<'a, T: Target> Pass<'a, hir::Module, T> for LowerFunctionToModuleAdaptor {
+    fn run(&self, module: &mut hir::Module, ctx: &mut Context<'a, T>) {
         ctx.mir_module = Some(mir::Module {
             name: module.name.clone(),
             globals: module.globals.clone(),

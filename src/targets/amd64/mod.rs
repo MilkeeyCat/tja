@@ -12,26 +12,28 @@ mod register_class_selector;
 mod sysv_calling_convention;
 
 use crate::{
+    codegen::allocator::Allocator,
     hir,
     mir::{
         self, BasicBlockPatch, Instruction, InstructionIdx, Operand, PhysicalRegister,
-        RegisterRole, StackFrameIdx,
+        RegisterRole, StackFrameIdx, passes::two_address::TwoAddressForm,
     },
+    pass::FunctionToModuleAdaptor,
     targets::amd64::{
         address_mode::{AddressMode, Base},
+        instruction_selector::InstructionSelection,
+        lower_stack_slots::StackSlotsLowerer,
+        materialize_copy::MaterializeCopy,
         opcode::{get_load_op, get_store_op},
+        prologue_epilogue_inserter::PrologueEpilogueInsterter,
+        register_class_selector::SelectRegisterClass,
     },
 };
 use abi::SysVAmd64;
 pub use asm_printer::AsmPrinter;
 use derive_more::Display;
-pub use instruction_selector::select_instructions;
-pub use lower_stack_slots::lower_stack_slots;
-pub use materialize_copy::materialize_copy;
 pub use opcode::Opcode;
-pub use prologue_epilogue_inserter::insert_prologue_epilogue;
 pub use register::Register;
-pub use register_class_selector::select_register_class;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
@@ -220,8 +222,25 @@ impl Target {
         }
     }
 
-    pub fn add_hir_passes(&self, pass_manager: &mut hir::pass::ModulePassManager<'_, Self>) {
-        pass_manager.add_pass::<hir::passes::lower::LowerFunctionToModuleAdaptor>();
+    pub fn add_hir_passes(&self, pass_manager: &mut hir::pass::ModulePassManager<'_, '_, Self>) {
+        pass_manager.add_pass(hir::passes::lower::LowerFunctionToModuleAdaptor::default());
+    }
+
+    pub fn add_mir_passes<'a>(
+        &self,
+        pass_manager: &mut mir::pass::ModulePassManager<'a, 'a, Self>,
+    ) {
+        let mut fn_pass_manager = mir::pass::FunctionPassManager::<'_, '_, Self>::new();
+
+        fn_pass_manager.add_pass(SelectRegisterClass::default());
+        fn_pass_manager.add_pass(InstructionSelection::default());
+        fn_pass_manager.add_pass(TwoAddressForm::default());
+        fn_pass_manager.add_pass(MaterializeCopy::default());
+        fn_pass_manager.add_pass(Allocator::default());
+        fn_pass_manager.add_pass(StackSlotsLowerer::default());
+        fn_pass_manager.add_pass(PrologueEpilogueInsterter::default());
+
+        pass_manager.add_pass(FunctionToModuleAdaptor::new(fn_pass_manager));
     }
 }
 

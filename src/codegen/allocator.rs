@@ -1,10 +1,10 @@
 use crate::{
-    hir::ty,
     mir::{
-        self, BasicBlockPatch, Operand, Register, RegisterRole, StackFrameIdx, VregIdx,
+        self, BasicBlockPatch, Function, Operand, Register, RegisterRole, StackFrameIdx, VregIdx,
         function::Value,
         interference_graph::{InterferenceGraph, NodeId},
     },
+    pass::{Context, Pass},
     targets::{Abi, RegisterInfo, Target},
 };
 use std::collections::{HashMap, HashSet};
@@ -16,37 +16,32 @@ pub enum Location {
 }
 
 /// A weird looking graph coloring by simplification register allocator
-struct Allocator<'a, T: Target> {
-    target: &'a T,
-    locations: HashMap<(VregIdx, usize), Location>,
+#[derive(Default)]
+pub struct Allocator {
     spill_mode: bool,
-    function: &'a mut mir::Function,
 }
 
-impl<'a, T: Target> Allocator<'a, T> {
-    fn new(target: &'a T, spill_mode: bool, function: &'a mut mir::Function) -> Self {
-        Self {
-            target,
-            locations: HashMap::new(),
-            spill_mode,
-            function,
-        }
+impl Allocator {
+    pub fn new(spill_mode: bool) -> Self {
+        Self { spill_mode }
     }
 
-    fn unique_register(
+    fn unique_register<T: Target>(
         &self,
+        target: &T,
+        func: &Function,
         graph: &InterferenceGraph,
         node_id: NodeId,
+        locations: &HashMap<(VregIdx, usize), Location>,
     ) -> Option<mir::PhysicalRegister> {
         let vreg_idx = match graph.get_node(node_id) {
             Value::Virtual(idx, _) => idx,
             Value::Physical(_) => unreachable!(),
         };
 
-        for r in self
-            .target
+        for r in target
             .register_info()
-            .get_registers_by_class(&self.function.vreg_classes[&vreg_idx])
+            .get_registers_by_class(&func.vreg_classes[&vreg_idx])
             .iter()
             .skip(self.spill_mode as usize)
         {
@@ -55,8 +50,8 @@ impl<'a, T: Target> Allocator<'a, T> {
             for neighbor in graph.neighbors(node_id) {
                 match graph.get_node(*neighbor) {
                     Value::Virtual(idx, def_idx) => {
-                        if let Location::Register(neighbor_r) = &self.locations[&(*idx, *def_idx)] {
-                            if self.target.register_info().overlaps(r, neighbor_r) {
+                        if let Location::Register(neighbor_r) = &locations[&(*idx, *def_idx)] {
+                            if target.register_info().overlaps(r, neighbor_r) {
                                 found = false;
 
                                 break;
@@ -64,7 +59,7 @@ impl<'a, T: Target> Allocator<'a, T> {
                         }
                     }
                     Value::Physical(neighbor_r) => {
-                        if self.target.register_info().overlaps(r, neighbor_r) {
+                        if target.register_info().overlaps(r, neighbor_r) {
                             found = false;
 
                             break;
@@ -82,6 +77,131 @@ impl<'a, T: Target> Allocator<'a, T> {
     }
 }
 
+impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
+    fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        let (mut graph, mut node_ids) = func.interference();
+        let mut stack: Vec<((VregIdx, usize), NodeId, HashSet<NodeId>)> = Vec::new();
+        let mut locations: HashMap<(VregIdx, usize), Location> = HashMap::new();
+        let mut redo = false;
+
+        while let Some(node_id) = min(&graph, &node_ids) {
+            let neighbors_count = graph.neighbors(node_id).len();
+            let vreg_idx = match graph.get_node(node_id) {
+                Value::Virtual(idx, _) => idx,
+                Value::Physical(_) => unreachable!(),
+            };
+            let node_id = if neighbors_count
+                < ctx
+                    .target
+                    .register_info()
+                    .get_registers_by_class(&func.vreg_classes[vreg_idx])
+                    .len()
+            {
+                min(&graph, &node_ids)
+            } else {
+                max(&graph, &node_ids)
+            }
+            .unwrap();
+            let vreg_value = match graph.get_node(node_id) {
+                Value::Virtual(idx, def_idx) => (*idx, *def_idx),
+                Value::Physical(_) => unreachable!(),
+            };
+
+            let neighbors = graph.neighbors(node_id).clone();
+            let pos = node_ids.iter().position(|idx| idx == &node_id).unwrap();
+
+            node_ids.remove(pos);
+            graph.remove_node(node_id);
+            stack.push((vreg_value, node_id, neighbors));
+        }
+
+        for ((vreg_idx, def_idx), node_id, neighbors) in stack.into_iter().rev() {
+            graph.add_node_with_node_id(Value::Virtual(vreg_idx, def_idx), node_id);
+
+            for neighbor in neighbors {
+                graph.add_edge(node_id, neighbor);
+            }
+
+            if let Some(r) = self.unique_register(ctx.target, func, &graph, node_id, &locations) {
+                locations.insert((vreg_idx, def_idx), Location::Register(r));
+            } else {
+                if self.spill_mode {
+                    let idx = func.next_stack_frame_idx;
+                    func.next_stack_frame_idx += 1;
+                    func.stack_slots.insert(
+                        idx,
+                        ctx.target
+                            .abi()
+                            .ty_size(ctx.ty_storage, func.vreg_types[&vreg_idx]),
+                    );
+
+                    locations.insert((vreg_idx, def_idx), Location::Spill(idx));
+                } else {
+                    redo = true;
+                    break;
+                }
+            }
+        }
+
+        if redo {
+            Self::new(true).run(func, ctx)
+        } else {
+            let mut vregs_occurences: HashMap<VregIdx, usize> = HashMap::new();
+
+            for bb in &mut func.blocks {
+                let mut patch = BasicBlockPatch::new();
+
+                for (instr_idx, instr) in bb.instructions.iter_mut().enumerate() {
+                    for operand in &mut instr.operands {
+                        if let Operand::Register(Register::Virtual(idx), role) = operand {
+                            let def_idx = vregs_occurences
+                                .entry(*idx)
+                                .and_modify(|def_idx| {
+                                    if let RegisterRole::Def = role {
+                                        *def_idx += 1;
+                                    }
+                                })
+                                .or_default();
+
+                            match locations[&(*idx, *def_idx)] {
+                                Location::Register(r) => {
+                                    *operand =
+                                        Operand::Register(Register::Physical(r), role.clone());
+                                }
+                                Location::Spill(frame_idx) => {
+                                    let r = ctx
+                                        .target
+                                        .register_info()
+                                        .get_registers_by_class(&func.vreg_classes[idx])[0];
+                                    let size = ctx
+                                        .target
+                                        .abi()
+                                        .ty_size(ctx.ty_storage, func.vreg_types[idx]);
+
+                                    ctx.target.load_reg_from_stack_slot(
+                                        &mut patch, instr_idx, r, frame_idx, size,
+                                    );
+                                    *operand =
+                                        Operand::Register(Register::Physical(r), role.clone());
+                                    ctx.target.store_reg_to_stack_slot(
+                                        &mut patch,
+                                        instr_idx + 1,
+                                        r,
+                                        frame_idx,
+                                        size,
+                                    );
+                                }
+                            };
+                        }
+                    }
+                }
+
+                patch.apply(bb);
+            }
+        }
+    }
+}
+
 fn min(graph: &InterferenceGraph, node_ids: &[NodeId]) -> Option<NodeId> {
     node_ids
         .iter()
@@ -94,134 +214,4 @@ fn max(graph: &InterferenceGraph, nodes_ids: &[NodeId]) -> Option<NodeId> {
         .iter()
         .max_by_key(|node_id| graph.neighbors(**node_id).len())
         .cloned()
-}
-
-pub fn allocate<T: Target>(
-    target: &T,
-    spill_mode: bool,
-    function: &mut mir::Function,
-    ty_storage: &ty::Storage,
-) {
-    let mut allocator = Allocator::new(target, spill_mode, function);
-    let (mut graph, mut node_ids) = allocator.function.interference();
-    let mut stack: Vec<((VregIdx, usize), NodeId, HashSet<NodeId>)> = Vec::new();
-    let mut redo = false;
-
-    while let Some(node_id) = min(&graph, &node_ids) {
-        let neighbors_count = graph.neighbors(node_id).len();
-        let vreg_idx = match graph.get_node(node_id) {
-            Value::Virtual(idx, _) => idx,
-            Value::Physical(_) => unreachable!(),
-        };
-        let node_id = if neighbors_count
-            < allocator
-                .target
-                .register_info()
-                .get_registers_by_class(&allocator.function.vreg_classes[vreg_idx])
-                .len()
-        {
-            min(&graph, &node_ids)
-        } else {
-            max(&graph, &node_ids)
-        }
-        .unwrap();
-        let vreg_value = match graph.get_node(node_id) {
-            Value::Virtual(idx, def_idx) => (*idx, *def_idx),
-            Value::Physical(_) => unreachable!(),
-        };
-
-        let neighbors = graph.neighbors(node_id).clone();
-        let pos = node_ids.iter().position(|idx| idx == &node_id).unwrap();
-
-        node_ids.remove(pos);
-        graph.remove_node(node_id);
-        stack.push((vreg_value, node_id, neighbors));
-    }
-
-    for ((vreg_idx, def_idx), node_id, neighbors) in stack.into_iter().rev() {
-        graph.add_node_with_node_id(Value::Virtual(vreg_idx, def_idx), node_id);
-
-        for neighbor in neighbors {
-            graph.add_edge(node_id, neighbor);
-        }
-
-        if let Some(r) = allocator.unique_register(&graph, node_id) {
-            allocator
-                .locations
-                .insert((vreg_idx, def_idx), Location::Register(r));
-        } else {
-            if allocator.spill_mode {
-                let idx = allocator.function.next_stack_frame_idx;
-                allocator.function.next_stack_frame_idx += 1;
-                allocator.function.stack_slots.insert(
-                    idx,
-                    allocator
-                        .target
-                        .abi()
-                        .ty_size(ty_storage, allocator.function.vreg_types[&vreg_idx]),
-                );
-
-                allocator
-                    .locations
-                    .insert((vreg_idx, def_idx), Location::Spill(idx));
-            } else {
-                allocator.spill_mode = true;
-                redo = true;
-                break;
-            }
-        }
-    }
-
-    if redo {
-        allocate(target, allocator.spill_mode, function, ty_storage)
-    } else {
-        let locations = allocator.locations;
-        let mut vregs_occurences: HashMap<VregIdx, usize> = HashMap::new();
-
-        for bb in &mut function.blocks {
-            let mut patch = BasicBlockPatch::new();
-
-            for (instr_idx, instr) in bb.instructions.iter_mut().enumerate() {
-                for operand in &mut instr.operands {
-                    if let Operand::Register(Register::Virtual(idx), role) = operand {
-                        let def_idx = vregs_occurences
-                            .entry(*idx)
-                            .and_modify(|def_idx| {
-                                if let RegisterRole::Def = role {
-                                    *def_idx += 1;
-                                }
-                            })
-                            .or_default();
-
-                        match locations[&(*idx, *def_idx)] {
-                            Location::Register(r) => {
-                                *operand = Operand::Register(Register::Physical(r), role.clone());
-                            }
-                            Location::Spill(frame_idx) => {
-                                let r = target
-                                    .register_info()
-                                    .get_registers_by_class(&function.vreg_classes[idx])[0];
-                                let size =
-                                    target.abi().ty_size(ty_storage, function.vreg_types[idx]);
-
-                                target.load_reg_from_stack_slot(
-                                    &mut patch, instr_idx, r, frame_idx, size,
-                                );
-                                *operand = Operand::Register(Register::Physical(r), role.clone());
-                                target.store_reg_to_stack_slot(
-                                    &mut patch,
-                                    instr_idx + 1,
-                                    r,
-                                    frame_idx,
-                                    size,
-                                );
-                            }
-                        };
-                    }
-                }
-            }
-
-            patch.apply(bb);
-        }
-    }
 }
