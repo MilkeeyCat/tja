@@ -18,9 +18,6 @@ pub type InstructionIdx = hir::InstructionIdx;
 pub type OperandIdx = usize;
 
 #[derive(Debug)]
-pub struct Mir(pub Vec<Module>);
-
-#[derive(Debug)]
 pub struct Module {
     pub name: String,
     pub globals: Vec<hir::Global>,
