@@ -1,7 +1,6 @@
 use crate::{
     mir::{
-        self, BasicBlockPatch, Function, Operand, Register, RegisterRole, StackFrameIdx, VregIdx,
-        function::Value,
+        self, BasicBlockPatch, Function, Operand, Register, StackFrameIdx, VregIdx,
         interference_graph::{InterferenceGraph, NodeId},
     },
     pass::{Context, Pass},
@@ -32,11 +31,11 @@ impl Allocator {
         func: &Function,
         graph: &InterferenceGraph,
         node_id: NodeId,
-        locations: &HashMap<(VregIdx, usize), Location>,
+        locations: &HashMap<VregIdx, Location>,
     ) -> Option<mir::PhysicalRegister> {
         let vreg_idx = match graph.get_node(node_id) {
-            Value::Virtual(idx, _) => idx,
-            Value::Physical(_) => unreachable!(),
+            Register::Virtual(idx) => idx,
+            Register::Physical(_) => unreachable!(),
         };
 
         for r in target
@@ -49,8 +48,8 @@ impl Allocator {
 
             for neighbor in graph.neighbors(node_id) {
                 match graph.get_node(*neighbor) {
-                    Value::Virtual(idx, def_idx) => {
-                        if let Location::Register(neighbor_r) = &locations[&(*idx, *def_idx)] {
+                    Register::Virtual(idx) => {
+                        if let Location::Register(neighbor_r) = &locations[idx] {
                             if target.register_info().overlaps(r, neighbor_r) {
                                 found = false;
 
@@ -58,7 +57,7 @@ impl Allocator {
                             }
                         }
                     }
-                    Value::Physical(neighbor_r) => {
+                    Register::Physical(neighbor_r) => {
                         if target.register_info().overlaps(r, neighbor_r) {
                             found = false;
 
@@ -80,15 +79,15 @@ impl Allocator {
 impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
         let (mut graph, mut node_ids) = func.interference();
-        let mut stack: Vec<((VregIdx, usize), NodeId, HashSet<NodeId>)> = Vec::new();
-        let mut locations: HashMap<(VregIdx, usize), Location> = HashMap::new();
+        let mut stack: Vec<(VregIdx, NodeId, HashSet<NodeId>)> = Vec::new();
+        let mut locations: HashMap<VregIdx, Location> = HashMap::new();
         let mut redo = false;
 
         while let Some(node_id) = min(&graph, &node_ids) {
             let neighbors_count = graph.neighbors(node_id).len();
             let vreg_idx = match graph.get_node(node_id) {
-                Value::Virtual(idx, _) => idx,
-                Value::Physical(_) => unreachable!(),
+                Register::Virtual(idx) => idx,
+                Register::Physical(_) => unreachable!(),
             };
             let node_id = if neighbors_count
                 < ctx
@@ -102,9 +101,9 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                 max(&graph, &node_ids)
             }
             .unwrap();
-            let vreg_value = match graph.get_node(node_id) {
-                Value::Virtual(idx, def_idx) => (*idx, *def_idx),
-                Value::Physical(_) => unreachable!(),
+            let vreg_idx = match graph.get_node(node_id) {
+                Register::Virtual(idx) => *idx,
+                Register::Physical(_) => unreachable!(),
             };
 
             let neighbors = graph.neighbors(node_id).clone();
@@ -112,18 +111,18 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
 
             node_ids.remove(pos);
             graph.remove_node(node_id);
-            stack.push((vreg_value, node_id, neighbors));
+            stack.push((vreg_idx, node_id, neighbors));
         }
 
-        for ((vreg_idx, def_idx), node_id, neighbors) in stack.into_iter().rev() {
-            graph.add_node_with_node_id(Value::Virtual(vreg_idx, def_idx), node_id);
+        for (vreg_idx, node_id, neighbors) in stack.into_iter().rev() {
+            graph.add_node_with_node_id(Register::Virtual(vreg_idx), node_id);
 
             for neighbor in neighbors {
                 graph.add_edge(node_id, neighbor);
             }
 
             if let Some(r) = self.unique_register(ctx.target, func, &graph, node_id, &locations) {
-                locations.insert((vreg_idx, def_idx), Location::Register(r));
+                locations.insert(vreg_idx, Location::Register(r));
             } else {
                 if self.spill_mode {
                     let idx = func.next_stack_frame_idx;
@@ -135,7 +134,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                             .ty_size(ctx.ty_storage, func.vreg_types[&vreg_idx]),
                     );
 
-                    locations.insert((vreg_idx, def_idx), Location::Spill(idx));
+                    locations.insert(vreg_idx, Location::Spill(idx));
                 } else {
                     redo = true;
                     break;
@@ -146,24 +145,13 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
         if redo {
             Self::new(true).run(func, ctx)
         } else {
-            let mut vregs_occurences: HashMap<VregIdx, usize> = HashMap::new();
-
             for bb in &mut func.blocks {
                 let mut patch = BasicBlockPatch::new();
 
                 for (instr_idx, instr) in bb.instructions.iter_mut().enumerate() {
                     for operand in &mut instr.operands {
                         if let Operand::Register(Register::Virtual(idx), role) = operand {
-                            let def_idx = vregs_occurences
-                                .entry(*idx)
-                                .and_modify(|def_idx| {
-                                    if let RegisterRole::Def = role {
-                                        *def_idx += 1;
-                                    }
-                                })
-                                .or_default();
-
-                            match locations[&(*idx, *def_idx)] {
+                            match locations[idx] {
                                 Location::Register(r) => {
                                     *operand =
                                         Operand::Register(Register::Physical(r), role.clone());
