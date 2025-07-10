@@ -28,7 +28,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
                 blocks: vec![mir::BasicBlock {
                     name: "entry".into(),
                     instructions: vec![],
-                    successors: HashSet::new(),
+                    successors: HashSet::from([1]),
                 }],
             },
             operand_to_vreg_indices: HashMap::new(),

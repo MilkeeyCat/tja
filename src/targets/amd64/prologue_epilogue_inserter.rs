@@ -1,6 +1,9 @@
 use super::Opcode;
 use crate::{
-    mir::{self, BasicBlock, BasicBlockPatch, Function, Instruction, Operand, RegisterRole},
+    mir::{
+        self, BasicBlock, BasicBlockPatch, Function, Instruction, Operand, RegisterRole,
+        function::FunctionPatch,
+    },
     pass::{Context, Pass},
     targets::{Target, amd64::Register},
 };
@@ -17,38 +20,35 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologueEpilogueInsterter {
             .sum::<usize>()
             .next_multiple_of(16);
 
-        func.blocks.insert(
-            0,
-            BasicBlock {
-                name: "prologue".into(),
-                instructions: vec![
-                    Instruction::new(
-                        Opcode::Push64r as mir::Opcode,
-                        vec![Operand::Register(
+        let mut bb = BasicBlock {
+            name: "prologue".into(),
+            instructions: vec![
+                Instruction::new(
+                    Opcode::Push64r as mir::Opcode,
+                    vec![Operand::Register(
+                        mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
+                        RegisterRole::Use,
+                    )],
+                ),
+                Instruction::new(
+                    Opcode::Mov64rr as mir::Opcode,
+                    vec![
+                        Operand::Register(
                             mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
                             RegisterRole::Use,
-                        )],
-                    ),
-                    Instruction::new(
-                        Opcode::Mov64rr as mir::Opcode,
-                        vec![
-                            Operand::Register(
-                                mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
-                                RegisterRole::Use,
-                            ),
-                            Operand::Register(
-                                mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                                RegisterRole::Use,
-                            ),
-                        ],
-                    ),
-                ],
-                successors: HashSet::from([1]),
-            },
-        );
+                        ),
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
+                    ],
+                ),
+            ],
+            successors: HashSet::from([1]),
+        };
 
         if stack_frame_size > 0 {
-            func.blocks[0].instructions.push(Instruction::new(
+            bb.instructions.push(Instruction::new(
                 Opcode::Sub64ri as mir::Opcode,
                 vec![
                     Operand::Register(
@@ -60,20 +60,15 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologueEpilogueInsterter {
             ));
         }
 
-        func.blocks[0].instructions.push(Instruction::new(
+        bb.instructions.push(Instruction::new(
             Opcode::Jmp as mir::Opcode,
             vec![Operand::Block(1)],
         ));
 
-        for bb in func.blocks.iter_mut().skip(1) {
-            for instr in &mut bb.instructions {
-                for operand in &mut instr.operands {
-                    if let Operand::Block(idx) = operand {
-                        *idx += 1;
-                    }
-                }
-            }
-        }
+        let mut patch = FunctionPatch::new();
+
+        patch.add_basic_block(0, bb);
+        patch.apply(func);
 
         for bb in &mut func.blocks {
             let terminator = bb.instructions.last().unwrap();
