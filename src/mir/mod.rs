@@ -28,6 +28,7 @@ pub struct Module {
 pub struct BasicBlock {
     pub name: String,
     pub instructions: Vec<Instruction>,
+    pub successors: HashSet<BlockIdx>,
 }
 
 pub struct BasicBlockPatch {

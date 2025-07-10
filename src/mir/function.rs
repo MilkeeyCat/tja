@@ -2,7 +2,7 @@ use super::{
     BasicBlock, Operand, Register, RegisterClass, StackFrameIdx, VregIdx,
     interference_graph::{InterferenceGraph, NodeId},
 };
-use crate::hir::ty::TyIdx;
+use crate::{hir::ty::TyIdx, mir::BlockIdx};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -160,5 +160,47 @@ impl Function {
         }
 
         registers
+    }
+}
+
+pub struct FunctionPatch {
+    new_basic_blocks: Vec<(BlockIdx, BasicBlock)>,
+}
+
+impl FunctionPatch {
+    pub fn new() -> Self {
+        Self {
+            new_basic_blocks: Vec::new(),
+        }
+    }
+
+    pub fn add_basic_block(&mut self, bb_idx: BlockIdx, bb: BasicBlock) {
+        self.new_basic_blocks.push((bb_idx, bb));
+    }
+
+    pub fn apply(self, func: &mut Function) {
+        let mut new_basic_blocks = self.new_basic_blocks;
+
+        new_basic_blocks.sort_by_key(|(instr_idx, _)| (*instr_idx));
+
+        for (bb_idx, bb) in new_basic_blocks.into_iter().rev() {
+            for bb in &mut func.blocks[bb_idx..] {
+                for instr in &mut bb.instructions {
+                    for operand in &mut instr.operands {
+                        if let Operand::Block(idx) = operand {
+                            if *idx >= bb_idx {
+                                *idx += 1;
+                            }
+                        }
+                    }
+                }
+
+                bb.successors = std::mem::take(&mut bb.successors)
+                    .into_iter()
+                    .map(|idx| idx + 1)
+                    .collect();
+            }
+            func.blocks.insert(bb_idx, bb);
+        }
     }
 }

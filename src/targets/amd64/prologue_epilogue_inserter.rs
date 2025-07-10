@@ -4,6 +4,7 @@ use crate::{
     pass::{Context, Pass},
     targets::{Target, amd64::Register},
 };
+use std::collections::HashSet;
 
 #[derive(Default)]
 pub struct PrologueEpilogueInsterter;
@@ -42,6 +43,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologueEpilogueInsterter {
                         ],
                     ),
                 ],
+                successors: HashSet::from([1]),
             },
         );
 

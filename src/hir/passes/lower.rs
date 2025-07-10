@@ -8,7 +8,7 @@ use crate::{
     pass::{Context, Pass},
     targets::{Abi, CallingConvention, Target},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub struct Lower;
@@ -28,6 +28,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
                 blocks: vec![mir::BasicBlock {
                     name: "entry".into(),
                     instructions: vec![],
+                    successors: HashSet::new(),
                 }],
             },
             operand_to_vreg_indices: HashMap::new(),
@@ -64,6 +65,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             lowering.mir_function.blocks.push(mir::BasicBlock {
                 name: bb.name.clone(),
                 instructions: Vec::new(),
+                successors: HashSet::new(),
             });
 
             for instr in &bb.instructions {
@@ -497,12 +499,13 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     iffalse: _,
                 } => unimplemented!(),
                 hir::Branch::Unconditional { block_idx } => {
-                    self.get_basic_block()
-                        .instructions
-                        .push(mir::Instruction::new(
-                            GenericOpcode::Br as Opcode,
-                            vec![mir::Operand::Block(*block_idx)],
-                        ));
+                    let bb = self.get_basic_block();
+
+                    bb.successors = HashSet::from([*block_idx]);
+                    bb.instructions.push(mir::Instruction::new(
+                        GenericOpcode::Br as Opcode,
+                        vec![mir::Operand::Block(*block_idx)],
+                    ));
                 }
             },
         }
