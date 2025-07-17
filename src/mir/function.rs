@@ -1,16 +1,13 @@
 use super::{
-    BasicBlock, Operand, Register, RegisterClass, StackFrameIdx, VregIdx,
+    Operand, Register, RegisterClass, StackFrameIdx, VregIdx,
     interference_graph::{InterferenceGraph, NodeId},
 };
-use crate::{hir::ty::TyIdx, mir::BlockIdx};
-use std::collections::{HashMap, HashSet};
-
-#[derive(Debug)]
-struct DefUseBlock {
-    defs: HashSet<Register>,
-    uses: HashSet<Register>,
-    next: HashSet<usize>,
-}
+use crate::{
+    dataflow::Liveness,
+    hir::ty::TyIdx,
+    mir::{BasicBlock, BlockIdx},
+};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Function {
@@ -24,83 +21,35 @@ pub struct Function {
 }
 
 impl Function {
-    fn defs_uses(&self) -> Vec<DefUseBlock> {
-        let mut basic_block_to_def_use_block = HashMap::new();
-        let mut blocks = Vec::new();
-
-        for (i, block) in self.blocks.iter().enumerate() {
-            let last_blocks_len = blocks.len();
-
-            for instr in &block.instructions {
-                blocks.push(DefUseBlock {
-                    defs: instr.defs(),
-                    uses: instr.uses(),
-                    next: instr.next(),
-                });
-            }
-
-            if last_blocks_len == blocks.len() {
-                blocks.push(DefUseBlock {
-                    defs: HashSet::new(),
-                    uses: HashSet::new(),
-                    next: HashSet::new(),
-                });
-            }
-
-            basic_block_to_def_use_block.insert(i, last_blocks_len);
-        }
-
-        let len = blocks.len();
-        for (i, block) in blocks.iter_mut().enumerate() {
-            if i != len - 1 {
-                let mut next: HashSet<_> = block
-                    .next
-                    .iter()
-                    .map(|idx| basic_block_to_def_use_block[idx])
-                    .collect();
-
-                if next.is_empty() {
-                    next.insert(i + 1);
-                }
-
-                block.next = next;
-            }
-        }
-
-        blocks
-    }
-
-    fn liveness(&self) -> Vec<(HashSet<Register>, HashSet<Register>)> {
-        let defs_uses = self.defs_uses();
-        let mut liveness: Vec<_> = defs_uses
-            .iter()
-            .map(|_| (HashSet::new(), HashSet::new()))
-            .collect();
+    fn liveness(&self) -> Vec<Liveness> {
+        let defs_uses: Vec<_> = self.blocks.iter().map(|bb| bb.defs_uses()).collect();
+        let mut liveness = vec![Liveness::default(); defs_uses.len()];
 
         loop {
             let mut done = true;
 
             // Some dude said that in reverse is better
-            for (id, block) in defs_uses.iter().enumerate().rev() {
+            for (i, (defs_uses, block)) in defs_uses.iter().zip(&self.blocks).enumerate().rev() {
                 // out[v] = ∪ in[w] where w ∈ succ(v)
                 let live_out = block
-                    .next
+                    .successors
                     .iter()
-                    .map(|id| liveness[*id].0.clone())
+                    .map(|id| liveness[*id].outs.clone())
                     .reduce(|acc, el| acc.union(&el).cloned().collect())
                     .unwrap_or_default();
                 // in[v] = use(v) ∪ (out[v] - def(v))
-                let live_in = block
+                let live_in = defs_uses
                     .uses
-                    .union(&(&liveness[id].1 - &block.defs))
+                    .union(&(&liveness[i].outs - &defs_uses.defs))
                     .cloned()
                     .collect();
 
-                if &liveness[id].0 != &live_in || &liveness[id].1 != &live_out {
+                if &liveness[i].ins != &live_in || &liveness[i].outs != &live_out {
                     done &= false;
                 }
 
-                liveness[id] = (live_in, live_out);
+                liveness[i].ins = live_in;
+                liveness[i].outs = live_out;
             }
 
             if done {
@@ -113,7 +62,6 @@ impl Function {
 
     pub fn interference(&self) -> (InterferenceGraph, Vec<NodeId>) {
         let mut graph = InterferenceGraph::new();
-        let liveness = self.liveness();
         let r_to_node_idx: HashMap<Register, NodeId> = self
             .registers()
             .into_iter()
@@ -128,14 +76,20 @@ impl Function {
             })
             .collect();
 
-        for (i, block) in self.defs_uses().into_iter().enumerate() {
-            for def in block.defs {
-                for out in &liveness[i].1 {
-                    let a = r_to_node_idx[out];
-                    let b = r_to_node_idx[&def];
+        for (bb, bb_liveness) in self.blocks.iter().zip(self.liveness()) {
+            for (instr_liveness, instr) in bb
+                .liveness(bb_liveness.outs)
+                .into_iter()
+                .zip(&bb.instructions)
+            {
+                for def in instr.defs_uses().defs {
+                    for out in &instr_liveness.outs {
+                        let a = r_to_node_idx[out];
+                        let b = r_to_node_idx[&def];
 
-                    if a != b {
-                        graph.add_edge(a, b);
+                        if a != b {
+                            graph.add_edge(a, b);
+                        }
                     }
                 }
             }

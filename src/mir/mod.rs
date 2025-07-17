@@ -1,13 +1,17 @@
+pub mod basic_block;
 pub mod function;
 pub mod interference_graph;
 mod opcode;
 pub mod pass;
 pub mod passes;
 
-use crate::hir::{self, FunctionIdx};
+use crate::{
+    dataflow::DefsUses,
+    hir::{self, FunctionIdx},
+};
+pub use basic_block::{BasicBlock, BasicBlockPatch};
 pub use function::Function;
 pub use opcode::{GenericOpcode, Opcode};
-use std::collections::HashSet;
 
 pub type VregIdx = usize;
 pub type StackFrameIdx = usize;
@@ -22,39 +26,6 @@ pub struct Module {
     pub name: String,
     pub globals: Vec<hir::Global>,
     pub functions: Vec<Function>,
-}
-
-#[derive(Debug)]
-pub struct BasicBlock {
-    pub name: String,
-    pub instructions: Vec<Instruction>,
-    pub successors: HashSet<BlockIdx>,
-}
-
-pub struct BasicBlockPatch {
-    new_instructions: Vec<(InstructionIdx, Instruction)>,
-}
-
-impl BasicBlockPatch {
-    pub fn new() -> Self {
-        Self {
-            new_instructions: Vec::new(),
-        }
-    }
-
-    pub fn add_instruction(&mut self, instr_idx: InstructionIdx, instr: Instruction) {
-        self.new_instructions.push((instr_idx, instr));
-    }
-
-    pub fn apply(self, bb: &mut BasicBlock) {
-        let mut new_instructions = self.new_instructions;
-
-        new_instructions.sort_by_key(|(instr_idx, _)| (*instr_idx));
-
-        for (instr_idx, instruction) in new_instructions.into_iter().rev() {
-            bb.instructions.insert(instr_idx, instruction);
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -109,33 +80,24 @@ impl Instruction {
         self.opcode == GenericOpcode::Copy as Opcode
     }
 
-    fn defs(&self) -> HashSet<Register> {
-        self.operands
-            .iter()
-            .filter_map(|operand| match operand {
-                Operand::Register(r, RegisterRole::Def) => Some(r.clone()),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn uses(&self) -> HashSet<Register> {
-        self.operands
-            .iter()
-            .filter_map(|operand| match operand {
-                Operand::Register(r, RegisterRole::Use) => Some(r.clone()),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn next(&self) -> HashSet<BlockIdx> {
-        self.operands
-            .iter()
-            .filter_map(|operand| match operand {
-                Operand::Block(idx) => Some(*idx),
-                _ => None,
-            })
-            .collect()
+    fn defs_uses(&self) -> DefsUses {
+        DefsUses {
+            defs: self
+                .operands
+                .iter()
+                .filter_map(|operand| match operand {
+                    Operand::Register(r, RegisterRole::Def) => Some(r.clone()),
+                    _ => None,
+                })
+                .collect(),
+            uses: self
+                .operands
+                .iter()
+                .filter_map(|operand| match operand {
+                    Operand::Register(r, RegisterRole::Use) => Some(r.clone()),
+                    _ => None,
+                })
+                .collect(),
+        }
     }
 }
