@@ -307,4 +307,11 @@ impl super::Target for Target {
             Instruction::new(get_load_op(size) as mir::Opcode, operands),
         );
     }
+
+    fn is_move_op(&self, opcode: mir::Opcode) -> bool {
+        match Opcode::from(opcode) {
+            Opcode::Mov8rr | Opcode::Mov16rr | Opcode::Mov32rr | Opcode::Mov64rr => true,
+            _ => false,
+        }
+    }
 }

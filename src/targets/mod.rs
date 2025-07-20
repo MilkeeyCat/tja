@@ -3,7 +3,8 @@ pub mod amd64;
 use crate::hir::passes::lower::FnLowering;
 use crate::hir::ty::{Storage, TyIdx};
 use crate::mir::{
-    BasicBlockPatch, InstructionIdx, PhysicalRegister, RegisterClass, StackFrameIdx, VregIdx,
+    BasicBlockPatch, InstructionIdx, Opcode, PhysicalRegister, RegisterClass, StackFrameIdx,
+    VregIdx,
 };
 
 pub trait RegisterInfo {
@@ -36,6 +37,7 @@ pub trait Target {
         frame_idx: StackFrameIdx,
         size: usize,
     );
+    fn is_move_op(&self, opcode: Opcode) -> bool;
 }
 
 pub trait CallingConvention {
