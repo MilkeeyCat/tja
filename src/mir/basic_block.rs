@@ -68,12 +68,14 @@ impl BasicBlock {
 
 pub struct BasicBlockPatch {
     new_instructions: Vec<(InstructionIdx, Instruction)>,
+    deleted_instructions: Vec<InstructionIdx>,
 }
 
 impl BasicBlockPatch {
     pub fn new() -> Self {
         Self {
             new_instructions: Vec::new(),
+            deleted_instructions: Vec::new(),
         }
     }
 
@@ -81,13 +83,33 @@ impl BasicBlockPatch {
         self.new_instructions.push((instr_idx, instr));
     }
 
+    pub fn delete_instruction(&mut self, instr_idx: InstructionIdx) {
+        self.deleted_instructions.push(instr_idx);
+    }
+
     pub fn apply(self, bb: &mut BasicBlock) {
         let mut new_instructions = self.new_instructions;
+        let mut deleted_instructions = self.deleted_instructions;
 
-        new_instructions.sort_by_key(|(instr_idx, _)| (*instr_idx));
+        let mut instr_indices: Vec<InstructionIdx> = deleted_instructions
+            .clone()
+            .into_iter()
+            .chain(new_instructions.iter().map(|(instr_idx, _)| *instr_idx))
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
 
-        for (instr_idx, instruction) in new_instructions.into_iter().rev() {
-            bb.instructions.insert(instr_idx, instruction);
+        instr_indices.sort_by_key(|instr_idx| *instr_idx);
+
+        for instr_idx in instr_indices.into_iter().rev() {
+            for _ in deleted_instructions.extract_if(.., |idx| *idx == instr_idx) {
+                bb.instructions.remove(instr_idx);
+            }
+
+            for (instr_idx, instr) in new_instructions.extract_if(.., |(idx, _)| *idx == instr_idx)
+            {
+                bb.instructions.insert(instr_idx, instr);
+            }
         }
     }
 }

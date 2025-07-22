@@ -21,7 +21,7 @@ pub struct Function {
 }
 
 impl Function {
-    fn liveness(&self) -> Vec<Liveness> {
+    pub fn liveness(&self) -> Vec<Liveness> {
         let defs_uses: Vec<_> = self.blocks.iter().map(|bb| bb.defs_uses()).collect();
         let mut liveness = vec![Liveness::default(); defs_uses.len()];
 

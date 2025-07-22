@@ -80,7 +80,7 @@ impl Instruction {
         self.opcode == GenericOpcode::Copy as Opcode
     }
 
-    fn defs_uses(&self) -> DefsUses {
+    pub fn defs_uses(&self) -> DefsUses {
         DefsUses {
             defs: self
                 .operands

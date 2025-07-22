@@ -15,8 +15,8 @@ use crate::{
     codegen::allocator::Allocator,
     hir,
     mir::{
-        self, BasicBlockPatch, Instruction, InstructionIdx, Operand, PhysicalRegister,
-        RegisterRole, StackFrameIdx, passes::two_address::TwoAddressForm,
+        self, BasicBlockPatch, Instruction, InstructionIdx, Operand, RegisterRole, StackFrameIdx,
+        VregIdx, passes::two_address::TwoAddressForm,
     },
     pass::FunctionToModuleAdaptor,
     targets::amd64::{
@@ -260,7 +260,7 @@ impl super::Target for Target {
         &self,
         patch: &mut BasicBlockPatch,
         idx: InstructionIdx,
-        r: PhysicalRegister,
+        vreg_idx: VregIdx,
         frame_idx: StackFrameIdx,
         size: usize,
     ) {
@@ -271,7 +271,7 @@ impl super::Target for Target {
             displacement: None,
         };
         let mut operands = vec![Operand::Register(
-            mir::Register::Physical(r),
+            mir::Register::Virtual(vreg_idx),
             RegisterRole::Use,
         )];
 
@@ -286,7 +286,7 @@ impl super::Target for Target {
         &self,
         patch: &mut BasicBlockPatch,
         idx: InstructionIdx,
-        r: PhysicalRegister,
+        vreg_idx: VregIdx,
         frame_idx: StackFrameIdx,
         size: usize,
     ) {
@@ -297,8 +297,8 @@ impl super::Target for Target {
             displacement: None,
         };
         let mut operands = vec![Operand::Register(
-            mir::Register::Physical(r),
-            RegisterRole::Use,
+            mir::Register::Virtual(vreg_idx),
+            RegisterRole::Def,
         )];
 
         address_mode.write(&mut operands, 1);

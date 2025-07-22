@@ -25,7 +25,7 @@ pub trait Target {
         &self,
         patch: &mut BasicBlockPatch,
         idx: InstructionIdx,
-        r: PhysicalRegister,
+        vreg_idx: VregIdx,
         frame_idx: StackFrameIdx,
         size: usize,
     );
@@ -33,7 +33,7 @@ pub trait Target {
         &self,
         patch: &mut BasicBlockPatch,
         idx: InstructionIdx,
-        r: PhysicalRegister,
+        vreg_idx: VregIdx,
         frame_idx: StackFrameIdx,
         size: usize,
     );
