@@ -559,7 +559,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             self.constrained_moves.insert((bb_idx, instr_idx));
             self.add_work_list(&u);
             self.add_work_list(&v);
-        } else if matches!(v, Register::Physical(_))
+        } else if matches!(u, Register::Physical(_))
             && self.george_strat(
                 self.adjacent(match &v {
                     Register::Virtual(idx) => idx,
@@ -567,7 +567,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 }),
                 u.clone(),
             )
-            || !matches!(v, Register::Physical(_))
+            || !matches!(u, Register::Physical(_))
                 && self.briggs_strat(
                     self.adjacent(match &u {
                         Register::Virtual(idx) => idx,
