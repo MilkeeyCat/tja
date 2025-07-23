@@ -1,5 +1,5 @@
 use crate::{
-    mir::{BasicBlockPatch, Function, GenericOpcode, Instruction, Opcode},
+    mir::{BasicBlockPatch, Function, GenericOpcode, Instruction, Opcode, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -22,6 +22,12 @@ impl<'a, T: Target> Pass<'a, Function, T> for TwoAddressForm {
                         ),
                     );
                     instr.operands.remove(rhs);
+
+                    let r = match instr.operands[lhs].clone() {
+                        Operand::Register(r, RegisterRole::Def) => r,
+                        _ => unreachable!(),
+                    };
+                    instr.implicit_uses.insert(r);
                 }
             }
 

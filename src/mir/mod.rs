@@ -12,6 +12,7 @@ use crate::{
 pub use basic_block::{BasicBlock, BasicBlockPatch};
 pub use function::Function;
 pub use opcode::{GenericOpcode, Opcode};
+use std::collections::HashSet;
 
 pub type VregIdx = usize;
 pub type StackFrameIdx = usize;
@@ -65,6 +66,8 @@ pub struct Instruction {
     pub opcode: Opcode,
     pub operands: Vec<Operand>,
     pub tied_operands: Option<(OperandIdx, OperandIdx)>,
+    pub implicit_defs: HashSet<Register>,
+    pub implicit_uses: HashSet<Register>,
 }
 
 impl Instruction {
@@ -73,6 +76,8 @@ impl Instruction {
             opcode,
             operands,
             tied_operands: None,
+            implicit_defs: HashSet::new(),
+            implicit_uses: HashSet::new(),
         }
     }
 
@@ -89,6 +94,7 @@ impl Instruction {
                     Operand::Register(r, RegisterRole::Def) => Some(r.clone()),
                     _ => None,
                 })
+                .chain(self.implicit_defs.iter().cloned())
                 .collect(),
             uses: self
                 .operands
@@ -97,6 +103,7 @@ impl Instruction {
                     Operand::Register(r, RegisterRole::Use) => Some(r.clone()),
                     _ => None,
                 })
+                .chain(self.implicit_uses.iter().cloned())
                 .collect(),
         }
     }
