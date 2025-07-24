@@ -7,6 +7,12 @@ pub enum Register {
     Ah,
     Al,
 
+    Rbx,
+    Ebx,
+    Bx,
+    Bh,
+    Bl,
+
     Rbp,
     Ebp,
     Bpl,
@@ -88,6 +94,12 @@ impl Register {
             Self::Ax => "ax",
             Self::Ah => "ah",
             Self::Al => "al",
+
+            Self::Rbx => "rbx",
+            Self::Ebx => "ebx",
+            Self::Bx => "bx",
+            Self::Bh => "bh",
+            Self::Bl => "bl",
 
             Self::Rbp => "rbp",
             Self::Ebp => "ebp",
@@ -172,6 +184,11 @@ impl Register {
             Self::Ax => &[Self::Ah, Self::Al],
             Self::Ah | Self::Al => &[],
 
+            Self::Rbx => &[Self::Ebx],
+            Self::Ebx => &[Self::Bx],
+            Self::Bx => &[Self::Bh, Self::Bl],
+            Self::Bh | Self::Bl => &[],
+
             Self::Rbp => &[Self::Ebp],
             Self::Ebp => &[Self::Bpl],
             Self::Bpl => &[Self::Bp],
@@ -252,6 +269,11 @@ impl Register {
             Self::Eax => 4,
             Self::Ax => 2,
             Self::Ah | Self::Al => 1,
+
+            Self::Rbx => 8,
+            Self::Ebx => 4,
+            Self::Bx => 2,
+            Self::Bh | Self::Bl => 1,
 
             Self::Rbp => 8,
             Self::Ebp => 4,

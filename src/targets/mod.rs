@@ -71,4 +71,7 @@ pub trait Abi {
     fn ty_size(&self, storage: &Storage, ty: TyIdx) -> usize;
     fn alignment(&self, storage: &Storage, ty: TyIdx) -> usize;
     fn calling_convention(&self) -> &Self::CallingConvention;
+
+    fn callee_saved_regs(&self) -> &'static [PhysicalRegister];
+    fn caller_saved_regs(&self) -> &'static [PhysicalRegister];
 }

@@ -635,16 +635,22 @@ impl CallingConvention for SysVAmd64 {
             );
         }
 
-        lowering
-            .get_basic_block()
-            .instructions
-            .push(Instruction::new(
-                Opcode::Call64r as mir::Opcode,
-                vec![
-                    Operand::Register(mir::Register::Virtual(callee_vreg_idx), RegisterRole::Use),
-                    Operand::Immediate(stack_offset as u64),
-                ],
-            ));
+        let mut instr = Instruction::new(
+            Opcode::Call64r as mir::Opcode,
+            vec![
+                Operand::Register(mir::Register::Virtual(callee_vreg_idx), RegisterRole::Use),
+                Operand::Immediate(stack_offset as u64),
+            ],
+        );
+
+        instr.implicit_defs = lowering
+            .abi
+            .caller_saved_regs()
+            .to_vec()
+            .into_iter()
+            .map(|r| mir::Register::Physical(r))
+            .collect();
+        lowering.get_basic_block().instructions.push(instr);
 
         if stack_offset > 0 {
             lowering
