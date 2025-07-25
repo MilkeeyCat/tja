@@ -6,7 +6,7 @@ mod instruction_selector;
 mod lower_stack_slots;
 mod materialize_copy;
 mod opcode;
-mod prologue_epilogue_inserter;
+mod prolog_epilog_inserter;
 pub mod register;
 mod register_class_selector;
 mod sysv_calling_convention;
@@ -25,7 +25,7 @@ use crate::{
         lower_stack_slots::StackSlotsLowerer,
         materialize_copy::MaterializeCopy,
         opcode::{get_load_op, get_store_op},
-        prologue_epilogue_inserter::PrologueEpilogueInsterter,
+        prolog_epilog_inserter::PrologEpilogInserter,
         register_class_selector::SelectRegisterClass,
     },
 };
@@ -238,7 +238,7 @@ impl Target {
         fn_pass_manager.add_pass(MaterializeCopy::default());
         fn_pass_manager.add_pass(Allocator::default());
         fn_pass_manager.add_pass(StackSlotsLowerer::default());
-        fn_pass_manager.add_pass(PrologueEpilogueInsterter::default());
+        fn_pass_manager.add_pass(PrologEpilogInserter::default());
 
         pass_manager.add_pass(FunctionToModuleAdaptor::new(fn_pass_manager));
     }

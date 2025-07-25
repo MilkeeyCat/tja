@@ -10,9 +10,9 @@ use crate::{
 use std::collections::HashSet;
 
 #[derive(Default)]
-pub struct PrologueEpilogueInsterter;
+pub struct PrologEpilogInserter;
 
-impl<'a, T: Target> Pass<'a, Function, T> for PrologueEpilogueInsterter {
+impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
     fn run(&self, func: &mut Function, _ctx: &mut Context<'a, T>) {
         let stack_frame_size = func
             .stack_slots

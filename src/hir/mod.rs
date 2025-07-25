@@ -77,8 +77,8 @@ impl Operand {
         Self::Const(Const::Int(value), ty)
     }
 
-    pub fn const_global(idx: GlobalIdx, strorage: &ty::Storage) -> Self {
-        Self::Const(Const::Global(idx), strorage.ptr_ty)
+    pub fn const_global(idx: GlobalIdx, storage: &ty::Storage) -> Self {
+        Self::Const(Const::Global(idx), storage.ptr_ty)
     }
 }
 
