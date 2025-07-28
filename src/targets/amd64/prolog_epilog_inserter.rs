@@ -1,11 +1,11 @@
 use super::Opcode;
 use crate::{
     mir::{
-        self, BasicBlock, BasicBlockPatch, Function, Instruction, Operand, RegisterRole,
-        function::FunctionPatch,
+        self, BasicBlock, BasicBlockPatch, Function, Instruction, Operand, PhysicalRegister,
+        RegisterRole, function::FunctionPatch,
     },
     pass::{Context, Pass},
-    targets::{Target, amd64::Register},
+    targets::{Abi, RegisterInfo, Target, amd64::Register},
 };
 use std::collections::HashSet;
 
@@ -13,29 +13,51 @@ use std::collections::HashSet;
 pub struct PrologEpilogInserter;
 
 impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
-    fn run(&self, func: &mut Function, _ctx: &mut Context<'a, T>) {
+    fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
         let stack_frame_size = func
             .stack_slots
             .values()
             .sum::<usize>()
             .next_multiple_of(16);
+        let regs = func.registers();
+        let used_callee_saved_regs: Vec<PhysicalRegister> = ctx
+            .target
+            .abi()
+            .callee_saved_regs()
+            .iter()
+            .filter_map(|r1| {
+                regs.iter()
+                    .any(|r| match r {
+                        mir::Register::Virtual(_) => false,
+                        mir::Register::Physical(r2) => ctx.target.register_info().overlaps(r1, r2),
+                    })
+                    .then_some(*r1)
+            })
+            .collect();
 
         let mut bb = BasicBlock {
-            name: "prologue".into(),
-            instructions: vec![
-                Instruction::new(
-                    Opcode::Push64r as mir::Opcode,
-                    vec![Operand::Register(
-                        mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
-                        RegisterRole::Use,
-                    )],
-                ),
+            name: "prolog".into(),
+            instructions: Vec::new(),
+            successors: HashSet::from([1]),
+        };
+
+        for r in &used_callee_saved_regs {
+            bb.instructions.push(Instruction::new(
+                Opcode::Push64r as mir::Opcode,
+                vec![Operand::Register(
+                    mir::Register::Physical(*r),
+                    RegisterRole::Use,
+                )],
+            ));
+        }
+        if stack_frame_size > 0 {
+            bb.instructions.extend([
                 Instruction::new(
                     Opcode::Mov64rr as mir::Opcode,
                     vec![
                         Operand::Register(
                             mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
-                            RegisterRole::Use,
+                            RegisterRole::Def,
                         ),
                         Operand::Register(
                             mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
@@ -43,21 +65,17 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                         ),
                     ],
                 ),
-            ],
-            successors: HashSet::from([1]),
-        };
-
-        if stack_frame_size > 0 {
-            bb.instructions.push(Instruction::new(
-                Opcode::Sub64ri as mir::Opcode,
-                vec![
-                    Operand::Register(
-                        mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                        RegisterRole::Use,
-                    ),
-                    Operand::Immediate(stack_frame_size as u64),
-                ],
-            ));
+                Instruction::new(
+                    Opcode::Sub64ri as mir::Opcode,
+                    vec![
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
+                        Operand::Immediate(stack_frame_size as u64),
+                    ],
+                ),
+            ]);
         }
 
         bb.instructions.push(Instruction::new(
@@ -76,10 +94,34 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             if terminator.opcode == Opcode::Ret as mir::Opcode {
                 let mut patch = BasicBlockPatch::new();
 
-                patch.add_instruction(
-                    bb.instructions.len() - 1,
-                    Instruction::new(Opcode::Leave as mir::Opcode, vec![]),
-                );
+                for r in &used_callee_saved_regs {
+                    patch.add_instruction(
+                        bb.instructions.len() - 1,
+                        Instruction::new(
+                            Opcode::Pop64r as mir::Opcode,
+                            vec![Operand::Register(
+                                mir::Register::Physical(*r),
+                                RegisterRole::Def,
+                            )],
+                        ),
+                    );
+                }
+
+                if stack_frame_size > 0 {
+                    patch.add_instruction(
+                        bb.instructions.len() - 1,
+                        Instruction::new(
+                            Opcode::Add64ri as mir::Opcode,
+                            vec![
+                                Operand::Register(
+                                    mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
+                                    RegisterRole::Use,
+                                ),
+                                Operand::Immediate(stack_frame_size as u64),
+                            ],
+                        ),
+                    );
+                }
 
                 patch.apply(bb);
             }

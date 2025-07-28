@@ -344,6 +344,8 @@ opcodes! {
 
     Push64r = "push {src}", (src = r64);
 
+    Pop64r = "pop {dest}", (dest = r64);
+
     Call64r = "call {src}", (src = r64);
 
     Jmp = "jmp {dest}", (dest = label);
