@@ -76,6 +76,11 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
         }
 
         for bb in lowering.mir_function.blocks.iter_mut().skip(1) {
+            bb.successors = std::mem::take(&mut bb.successors)
+                .into_iter()
+                .map(|idx| idx + 1)
+                .collect();
+
             for instr in &mut bb.instructions {
                 for operand in &mut instr.operands {
                     if let mir::Operand::Block(idx) = operand {

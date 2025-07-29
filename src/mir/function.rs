@@ -34,7 +34,7 @@ impl Function {
                 let live_out = block
                     .successors
                     .iter()
-                    .map(|id| liveness[*id].outs.clone())
+                    .map(|id| liveness[*id].ins.clone())
                     .reduce(|acc, el| acc.union(&el).cloned().collect())
                     .unwrap_or_default();
                 // in[v] = use(v) ∪ (out[v] - def(v))
