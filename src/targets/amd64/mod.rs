@@ -237,8 +237,8 @@ impl Target {
         fn_pass_manager.add_pass(TwoAddressForm::default());
         fn_pass_manager.add_pass(MaterializeCopy::default());
         fn_pass_manager.add_pass(Allocator::default());
-        fn_pass_manager.add_pass(StackSlotsLowerer::default());
         fn_pass_manager.add_pass(PrologEpilogInserter::default());
+        fn_pass_manager.add_pass(StackSlotsLowerer::default());
 
         pass_manager.add_pass(FunctionToModuleAdaptor::new(fn_pass_manager));
     }

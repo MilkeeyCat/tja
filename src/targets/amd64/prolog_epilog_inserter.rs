@@ -2,10 +2,16 @@ use super::Opcode;
 use crate::{
     mir::{
         self, BasicBlock, BasicBlockPatch, Function, Instruction, Operand, PhysicalRegister,
-        RegisterRole, function::FunctionPatch,
+        RegisterRole, StackFrameIdx, function::FunctionPatch,
     },
     pass::{Context, Pass},
-    targets::{Abi, RegisterInfo, Target, amd64::Register},
+    targets::{
+        Abi, RegisterInfo, Target,
+        amd64::{
+            Register,
+            address_mode::{AddressMode, Base},
+        },
+    },
 };
 use std::collections::HashSet;
 
@@ -25,6 +31,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             .abi()
             .callee_saved_regs()
             .iter()
+            .filter(|r| **r != Register::Rbp as PhysicalRegister)
             .filter_map(|r1| {
                 regs.iter()
                     .any(|r| match r {
@@ -34,22 +41,21 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                     .then_some(*r1)
             })
             .collect();
+        let mut regs_stack_slots: Vec<StackFrameIdx> =
+            Vec::with_capacity(used_callee_saved_regs.len());
 
         let mut bb = BasicBlock {
             name: "prolog".into(),
-            instructions: Vec::new(),
+            instructions: vec![Instruction::new(
+                Opcode::Push64r as mir::Opcode,
+                vec![Operand::Register(
+                    mir::Register::Physical(Register::Rbp as PhysicalRegister),
+                    RegisterRole::Use,
+                )],
+            )],
             successors: HashSet::from([1]),
         };
 
-        for r in &used_callee_saved_regs {
-            bb.instructions.push(Instruction::new(
-                Opcode::Push64r as mir::Opcode,
-                vec![Operand::Register(
-                    mir::Register::Physical(*r),
-                    RegisterRole::Use,
-                )],
-            ));
-        }
         if stack_frame_size > 0 {
             bb.instructions.extend([
                 Instruction::new(
@@ -78,6 +84,30 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             ]);
         }
 
+        for r in &used_callee_saved_regs {
+            let idx = func.next_stack_frame_idx;
+
+            regs_stack_slots.push(idx);
+            func.next_stack_frame_idx += 1;
+            func.stack_slots.insert(idx, 8);
+
+            let mut operands = vec![Operand::Register(
+                mir::Register::Physical(*r),
+                RegisterRole::Use,
+            )];
+            let address_mode = AddressMode {
+                base: Base::Frame(idx),
+                index: None,
+                scale: 1,
+                displacement: None,
+            };
+
+            address_mode.write(&mut operands, 0);
+
+            bb.instructions
+                .push(Instruction::new(Opcode::Mov64mr as mir::Opcode, operands));
+        }
+
         bb.instructions.push(Instruction::new(
             Opcode::Jmp as mir::Opcode,
             vec![Operand::Block(1)],
@@ -94,32 +124,27 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             if terminator.opcode == Opcode::Ret as mir::Opcode {
                 let mut patch = BasicBlockPatch::new();
 
-                for r in &used_callee_saved_regs {
-                    patch.add_instruction(
-                        bb.instructions.len() - 1,
-                        Instruction::new(
-                            Opcode::Pop64r as mir::Opcode,
-                            vec![Operand::Register(
-                                mir::Register::Physical(*r),
-                                RegisterRole::Def,
-                            )],
-                        ),
-                    );
-                }
+                patch.add_instruction(
+                    bb.instructions.len() - 1,
+                    Instruction::new(Opcode::Leave as mir::Opcode, vec![]),
+                );
 
-                if stack_frame_size > 0 {
+                for (r, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
+                    let mut operands = vec![Operand::Register(
+                        mir::Register::Physical(*r),
+                        RegisterRole::Use,
+                    )];
+                    let address_mode = AddressMode {
+                        base: Base::Frame(*frame_idx),
+                        index: None,
+                        scale: 1,
+                        displacement: None,
+                    };
+
+                    address_mode.write(&mut operands, 1);
                     patch.add_instruction(
                         bb.instructions.len() - 1,
-                        Instruction::new(
-                            Opcode::Add64ri as mir::Opcode,
-                            vec![
-                                Operand::Register(
-                                    mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                                    RegisterRole::Use,
-                                ),
-                                Operand::Immediate(stack_frame_size as u64),
-                            ],
-                        ),
+                        Instruction::new(Opcode::Mov64rm as mir::Opcode, operands),
                     );
                 }
 
