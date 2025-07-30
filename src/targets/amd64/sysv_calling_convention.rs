@@ -25,6 +25,8 @@ enum ClassKind {
 pub struct SysVAmd64;
 
 impl SysVAmd64 {
+    const STACK_RET_VREG_IDX: VregIdx = 0;
+
     pub fn new() -> Self {
         Self
     }
@@ -129,11 +131,14 @@ impl CallingConvention for SysVAmd64 {
         {
             match class {
                 ClassKind::Memory => {
+                    assert_eq!(
+                        lowering.mir_function.vreg_types[&Self::STACK_RET_VREG_IDX],
+                        lowering.ty_storage.ptr_ty
+                    );
+
                     let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
                     let address_mode = AddressMode {
-                        base: Base::Register(mir::Register::Physical(
-                            Register::Rdi as PhysicalRegister,
-                        )),
+                        base: Base::Register(mir::Register::Virtual(Self::STACK_RET_VREG_IDX)),
                         index: None,
                         scale: 1,
                         displacement: None,
@@ -276,7 +281,23 @@ impl CallingConvention for SysVAmd64 {
             .ty_class(lowering.abi, lowering.ty_storage, ret_ty)
             .contains(&ClassKind::Memory)
         {
-            registers.retain(|r| r != &Register::Rdx);
+            let vreg_idx = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+            assert_eq!(vreg_idx, Self::STACK_RET_VREG_IDX);
+
+            lowering
+                .get_basic_block()
+                .instructions
+                .push(Instruction::new(
+                    GenericOpcode::Copy as mir::Opcode,
+                    vec![
+                        Operand::Register(mir::Register::Virtual(vreg_idx), RegisterRole::Def),
+                        Operand::Register(
+                            mir::Register::Physical(Register::Rdi as PhysicalRegister),
+                            RegisterRole::Use,
+                        ),
+                    ],
+                ));
+            registers.retain(|r| r != &Register::Rdi);
         }
 
         for ((ty, mut classes), mut vreg_indices) in tys
