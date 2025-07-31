@@ -1,4 +1,5 @@
 use crate::{
+    hir::ty,
     mir::Module,
     targets::{Target, amd64::AsmPrinter},
 };
@@ -21,10 +22,11 @@ pub struct Options {
 pub fn emit_binary<T: Target>(
     module: &mut Module,
     target: &T,
+    ty_storage: &ty::Storage,
     options: Options,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = String::new();
-    let printer = AsmPrinter::new(target, &mut buf);
+    let printer = AsmPrinter::new(target, ty_storage, &mut buf);
     printer.emit(module)?;
 
     let name = &module.name;
