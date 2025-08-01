@@ -1,7 +1,4 @@
-use super::{
-    Operand, Register, RegisterClass, StackFrameIdx, VregIdx,
-    interference_graph::{InterferenceGraph, NodeId},
-};
+use super::{Operand, Register, RegisterClass, StackFrameIdx, VregIdx};
 use crate::{
     dataflow::Liveness,
     hir::ty::TyIdx,
@@ -58,44 +55,6 @@ impl Function {
         }
 
         liveness
-    }
-
-    pub fn interference(&self) -> (InterferenceGraph, Vec<NodeId>) {
-        let mut graph = InterferenceGraph::new();
-        let r_to_node_idx: HashMap<Register, NodeId> = self
-            .registers()
-            .into_iter()
-            .map(|r| (r.clone(), graph.add_node(r)))
-            .collect();
-        let node_ids: Vec<NodeId> = self
-            .registers()
-            .into_iter()
-            .filter_map(|r| match r {
-                Register::Virtual(_) => Some(r_to_node_idx[&r]),
-                Register::Physical(_) => None,
-            })
-            .collect();
-
-        for (bb, bb_liveness) in self.blocks.iter().zip(self.liveness()) {
-            for (instr_liveness, instr) in bb
-                .liveness(bb_liveness.outs)
-                .into_iter()
-                .zip(&bb.instructions)
-            {
-                for def in instr.defs_uses().defs {
-                    for out in &instr_liveness.outs {
-                        let a = r_to_node_idx[out];
-                        let b = r_to_node_idx[&def];
-
-                        if a != b {
-                            graph.add_edge(a, b);
-                        }
-                    }
-                }
-            }
-        }
-
-        (graph, node_ids)
     }
 
     pub fn registers(&self) -> Vec<Register> {

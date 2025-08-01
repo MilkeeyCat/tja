@@ -1,6 +1,5 @@
 pub mod basic_block;
 pub mod function;
-pub mod interference_graph;
 mod opcode;
 pub mod pass;
 pub mod passes;
