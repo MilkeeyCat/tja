@@ -658,10 +658,10 @@ impl CallingConvention for SysVAmd64 {
 
         let mut instr = Instruction::new(
             Opcode::Call64r as mir::Opcode,
-            vec![
-                Operand::Register(mir::Register::Virtual(callee_vreg_idx), RegisterRole::Use),
-                Operand::Immediate(stack_offset as u64),
-            ],
+            vec![Operand::Register(
+                mir::Register::Virtual(callee_vreg_idx),
+                RegisterRole::Use,
+            )],
         );
 
         instr.implicit_defs = lowering
