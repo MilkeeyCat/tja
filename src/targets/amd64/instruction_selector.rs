@@ -162,6 +162,18 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                                 instr.operands.remove(1);
                                 address_mode.write(&mut instr.operands, 1);
                             }
+                            Operand::Global(idx) => {
+                                let address_mode = AddressMode {
+                                    base: Base::Global(idx),
+                                    index: None,
+                                    scale: 1,
+                                    displacement: None,
+                                };
+
+                                instr.opcode = super::Opcode::Lea64 as Opcode;
+                                instr.operands.remove(1);
+                                address_mode.write(&mut instr.operands, 1);
+                            }
                             _ => unreachable!(),
                         },
                         GenericOpcode::Copy => (), // skip copy instructions at this step

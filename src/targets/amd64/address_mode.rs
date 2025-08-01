@@ -1,5 +1,5 @@
 use crate::{
-    hir::FunctionIdx,
+    hir::{FunctionIdx, GlobalIdx},
     mir::{Operand, Register, RegisterRole, StackFrameIdx},
 };
 
@@ -8,6 +8,7 @@ pub enum Base {
     Register(Register),
     Frame(StackFrameIdx),
     Function(FunctionIdx),
+    Global(GlobalIdx),
 }
 
 #[derive(Clone, Debug)]
@@ -24,6 +25,7 @@ impl AddressMode {
             Base::Register(r) => Operand::Register(r, RegisterRole::Use),
             Base::Frame(stack_frame_idx) => Operand::Frame(stack_frame_idx),
             Base::Function(idx) => Operand::Function(idx),
+            Base::Global(idx) => Operand::Global(idx),
         };
 
         operands.insert(idx, base);

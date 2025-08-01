@@ -137,7 +137,23 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 }
             }
             hir::Operand::Const(c, ty) => match c {
-                Const::Global(_global_idx) => unimplemented!(),
+                Const::Global(idx) => {
+                    let vreg_idx = self.create_vreg(*ty);
+
+                    self.get_basic_block()
+                        .instructions
+                        .push(mir::Instruction::new(
+                            mir::GenericOpcode::GlobalValue as mir::Opcode,
+                            vec![
+                                mir::Operand::Register(
+                                    Register::Virtual(vreg_idx),
+                                    RegisterRole::Def,
+                                ),
+                                mir::Operand::Global(*idx),
+                            ],
+                        ));
+                    vreg_indices.push(vreg_idx);
+                }
                 Const::Function(idx) => {
                     let vreg_idx = self.create_vreg(*ty);
 
