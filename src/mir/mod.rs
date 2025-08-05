@@ -1,24 +1,21 @@
 pub mod basic_block;
 pub mod function;
+mod instruction;
 mod opcode;
 pub mod pass;
 pub mod passes;
 
-use crate::{
-    dataflow::DefsUses,
-    hir::{self, FunctionIdx},
-};
+use crate::hir::{self, FunctionIdx};
 pub use basic_block::{BasicBlock, BasicBlockPatch};
 pub use function::Function;
+pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
 pub use opcode::{GenericOpcode, Opcode};
-use std::collections::HashSet;
 
 pub type VregIdx = usize;
 pub type StackFrameIdx = usize;
 pub type RegisterClass = usize;
 pub type PhysicalRegister = usize;
 pub type BlockIdx = hir::BlockIdx;
-pub type InstructionIdx = hir::InstructionIdx;
 pub type OperandIdx = usize;
 
 #[derive(Debug)]
@@ -40,6 +37,17 @@ pub enum Register {
     Physical(PhysicalRegister),
 }
 
+impl TryFrom<Operand> for Register {
+    type Error = ();
+
+    fn try_from(value: Operand) -> Result<Self, Self::Error> {
+        match value {
+            Operand::Register(r, _) => Ok(r),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Operand {
     Register(Register, RegisterRole),
@@ -51,59 +59,20 @@ pub enum Operand {
 }
 
 impl Operand {
+    pub fn def(r: Register) -> Self {
+        Self::Register(r, RegisterRole::Def)
+    }
+
+    // Can't use `use` -.-
+    pub fn not_def(r: Register) -> Self {
+        Self::Register(r, RegisterRole::Use)
+    }
+
     pub fn get_vreg_idx(&self) -> Option<&VregIdx> {
         if let Self::Register(Register::Virtual(idx), _) = self {
             Some(idx)
         } else {
             None
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Instruction {
-    pub opcode: Opcode,
-    pub operands: Vec<Operand>,
-    pub tied_operands: Option<(OperandIdx, OperandIdx)>,
-    pub implicit_defs: HashSet<Register>,
-    pub implicit_uses: HashSet<Register>,
-}
-
-impl Instruction {
-    pub fn new(opcode: Opcode, operands: Vec<Operand>) -> Self {
-        Self {
-            opcode,
-            operands,
-            tied_operands: None,
-            implicit_defs: HashSet::new(),
-            implicit_uses: HashSet::new(),
-        }
-    }
-
-    pub fn is_copy(&self) -> bool {
-        self.opcode == GenericOpcode::Copy as Opcode
-    }
-
-    pub fn defs_uses(&self) -> DefsUses {
-        DefsUses {
-            defs: self
-                .operands
-                .iter()
-                .filter_map(|operand| match operand {
-                    Operand::Register(r, RegisterRole::Def) => Some(r.clone()),
-                    _ => None,
-                })
-                .chain(self.implicit_defs.iter().cloned())
-                .collect(),
-            uses: self
-                .operands
-                .iter()
-                .filter_map(|operand| match operand {
-                    Operand::Register(r, RegisterRole::Use) => Some(r.clone()),
-                    _ => None,
-                })
-                .chain(self.implicit_uses.iter().cloned())
-                .collect(),
         }
     }
 }

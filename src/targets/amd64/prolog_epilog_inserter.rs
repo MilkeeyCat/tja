@@ -1,8 +1,8 @@
 use super::Opcode;
 use crate::{
     mir::{
-        self, BasicBlock, BasicBlockPatch, Function, Instruction, Operand, PhysicalRegister,
-        RegisterRole, StackFrameIdx, function::FunctionPatch,
+        self, BasicBlock, BasicBlockPatch, Function, InstrBuilder, Instruction, Operand,
+        PhysicalRegister, StackFrameIdx, function::FunctionPatch,
     },
     pass::{Context, Pass},
     targets::{
@@ -46,41 +46,30 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
 
         let mut bb = BasicBlock {
             name: "prolog".into(),
-            instructions: vec![Instruction::new(
-                Opcode::Push64r as mir::Opcode,
-                vec![Operand::Register(
-                    mir::Register::Physical(Register::Rbp as PhysicalRegister),
-                    RegisterRole::Use,
-                )],
-            )],
+            instructions: vec![
+                InstrBuilder::new(Opcode::Push64r as mir::Opcode)
+                    .add_use(mir::Register::Physical(Register::Rbp as PhysicalRegister))
+                    .into(),
+            ],
             successors: HashSet::from([1]),
         };
 
         if stack_frame_size > 0 {
             bb.instructions.extend([
-                Instruction::new(
-                    Opcode::Mov64rr as mir::Opcode,
-                    vec![
-                        Operand::Register(
-                            mir::Register::Physical(Register::Rbp as mir::PhysicalRegister),
-                            RegisterRole::Def,
-                        ),
-                        Operand::Register(
-                            mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                            RegisterRole::Use,
-                        ),
-                    ],
-                ),
-                Instruction::new(
-                    Opcode::Sub64ri as mir::Opcode,
-                    vec![
-                        Operand::Register(
-                            mir::Register::Physical(Register::Rsp as mir::PhysicalRegister),
-                            RegisterRole::Use,
-                        ),
-                        Operand::Immediate(stack_frame_size as u64),
-                    ],
-                ),
+                InstrBuilder::new(Opcode::Mov64rr as mir::Opcode)
+                    .add_def(mir::Register::Physical(
+                        Register::Rbp as mir::PhysicalRegister,
+                    ))
+                    .add_use(mir::Register::Physical(
+                        Register::Rsp as mir::PhysicalRegister,
+                    ))
+                    .into(),
+                InstrBuilder::new(Opcode::Sub64ri as mir::Opcode)
+                    .add_use(mir::Register::Physical(
+                        Register::Rsp as mir::PhysicalRegister,
+                    ))
+                    .add_operand(Operand::Immediate(stack_frame_size as u64))
+                    .into(),
             ]);
         }
 
@@ -91,27 +80,24 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             func.next_stack_frame_idx += 1;
             func.stack_slots.insert(idx, 8);
 
-            let mut operands = vec![Operand::Register(
-                mir::Register::Physical(*r),
-                RegisterRole::Use,
-            )];
-            let address_mode = AddressMode {
-                base: Base::Frame(idx),
-                index: None,
-                scale: 1,
-                displacement: None,
-            };
-
-            address_mode.write(&mut operands, 0);
-
-            bb.instructions
-                .push(Instruction::new(Opcode::Mov64mr as mir::Opcode, operands));
+            bb.instructions.push(
+                InstrBuilder::new(Opcode::Mov64mr as mir::Opcode)
+                    .add_addr_mode(AddressMode {
+                        base: Base::Frame(idx),
+                        index: None,
+                        scale: 1,
+                        displacement: None,
+                    })
+                    .add_use(mir::Register::Physical(*r))
+                    .into(),
+            );
         }
 
-        bb.instructions.push(Instruction::new(
-            Opcode::Jmp as mir::Opcode,
-            vec![Operand::Block(1)],
-        ));
+        bb.instructions.push(
+            InstrBuilder::new(Opcode::Jmp as mir::Opcode)
+                .add_operand(Operand::Block(1))
+                .into(),
+        );
 
         let mut patch = FunctionPatch::new();
 
@@ -126,25 +112,21 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
 
                 patch.add_instruction(
                     bb.instructions.len() - 1,
-                    Instruction::new(Opcode::Leave as mir::Opcode, vec![]),
+                    Instruction::new(Opcode::Leave as mir::Opcode),
                 );
 
                 for (r, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
-                    let mut operands = vec![Operand::Register(
-                        mir::Register::Physical(*r),
-                        RegisterRole::Use,
-                    )];
-                    let address_mode = AddressMode {
-                        base: Base::Frame(*frame_idx),
-                        index: None,
-                        scale: 1,
-                        displacement: None,
-                    };
-
-                    address_mode.write(&mut operands, 1);
                     patch.add_instruction(
                         bb.instructions.len() - 1,
-                        Instruction::new(Opcode::Mov64rm as mir::Opcode, operands),
+                        InstrBuilder::new(Opcode::Mov64rm as mir::Opcode)
+                            .add_use(mir::Register::Physical(*r))
+                            .add_addr_mode(AddressMode {
+                                base: Base::Frame(*frame_idx),
+                                index: None,
+                                scale: 1,
+                                displacement: None,
+                            })
+                            .into(),
                     );
                 }
 

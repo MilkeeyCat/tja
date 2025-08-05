@@ -3,7 +3,7 @@ use crate::{
         passes::lower::FnLowering,
         ty::{self, Ty, TyIdx},
     },
-    mir::{self, GenericOpcode, Instruction, Operand, PhysicalRegister, RegisterRole, VregIdx},
+    mir::{self, InstrBuilder, Instruction, Operand, PhysicalRegister, VregIdx},
     targets::{
         Abi, CallingConvention,
         amd64::{
@@ -137,25 +137,20 @@ impl CallingConvention for SysVAmd64 {
                     );
 
                     let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
-                    let address_mode = AddressMode {
-                        base: Base::Register(mir::Register::Virtual(Self::STACK_RET_VREG_IDX)),
-                        index: None,
-                        scale: 1,
-                        displacement: None,
-                    };
-                    let mut operands = vec![mir::Operand::Register(
-                        mir::Register::Virtual(base),
-                        RegisterRole::Def,
-                    )];
 
-                    address_mode.write(&mut operands, 1);
-                    lowering
-                        .get_basic_block()
-                        .instructions
-                        .push(mir::Instruction::new(
-                            Opcode::Lea64 as mir::Opcode,
-                            operands,
-                        ));
+                    lowering.get_basic_block().instructions.push(
+                        InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
+                            .add_def(mir::Register::Virtual(base))
+                            .add_addr_mode(AddressMode {
+                                base: Base::Register(mir::Register::Virtual(
+                                    Self::STACK_RET_VREG_IDX,
+                                )),
+                                index: None,
+                                scale: 1,
+                                displacement: None,
+                            })
+                            .into(),
+                    );
 
                     for (vreg_idx, offset) in std::mem::take(&mut vreg_indices)
                         .into_iter()
@@ -164,33 +159,17 @@ impl CallingConvention for SysVAmd64 {
                         let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
                         let bb = lowering.get_basic_block();
 
-                        bb.instructions.push(mir::Instruction::new(
-                            GenericOpcode::PtrAdd as mir::Opcode,
-                            vec![
-                                mir::Operand::Register(
-                                    mir::Register::Virtual(ptr_add),
-                                    RegisterRole::Def,
-                                ),
-                                mir::Operand::Register(
-                                    mir::Register::Virtual(base),
-                                    RegisterRole::Use,
-                                ),
+                        bb.instructions.extend([
+                            Instruction::ptr_add(
+                                mir::Register::Virtual(ptr_add),
+                                Operand::not_def(mir::Register::Virtual(base)),
                                 mir::Operand::Immediate(offset as u64),
-                            ],
-                        ));
-                        bb.instructions.push(Instruction::new(
-                            GenericOpcode::Store as mir::Opcode,
-                            vec![
-                                Operand::Register(
-                                    mir::Register::Virtual(vreg_idx),
-                                    RegisterRole::Use,
-                                ),
-                                Operand::Register(
-                                    mir::Register::Virtual(ptr_add),
-                                    RegisterRole::Use,
-                                ),
-                            ],
-                        ));
+                            ),
+                            Instruction::store(
+                                mir::Register::Virtual(vreg_idx),
+                                Operand::not_def(mir::Register::Virtual(ptr_add)),
+                            ),
+                        ]);
                     }
                 }
                 ClassKind::Integer => {
@@ -204,19 +183,14 @@ impl CallingConvention for SysVAmd64 {
                         let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
 
                         if let Some(last_offset) = last_offset {
-                            lowering
-                                .get_basic_block()
-                                .instructions
-                                .push(Instruction::new(
-                                    Opcode::Shl64ri as mir::Opcode,
-                                    vec![
-                                        Operand::Register(
-                                            mir::Register::Physical(r as PhysicalRegister),
-                                            RegisterRole::Use,
-                                        ),
-                                        Operand::Immediate((last_offset - offset) as u64 * 8),
-                                    ],
-                                ));
+                            lowering.get_basic_block().instructions.push(
+                                InstrBuilder::new(Opcode::Shl64ri as mir::Opcode)
+                                    .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                    .add_operand(Operand::Immediate(
+                                        (last_offset - offset) as u64 * 8,
+                                    ))
+                                    .into(),
+                            );
                         }
 
                         let r = match (r, ty_size) {
@@ -236,18 +210,9 @@ impl CallingConvention for SysVAmd64 {
                         lowering
                             .get_basic_block()
                             .instructions
-                            .push(Instruction::new(
-                                GenericOpcode::Copy as mir::Opcode,
-                                vec![
-                                    Operand::Register(
-                                        mir::Register::Physical(r as PhysicalRegister),
-                                        RegisterRole::Def,
-                                    ),
-                                    Operand::Register(
-                                        mir::Register::Virtual(vreg_idx),
-                                        RegisterRole::Use,
-                                    ),
-                                ],
+                            .push(Instruction::copy(
+                                mir::Register::Physical(r as PhysicalRegister),
+                                Operand::not_def(mir::Register::Virtual(vreg_idx)),
                             ));
                         last_offset = Some(offset);
                     }
@@ -287,15 +252,9 @@ impl CallingConvention for SysVAmd64 {
             lowering
                 .get_basic_block()
                 .instructions
-                .push(Instruction::new(
-                    GenericOpcode::Copy as mir::Opcode,
-                    vec![
-                        Operand::Register(mir::Register::Virtual(vreg_idx), RegisterRole::Def),
-                        Operand::Register(
-                            mir::Register::Physical(Register::Rdi as PhysicalRegister),
-                            RegisterRole::Use,
-                        ),
-                    ],
+                .push(Instruction::copy(
+                    mir::Register::Virtual(vreg_idx),
+                    Operand::not_def(mir::Register::Physical(Register::Rdi as PhysicalRegister)),
                 ));
             registers.retain(|r| r != &Register::Rdi);
         }
@@ -315,27 +274,20 @@ impl CallingConvention for SysVAmd64 {
                 match class {
                     ClassKind::Memory => {
                         let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
-                        let address_mode = AddressMode {
-                            base: Base::Register(mir::Register::Physical(
-                                Register::Rbp as PhysicalRegister,
-                            )),
-                            index: None,
-                            scale: 1,
-                            displacement: Some(16), // return address & rbp
-                        };
-                        let mut operands = vec![mir::Operand::Register(
-                            mir::Register::Virtual(base),
-                            RegisterRole::Def,
-                        )];
 
-                        address_mode.write(&mut operands, 1);
-                        lowering
-                            .get_basic_block()
-                            .instructions
-                            .push(mir::Instruction::new(
-                                Opcode::Lea64 as mir::Opcode,
-                                operands,
-                            ));
+                        lowering.get_basic_block().instructions.push(
+                            InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
+                                .add_def(mir::Register::Virtual(base))
+                                .add_addr_mode(AddressMode {
+                                    base: Base::Register(mir::Register::Physical(
+                                        Register::Rbp as PhysicalRegister,
+                                    )),
+                                    index: None,
+                                    scale: 1,
+                                    displacement: Some(16), // return address & rbp
+                                })
+                                .into(),
+                        );
 
                         for (vreg_idx, offset) in std::mem::take(&mut vreg_indices)
                             .into_iter()
@@ -344,33 +296,17 @@ impl CallingConvention for SysVAmd64 {
                             let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
                             let bb = lowering.get_basic_block();
 
-                            bb.instructions.push(mir::Instruction::new(
-                                GenericOpcode::PtrAdd as mir::Opcode,
-                                vec![
-                                    mir::Operand::Register(
-                                        mir::Register::Virtual(ptr_add),
-                                        RegisterRole::Def,
-                                    ),
-                                    mir::Operand::Register(
-                                        mir::Register::Virtual(base),
-                                        RegisterRole::Use,
-                                    ),
-                                    mir::Operand::Immediate(offset as u64),
-                                ],
-                            ));
-                            bb.instructions.push(Instruction::new(
-                                GenericOpcode::Load as mir::Opcode,
-                                vec![
-                                    Operand::Register(
-                                        mir::Register::Virtual(vreg_idx),
-                                        RegisterRole::Def,
-                                    ),
-                                    Operand::Register(
-                                        mir::Register::Virtual(ptr_add),
-                                        RegisterRole::Use,
-                                    ),
-                                ],
-                            ));
+                            bb.instructions.extend([
+                                Instruction::ptr_add(
+                                    mir::Register::Virtual(ptr_add),
+                                    Operand::not_def(mir::Register::Virtual(base)),
+                                    Operand::Immediate(offset as u64),
+                                ),
+                                Instruction::load(
+                                    mir::Register::Virtual(vreg_idx),
+                                    Operand::not_def(mir::Register::Virtual(ptr_add)),
+                                ),
+                            ]);
                         }
                     }
                     ClassKind::Integer => {
@@ -385,16 +321,14 @@ impl CallingConvention for SysVAmd64 {
                             let bb = lowering.get_basic_block();
 
                             if let Some(last_offset) = last_offset {
-                                bb.instructions.push(Instruction::new(
-                                    Opcode::Shr64ri as mir::Opcode,
-                                    vec![
-                                        Operand::Register(
-                                            mir::Register::Physical(r as PhysicalRegister),
-                                            RegisterRole::Use,
-                                        ),
-                                        Operand::Immediate((offset - last_offset) as u64 * 8),
-                                    ],
-                                ));
+                                bb.instructions.push(
+                                    InstrBuilder::new(Opcode::Shr64ri as mir::Opcode)
+                                        .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                        .add_operand(Operand::Immediate(
+                                            (offset - last_offset) as u64 * 8,
+                                        ))
+                                        .into(),
+                                );
                             }
 
                             let r = match (r, ty_size) {
@@ -431,18 +365,9 @@ impl CallingConvention for SysVAmd64 {
                                 _ => unreachable!(),
                             };
 
-                            bb.instructions.push(Instruction::new(
-                                GenericOpcode::Copy as mir::Opcode,
-                                vec![
-                                    Operand::Register(
-                                        mir::Register::Virtual(vreg_idx),
-                                        RegisterRole::Def,
-                                    ),
-                                    Operand::Register(
-                                        mir::Register::Physical(r as PhysicalRegister),
-                                        RegisterRole::Use,
-                                    ),
-                                ],
+                            bb.instructions.push(Instruction::copy(
+                                mir::Register::Virtual(vreg_idx),
+                                Operand::not_def(mir::Register::Physical(r as PhysicalRegister)),
                             ));
 
                             last_offset = Some(offset);
@@ -486,15 +411,9 @@ impl CallingConvention for SysVAmd64 {
                 lowering
                     .get_basic_block()
                     .instructions
-                    .push(Instruction::new(
-                        GenericOpcode::FrameIndex as mir::Opcode,
-                        vec![
-                            Operand::Register(
-                                mir::Register::Physical(Register::Rdi as PhysicalRegister),
-                                RegisterRole::Def,
-                            ),
-                            Operand::Frame(frame_idx),
-                        ],
+                    .push(Instruction::frame_idx(
+                        mir::Register::Physical(Register::Rdi as PhysicalRegister),
+                        frame_idx,
                     ));
             }
         }
@@ -528,30 +447,17 @@ impl CallingConvention for SysVAmd64 {
                             let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
                             let bb = lowering.get_basic_block();
 
-                            bb.instructions.push(mir::Instruction::new(
-                                GenericOpcode::PtrAdd as mir::Opcode,
-                                vec![
-                                    mir::Operand::Register(
-                                        mir::Register::Virtual(ptr_add),
-                                        RegisterRole::Def,
-                                    ),
-                                    mir::Operand::Register(base.clone(), RegisterRole::Use),
+                            bb.instructions.extend([
+                                Instruction::ptr_add(
+                                    mir::Register::Virtual(ptr_add),
+                                    Operand::not_def(base.clone()),
                                     mir::Operand::Immediate((stack_offset + offset) as u64),
-                                ],
-                            ));
-                            bb.instructions.push(Instruction::new(
-                                GenericOpcode::Store as mir::Opcode,
-                                vec![
-                                    Operand::Register(
-                                        mir::Register::Virtual(vreg_idx),
-                                        RegisterRole::Use,
-                                    ),
-                                    Operand::Register(
-                                        mir::Register::Virtual(ptr_add),
-                                        RegisterRole::Use,
-                                    ),
-                                ],
-                            ));
+                                ),
+                                Instruction::store(
+                                    mir::Register::Virtual(vreg_idx),
+                                    Operand::not_def(mir::Register::Virtual(ptr_add)),
+                                ),
+                            ]);
                         }
 
                         stack_offset += lowering.abi.ty_size(lowering.ty_storage, ty);
@@ -567,19 +473,14 @@ impl CallingConvention for SysVAmd64 {
                             let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
 
                             if let Some(last_offset) = last_offset {
-                                lowering
-                                    .get_basic_block()
-                                    .instructions
-                                    .push(Instruction::new(
-                                        Opcode::Shl64ri as mir::Opcode,
-                                        vec![
-                                            Operand::Register(
-                                                mir::Register::Physical(r as PhysicalRegister),
-                                                RegisterRole::Use,
-                                            ),
-                                            Operand::Immediate((last_offset - offset) as u64 * 8),
-                                        ],
-                                    ));
+                                lowering.get_basic_block().instructions.push(
+                                    InstrBuilder::new(Opcode::Shl64ri as mir::Opcode)
+                                        .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                        .add_operand(Operand::Immediate(
+                                            (last_offset - offset) as u64 * 8,
+                                        ))
+                                        .into(),
+                                );
                             }
 
                             let r = match (r, ty_size) {
@@ -619,18 +520,9 @@ impl CallingConvention for SysVAmd64 {
                             lowering
                                 .get_basic_block()
                                 .instructions
-                                .push(Instruction::new(
-                                    GenericOpcode::Copy as mir::Opcode,
-                                    vec![
-                                        Operand::Register(
-                                            mir::Register::Physical(r as PhysicalRegister),
-                                            RegisterRole::Def,
-                                        ),
-                                        Operand::Register(
-                                            mir::Register::Virtual(vreg_idx),
-                                            RegisterRole::Use,
-                                        ),
-                                    ],
+                                .push(Instruction::copy(
+                                    mir::Register::Physical(r as PhysicalRegister),
+                                    Operand::not_def(mir::Register::Virtual(vreg_idx)),
                                 ));
                             last_offset = Some(offset);
                         }
@@ -643,27 +535,16 @@ impl CallingConvention for SysVAmd64 {
         if stack_offset > 0 {
             lowering.get_basic_block().instructions.insert(
                 adj_stack_pos,
-                Instruction::new(
-                    Opcode::Sub64ri as mir::Opcode,
-                    vec![
-                        Operand::Register(
-                            mir::Register::Physical(Register::Rsp as PhysicalRegister),
-                            RegisterRole::Use,
-                        ),
-                        Operand::Immediate(stack_offset as u64),
-                    ],
-                ),
+                InstrBuilder::new(Opcode::Sub64ri as mir::Opcode)
+                    .add_use(mir::Register::Physical(Register::Rsp as PhysicalRegister))
+                    .add_operand(Operand::Immediate(stack_offset as u64))
+                    .into(),
             );
         }
 
-        let mut instr = Instruction::new(
-            Opcode::Call64r as mir::Opcode,
-            vec![Operand::Register(
-                mir::Register::Virtual(callee_vreg_idx),
-                RegisterRole::Use,
-            )],
-        );
+        let mut instr = Instruction::new(Opcode::Call64r as mir::Opcode);
 
+        instr.add_use(mir::Register::Virtual(callee_vreg_idx));
         instr.implicit_defs = lowering
             .abi
             .caller_saved_regs()
@@ -674,19 +555,12 @@ impl CallingConvention for SysVAmd64 {
         lowering.get_basic_block().instructions.push(instr);
 
         if stack_offset > 0 {
-            lowering
-                .get_basic_block()
-                .instructions
-                .push(Instruction::new(
-                    Opcode::Add64ri as mir::Opcode,
-                    vec![
-                        Operand::Register(
-                            mir::Register::Physical(Register::Rsp as PhysicalRegister),
-                            RegisterRole::Use,
-                        ),
-                        Operand::Immediate(stack_offset as u64),
-                    ],
-                ));
+            lowering.get_basic_block().instructions.push(
+                InstrBuilder::new(Opcode::Add64ri as mir::Opcode)
+                    .add_use(mir::Register::Physical(Register::Rsp as PhysicalRegister))
+                    .add_operand(Operand::Immediate(stack_offset as u64))
+                    .into(),
+            );
         }
 
         if let Some((mut vreg_indices, ty)) = ret {
@@ -697,27 +571,20 @@ impl CallingConvention for SysVAmd64 {
                 match class {
                     ClassKind::Memory => {
                         let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
-                        let address_mode = AddressMode {
-                            base: Base::Register(mir::Register::Physical(
-                                Register::Rdi as PhysicalRegister,
-                            )),
-                            index: None,
-                            scale: 1,
-                            displacement: None,
-                        };
-                        let mut operands = vec![mir::Operand::Register(
-                            mir::Register::Virtual(base),
-                            RegisterRole::Def,
-                        )];
 
-                        address_mode.write(&mut operands, 1);
-                        lowering
-                            .get_basic_block()
-                            .instructions
-                            .push(mir::Instruction::new(
-                                Opcode::Lea64 as mir::Opcode,
-                                operands,
-                            ));
+                        lowering.get_basic_block().instructions.push(
+                            InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
+                                .add_def(mir::Register::Virtual(base))
+                                .add_addr_mode(AddressMode {
+                                    base: Base::Register(mir::Register::Physical(
+                                        Register::Rdi as PhysicalRegister,
+                                    )),
+                                    index: None,
+                                    scale: 1,
+                                    displacement: None,
+                                })
+                                .into(),
+                        );
 
                         for (vreg_idx, offset) in std::mem::take(&mut vreg_indices)
                             .into_iter()
@@ -726,33 +593,17 @@ impl CallingConvention for SysVAmd64 {
                             let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
                             let bb = lowering.get_basic_block();
 
-                            bb.instructions.push(mir::Instruction::new(
-                                GenericOpcode::PtrAdd as mir::Opcode,
-                                vec![
-                                    mir::Operand::Register(
-                                        mir::Register::Virtual(ptr_add),
-                                        RegisterRole::Def,
-                                    ),
-                                    mir::Operand::Register(
-                                        mir::Register::Virtual(base),
-                                        RegisterRole::Use,
-                                    ),
-                                    mir::Operand::Immediate(offset as u64),
-                                ],
-                            ));
-                            bb.instructions.push(Instruction::new(
-                                GenericOpcode::Load as mir::Opcode,
-                                vec![
-                                    Operand::Register(
-                                        mir::Register::Virtual(vreg_idx),
-                                        RegisterRole::Def,
-                                    ),
-                                    Operand::Register(
-                                        mir::Register::Virtual(ptr_add),
-                                        RegisterRole::Use,
-                                    ),
-                                ],
-                            ));
+                            bb.instructions.extend([
+                                Instruction::ptr_add(
+                                    mir::Register::Virtual(ptr_add),
+                                    Operand::not_def(mir::Register::Virtual(base)),
+                                    Operand::Immediate(offset as u64),
+                                ),
+                                Instruction::load(
+                                    mir::Register::Virtual(vreg_idx),
+                                    Operand::not_def(mir::Register::Virtual(ptr_add)),
+                                ),
+                            ]);
                         }
                     }
                     ClassKind::Integer => {
@@ -767,16 +618,14 @@ impl CallingConvention for SysVAmd64 {
                             let bb = lowering.get_basic_block();
 
                             if let Some(last_offset) = last_offset {
-                                bb.instructions.push(Instruction::new(
-                                    Opcode::Shr64ri as mir::Opcode,
-                                    vec![
-                                        Operand::Register(
-                                            mir::Register::Physical(r as PhysicalRegister),
-                                            RegisterRole::Use,
-                                        ),
-                                        Operand::Immediate((offset - last_offset) as u64 * 8),
-                                    ],
-                                ));
+                                bb.instructions.push(
+                                    InstrBuilder::new(Opcode::Shr64ri as mir::Opcode)
+                                        .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                        .add_operand(Operand::Immediate(
+                                            (offset - last_offset) as u64 * 8,
+                                        ))
+                                        .into(),
+                                );
                             }
 
                             let r = match (r, ty_size) {
@@ -793,18 +642,9 @@ impl CallingConvention for SysVAmd64 {
                                 _ => unreachable!(),
                             };
 
-                            bb.instructions.push(Instruction::new(
-                                GenericOpcode::Copy as mir::Opcode,
-                                vec![
-                                    Operand::Register(
-                                        mir::Register::Virtual(vreg_idx),
-                                        RegisterRole::Def,
-                                    ),
-                                    Operand::Register(
-                                        mir::Register::Physical(r as PhysicalRegister),
-                                        RegisterRole::Use,
-                                    ),
-                                ],
+                            bb.instructions.push(Instruction::copy(
+                                mir::Register::Virtual(vreg_idx),
+                                Operand::not_def(mir::Register::Physical(r as PhysicalRegister)),
                             ));
 
                             last_offset = Some(offset);

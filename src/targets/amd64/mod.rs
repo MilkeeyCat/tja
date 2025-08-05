@@ -15,8 +15,8 @@ use crate::{
     codegen::allocator::Allocator,
     hir,
     mir::{
-        self, BasicBlockPatch, Instruction, InstructionIdx, Operand, RegisterRole, StackFrameIdx,
-        VregIdx, passes::two_address::TwoAddressForm,
+        self, BasicBlockPatch, InstrBuilder, InstructionIdx, Operand, StackFrameIdx, VregIdx,
+        passes::two_address::TwoAddressForm,
     },
     pass::FunctionToModuleAdaptor,
     targets::amd64::{
@@ -264,21 +264,17 @@ impl super::Target for Target {
         frame_idx: StackFrameIdx,
         size: usize,
     ) {
-        let address_mode = AddressMode {
-            base: Base::Frame(frame_idx),
-            index: None,
-            scale: 1,
-            displacement: None,
-        };
-        let mut operands = vec![Operand::Register(
-            mir::Register::Virtual(vreg_idx),
-            RegisterRole::Use,
-        )];
-
-        address_mode.write(&mut operands, 0);
         patch.add_instruction(
             idx,
-            Instruction::new(get_store_op(size) as mir::Opcode, operands),
+            InstrBuilder::new(get_store_op(size) as mir::Opcode)
+                .add_addr_mode(AddressMode {
+                    base: Base::Frame(frame_idx),
+                    index: None,
+                    scale: 1,
+                    displacement: None,
+                })
+                .add_use(mir::Register::Virtual(vreg_idx))
+                .into(),
         );
     }
 
@@ -290,21 +286,17 @@ impl super::Target for Target {
         frame_idx: StackFrameIdx,
         size: usize,
     ) {
-        let address_mode = AddressMode {
-            base: Base::Frame(frame_idx),
-            index: None,
-            scale: 1,
-            displacement: None,
-        };
-        let mut operands = vec![Operand::Register(
-            mir::Register::Virtual(vreg_idx),
-            RegisterRole::Def,
-        )];
-
-        address_mode.write(&mut operands, 1);
         patch.add_instruction(
             idx,
-            Instruction::new(get_load_op(size) as mir::Opcode, operands),
+            InstrBuilder::new(get_load_op(size) as mir::Opcode)
+                .add_def(mir::Register::Virtual(vreg_idx))
+                .add_addr_mode(AddressMode {
+                    base: Base::Frame(frame_idx),
+                    index: None,
+                    scale: 1,
+                    displacement: None,
+                })
+                .into(),
         );
     }
 
@@ -313,5 +305,15 @@ impl super::Target for Target {
             Opcode::Mov8rr | Opcode::Mov16rr | Opcode::Mov32rr | Opcode::Mov64rr => true,
             _ => false,
         }
+    }
+}
+
+impl InstrBuilder {
+    pub fn add_addr_mode(mut self, addr_mode: AddressMode) -> Self {
+        let len = self.0.operands.len();
+
+        addr_mode.write(&mut self.0.operands, len);
+
+        self
     }
 }

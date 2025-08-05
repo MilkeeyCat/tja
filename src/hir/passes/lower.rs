@@ -4,7 +4,7 @@ use crate::{
         op::BinOp,
         ty::{self, Ty, TyIdx},
     },
-    mir::{self, BlockIdx, GenericOpcode, Opcode, Register, RegisterRole},
+    mir::{self, BlockIdx, GenericOpcode, InstrBuilder, Opcode, Operand, Register, RegisterRole},
     pass::{Context, Pass},
     targets::{Abi, CallingConvention, Target},
 };
@@ -55,10 +55,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
         lowering
             .get_basic_block()
             .instructions
-            .push(mir::Instruction::new(
-                GenericOpcode::Br as mir::Opcode,
-                vec![mir::Operand::Block(1)],
-            ));
+            .push(mir::Instruction::br(1));
 
         for (idx, bb) in function.blocks.iter().enumerate() {
             lowering.current_bb_idx = idx + 1;
@@ -142,15 +139,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                     self.get_basic_block()
                         .instructions
-                        .push(mir::Instruction::new(
-                            mir::GenericOpcode::GlobalValue as mir::Opcode,
-                            vec![
-                                mir::Operand::Register(
-                                    Register::Virtual(vreg_idx),
-                                    RegisterRole::Def,
-                                ),
-                                mir::Operand::Global(*idx),
-                            ],
+                        .push(mir::Instruction::global_value(
+                            Register::Virtual(vreg_idx),
+                            *idx,
                         ));
                     vreg_indices.push(vreg_idx);
                 }
@@ -159,15 +150,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                     self.get_basic_block()
                         .instructions
-                        .push(mir::Instruction::new(
-                            mir::GenericOpcode::GlobalValue as mir::Opcode,
-                            vec![
-                                mir::Operand::Register(
-                                    Register::Virtual(vreg_idx),
-                                    RegisterRole::Def,
-                                ),
-                                mir::Operand::Function(*idx),
-                            ],
+                        .push(mir::Instruction::global_value(
+                            Register::Virtual(vreg_idx),
+                            *idx,
                         ));
                     vreg_indices.push(vreg_idx);
                 }
@@ -176,15 +161,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                     self.get_basic_block()
                         .instructions
-                        .push(mir::Instruction::new(
-                            mir::GenericOpcode::Copy as mir::Opcode,
-                            vec![
-                                mir::Operand::Register(
-                                    Register::Virtual(vreg_idx),
-                                    RegisterRole::Def,
-                                ),
-                                mir::Operand::Immediate(*value),
-                            ],
+                        .push(mir::Instruction::copy(
+                            Register::Virtual(vreg_idx),
+                            mir::Operand::Immediate(*value),
                         ));
                     vreg_indices.push(vreg_idx);
                 }
@@ -288,16 +267,13 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     BinOp::UDiv => GenericOpcode::UDiv,
                 };
 
-                self.get_basic_block()
-                    .instructions
-                    .push(mir::Instruction::new(
-                        opcode as Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(def), RegisterRole::Def),
-                            mir::Operand::Register(Register::Virtual(lhs), RegisterRole::Use),
-                            mir::Operand::Register(Register::Virtual(rhs), RegisterRole::Use),
-                        ],
-                    ));
+                self.get_basic_block().instructions.push(
+                    InstrBuilder::new(opcode as Opcode)
+                        .add_def(Register::Virtual(def))
+                        .add_use(Register::Virtual(lhs))
+                        .add_use(Register::Virtual(rhs))
+                        .into(),
+                );
             }
             hir::Instruction::Alloca { ty, out } => {
                 let def = self.get_or_create_vreg(hir::Operand::Local(*out));
@@ -305,12 +281,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                 self.get_basic_block()
                     .instructions
-                    .push(mir::Instruction::new(
-                        GenericOpcode::FrameIndex as Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(def), RegisterRole::Def),
-                            mir::Operand::Frame(frame_idx),
-                        ],
+                    .push(mir::Instruction::frame_idx(
+                        Register::Virtual(def),
+                        frame_idx,
                     ));
             }
             hir::Instruction::Store { ptr, value } => {
@@ -325,12 +298,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     );
                     let bb = self.get_basic_block();
 
-                    bb.instructions.push(mir::Instruction::new(
-                        GenericOpcode::Store as Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Use),
-                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Use),
-                        ],
+                    bb.instructions.push(mir::Instruction::store(
+                        Register::Virtual(vreg_idx),
+                        Operand::not_def(Register::Virtual(ptr_add)),
                     ));
                 }
             }
@@ -346,12 +316,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     );
                     let bb = self.get_basic_block();
 
-                    bb.instructions.push(mir::Instruction::new(
-                        GenericOpcode::Load as Opcode,
-                        vec![
-                            mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def),
-                            mir::Operand::Register(Register::Virtual(ptr_add), RegisterRole::Use),
-                        ],
+                    bb.instructions.push(mir::Instruction::load(
+                        Register::Virtual(vreg_idx),
+                        Operand::not_def(Register::Virtual(ptr_add)),
                     ));
                 }
             }
@@ -404,19 +371,11 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                                         let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
 
                                         self.get_basic_block().instructions.push(
-                                            mir::Instruction::new(
+                                            mir::Instruction::binary(
                                                 GenericOpcode::Mul as Opcode,
-                                                vec![
-                                                    mir::Operand::Register(
-                                                        Register::Virtual(def_vreg_idx),
-                                                        RegisterRole::Def,
-                                                    ),
-                                                    mir::Operand::Register(
-                                                        Register::Virtual(lhs_vreg_idx),
-                                                        RegisterRole::Use,
-                                                    ),
-                                                    mir::Operand::Immediate(size as u64),
-                                                ],
+                                                Register::Virtual(def_vreg_idx),
+                                                Operand::not_def(Register::Virtual(lhs_vreg_idx)),
+                                                Operand::Immediate(size as u64),
                                             ),
                                         );
 
@@ -454,15 +413,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                 self.get_basic_block()
                     .instructions
-                    .push(mir::Instruction::new(
-                        GenericOpcode::Copy as Opcode,
-                        vec![
-                            mir::Operand::Register(
-                                Register::Virtual(def_vreg_idx),
-                                RegisterRole::Def,
-                            ),
-                            mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
-                        ],
+                    .push(mir::Instruction::copy(
+                        Register::Virtual(def_vreg_idx),
+                        Operand::not_def(Register::Virtual(base)),
                     ));
             }
             hir::Instruction::Call {
@@ -508,10 +461,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                 self.get_basic_block()
                     .instructions
-                    .push(mir::Instruction::new(
-                        GenericOpcode::Return as mir::Opcode,
-                        vec![],
-                    ));
+                    .push(mir::Instruction::new(GenericOpcode::Return as mir::Opcode));
             }
             hir::Terminator::Br(branch) => match branch {
                 hir::Branch::Conditional {
@@ -523,31 +473,21 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     let bb = self.get_basic_block();
 
                     bb.successors = HashSet::from([*block_idx]);
-                    bb.instructions.push(mir::Instruction::new(
-                        GenericOpcode::Br as Opcode,
-                        vec![mir::Operand::Block(*block_idx)],
-                    ));
+                    bb.instructions.push(mir::Instruction::br(*block_idx));
                 }
             },
         }
     }
 
     fn ptr_add(&mut self, base: mir::Operand, offset: mir::Operand) -> mir::VregIdx {
-        assert!(matches!(
-            offset,
-            mir::Operand::Register(_, _) | mir::Operand::Immediate(_)
-        ));
         let vreg_idx = self.create_vreg(self.ty_storage.ptr_ty);
 
         self.get_basic_block()
             .instructions
-            .push(mir::Instruction::new(
-                GenericOpcode::PtrAdd as Opcode,
-                vec![
-                    mir::Operand::Register(Register::Virtual(vreg_idx), RegisterRole::Def),
-                    base,
-                    offset,
-                ],
+            .push(mir::Instruction::ptr_add(
+                Register::Virtual(vreg_idx),
+                base,
+                offset,
             ));
 
         vreg_idx

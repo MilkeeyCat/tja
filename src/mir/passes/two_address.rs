@@ -1,5 +1,5 @@
 use crate::{
-    mir::{BasicBlockPatch, Function, GenericOpcode, Instruction, Opcode, Operand, RegisterRole},
+    mir::{BasicBlockPatch, Function, Instruction, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -16,9 +16,9 @@ impl<'a, T: Target> Pass<'a, Function, T> for TwoAddressForm {
                 if let Some((lhs, rhs)) = std::mem::take(&mut instr.tied_operands) {
                     patch.add_instruction(
                         idx,
-                        Instruction::new(
-                            GenericOpcode::Copy as Opcode,
-                            vec![instr.operands[lhs].clone(), instr.operands[rhs].clone()],
+                        Instruction::copy(
+                            instr.operands[lhs].clone().try_into().unwrap(),
+                            instr.operands[rhs].clone(),
                         ),
                     );
                     instr.operands.remove(rhs);
