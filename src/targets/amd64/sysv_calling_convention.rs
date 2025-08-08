@@ -1,5 +1,6 @@
 use crate::{
     hir::{
+        self,
         passes::lower::FnLowering,
         ty::{self, Ty, TyIdx},
     },
@@ -25,8 +26,6 @@ enum ClassKind {
 pub struct SysVAmd64;
 
 impl SysVAmd64 {
-    const STACK_RET_VREG_IDX: VregIdx = 0;
-
     pub fn new() -> Self {
         Self
     }
@@ -131,8 +130,17 @@ impl CallingConvention for SysVAmd64 {
         {
             match class {
                 ClassKind::Memory => {
+                    let vreg_idx: VregIdx = (0..lowering.hir_function.params_count)
+                        .into_iter()
+                        .map(|local_idx| {
+                            lowering
+                                .get_or_create_vregs(hir::Operand::Local(local_idx))
+                                .len()
+                        })
+                        .sum();
+
                     assert_eq!(
-                        lowering.mir_function.vreg_types[&Self::STACK_RET_VREG_IDX],
+                        lowering.mir_function.vreg_types[&vreg_idx],
                         lowering.ty_storage.ptr_ty
                     );
 
@@ -142,9 +150,7 @@ impl CallingConvention for SysVAmd64 {
                         InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
                             .add_def(mir::Register::Virtual(base))
                             .add_addr_mode(AddressMode {
-                                base: Base::Register(mir::Register::Virtual(
-                                    Self::STACK_RET_VREG_IDX,
-                                )),
+                                base: Base::Register(mir::Register::Virtual(vreg_idx)),
                                 index: None,
                                 scale: 1,
                                 displacement: None,
@@ -247,7 +253,13 @@ impl CallingConvention for SysVAmd64 {
             .contains(&ClassKind::Memory)
         {
             let vreg_idx = lowering.create_vreg(lowering.ty_storage.ptr_ty);
-            assert_eq!(vreg_idx, Self::STACK_RET_VREG_IDX);
+            assert_eq!(
+                vreg_idx,
+                vreg_indices
+                    .iter()
+                    .map(|vreg_indices| vreg_indices.len())
+                    .sum()
+            );
 
             lowering
                 .get_basic_block()

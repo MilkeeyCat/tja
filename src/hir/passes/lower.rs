@@ -93,7 +93,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
 
 pub struct FnLowering<'a, A: Abi> {
     pub ty_storage: &'a ty::Storage,
-    hir_function: &'a hir::Function,
+    pub hir_function: &'a hir::Function,
     pub mir_function: mir::Function,
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
     pub ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
@@ -111,7 +111,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
         vreg_idx
     }
 
-    fn get_or_create_vregs(&mut self, operand: hir::Operand) -> &[mir::VregIdx] {
+    pub fn get_or_create_vregs(&mut self, operand: hir::Operand) -> &[mir::VregIdx] {
         if self.operand_to_vreg_indices.contains_key(&operand) {
             return &self.operand_to_vreg_indices[&operand];
         }
