@@ -234,7 +234,7 @@ impl Context {
         idx
     }
 
-    pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<&mut Module> {
+    pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<'_, &mut Module> {
         Wrapper {
             ty_storage: &mut self.ty_storage,
             inner: &mut self.modules[idx],

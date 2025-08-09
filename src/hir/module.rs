@@ -44,7 +44,7 @@ impl Module {
 }
 
 impl Wrapper<'_, &mut Module> {
-    pub fn get_fn(&mut self, idx: FunctionIdx) -> Wrapper<&mut Function> {
+    pub fn get_fn(&mut self, idx: FunctionIdx) -> Wrapper<'_, &mut Function> {
         Wrapper {
             ty_storage: self.ty_storage,
             inner: &mut self.inner.functions[idx],

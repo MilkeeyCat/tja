@@ -162,7 +162,7 @@ impl Function {
 }
 
 impl Wrapper<'_, &mut Function> {
-    pub fn get_block(&mut self, idx: BlockIdx) -> basic_block::Wrapper {
+    pub fn get_block(&mut self, idx: BlockIdx) -> basic_block::Wrapper<'_> {
         basic_block::Wrapper {
             ty_storage: self.ty_storage,
             fn_locals: &mut self.inner.locals,
