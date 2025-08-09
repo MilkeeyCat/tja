@@ -1,14 +1,13 @@
-use crate::mir::Register;
-use std::collections::HashSet;
+use crate::{datastructures::vecset::VecSet, mir::Register};
 
 #[derive(Default, Debug)]
 pub struct DefsUses {
-    pub defs: HashSet<Register>,
-    pub uses: HashSet<Register>,
+    pub defs: VecSet<Register>,
+    pub uses: VecSet<Register>,
 }
 
 #[derive(Default, Clone, Debug)]
 pub struct Liveness {
-    pub ins: HashSet<Register>,
-    pub outs: HashSet<Register>,
+    pub ins: VecSet<Register>,
+    pub outs: VecSet<Register>,
 }

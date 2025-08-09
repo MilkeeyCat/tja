@@ -1,6 +1,6 @@
 use crate::{
-    dataflow::{DefsUses, Liveness},
-    mir::{BlockIdx, Instruction, InstructionIdx, Register},
+    dataflow::DefsUses,
+    mir::{BlockIdx, Instruction, InstructionIdx},
 };
 use std::collections::HashSet;
 
@@ -25,44 +25,6 @@ impl BasicBlock {
         defs_uses.uses = &defs_uses.uses - &defs_uses.defs;
 
         defs_uses
-    }
-
-    pub fn liveness(&self, mut succ_live_in: HashSet<Register>) -> Vec<Liveness> {
-        let defs_uses: Vec<_> = self
-            .instructions
-            .iter()
-            .map(|instr| instr.defs_uses())
-            .collect();
-        let mut liveness = vec![Liveness::default(); defs_uses.len()];
-
-        loop {
-            let mut done = true;
-
-            for (i, defs_uses) in defs_uses.iter().enumerate().rev() {
-                // out[v] = ∪ in[w] where w ∈ succ(v)
-                let live_out = succ_live_in.clone();
-                // in[v] = use(v) ∪ (out[v] - def(v))
-                let live_in = defs_uses
-                    .uses
-                    .union(&(&liveness[i].outs - &defs_uses.defs))
-                    .cloned()
-                    .collect();
-
-                if &liveness[i].ins != &live_in || &liveness[i].outs != &live_out {
-                    done &= false;
-                }
-
-                succ_live_in = live_out.clone();
-                liveness[i].ins = live_in;
-                liveness[i].outs = live_out;
-            }
-
-            if done {
-                break;
-            }
-        }
-
-        liveness
     }
 }
 
