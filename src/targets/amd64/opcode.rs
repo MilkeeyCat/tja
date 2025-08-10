@@ -1,6 +1,6 @@
 use super::{AsmPrinter, Condition};
 use crate::{
-    hir::FunctionIdx,
+    FunctionIdx,
     mir::{GenericOpcode, Module, Operand, Register},
     targets::{RegisterInfo, Target},
 };

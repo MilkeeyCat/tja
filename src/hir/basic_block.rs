@@ -1,8 +1,8 @@
 use super::{
     Branch, Function, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
     op::{BinOp, CmpOp},
-    ty::{self, Ty, TyIdx},
 };
+use crate::ty::{self, Ty, TyIdx};
 
 pub type BlockIdx = usize;
 

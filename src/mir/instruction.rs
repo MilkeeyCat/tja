@@ -1,4 +1,5 @@
 use crate::{
+    GlobalIdx,
     dataflow::DefsUses,
     hir::{self, BlockIdx},
     mir::{GenericOpcode, Opcode, Operand, OperandIdx, Register, RegisterRole, StackFrameIdx},
@@ -120,7 +121,7 @@ impl Instruction {
             .into()
     }
 
-    pub fn global_value(lhs: Register, rhs: hir::GlobalIdx) -> Self {
+    pub fn global_value(lhs: Register, rhs: GlobalIdx) -> Self {
         Builder::new(GenericOpcode::GlobalValue as Opcode)
             .add_def(lhs)
             .add_operand(Operand::Global(rhs))

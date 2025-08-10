@@ -1,10 +1,10 @@
 use crate::{
-    hir::ty::{self, Ty, TyIdx},
     mir::PhysicalRegister,
     targets::{
         Abi,
         amd64::{Register, sysv_calling_convention},
     },
+    ty::{self, Ty, TyIdx},
 };
 
 pub struct SysVAmd64 {

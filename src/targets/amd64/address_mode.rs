@@ -1,5 +1,5 @@
 use crate::{
-    hir::{FunctionIdx, GlobalIdx},
+    FunctionIdx, GlobalIdx,
     mir::{Operand, Register, RegisterRole, StackFrameIdx},
 };
 

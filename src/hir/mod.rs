@@ -4,39 +4,23 @@ mod module;
 pub mod op;
 pub mod pass;
 pub mod passes;
-pub mod ty;
 
+use crate::{
+    Const, GlobalIdx,
+    ty::{self, TyIdx},
+};
 pub use basic_block::{BasicBlock, BlockIdx};
 pub use derive_more::From;
-pub use function::{Function, FunctionIdx, Patch};
+pub use function::{Function, Patch};
 pub use module::{Module, ModuleIdx};
 use op::{BinOp, CmpOp};
 use std::{
     collections::HashSet,
     ops::{Deref, DerefMut},
 };
-use ty::TyIdx;
 
 pub type LocalIdx = usize;
-pub type GlobalIdx = usize;
 pub type InstructionIdx = usize;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Const {
-    Global(GlobalIdx),
-    Function(FunctionIdx),
-    Int(u64),
-    Aggregate(Vec<Self>),
-}
-
-impl Const {
-    pub fn usize_unchecked(&self) -> usize {
-        match self {
-            Self::Int(value) => (*value).try_into().unwrap(),
-            Self::Global(_) | Self::Function(_) | Self::Aggregate(_) => unreachable!(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
@@ -205,13 +189,6 @@ impl Terminator {
             Self::Br(_) => HashSet::new(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Global {
-    pub name: String,
-    pub ty: TyIdx,
-    pub value: Option<Const>,
 }
 
 pub struct Context {

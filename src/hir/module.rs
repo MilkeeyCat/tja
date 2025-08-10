@@ -1,4 +1,5 @@
-use super::{Const, Function, Global, GlobalIdx, Wrapper, function::FunctionIdx, ty::TyIdx};
+use super::{Function, GlobalIdx, Wrapper};
+use crate::{Const, FunctionIdx, Global, ty::TyIdx};
 
 pub type ModuleIdx = usize;
 

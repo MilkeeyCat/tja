@@ -5,7 +5,7 @@ mod opcode;
 pub mod pass;
 pub mod passes;
 
-use crate::hir::{self, FunctionIdx};
+use crate::{FunctionIdx, Global, GlobalIdx, hir};
 pub use basic_block::{BasicBlock, BasicBlockPatch};
 pub use function::Function;
 pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
@@ -21,7 +21,7 @@ pub type OperandIdx = usize;
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub globals: Vec<hir::Global>,
+    pub globals: Vec<Global>,
     pub functions: Vec<Function>,
 }
 
@@ -52,7 +52,7 @@ impl TryFrom<Operand> for Register {
 pub enum Operand {
     Register(Register, RegisterRole),
     Frame(StackFrameIdx),
-    Global(hir::GlobalIdx),
+    Global(GlobalIdx),
     Function(FunctionIdx),
     Block(BlockIdx),
     Immediate(u64),

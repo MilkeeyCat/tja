@@ -1,8 +1,4 @@
-use crate::{
-    hir::{self, ty},
-    mir,
-    targets::Target,
-};
+use crate::{hir, mir, targets::Target, ty};
 
 pub struct Context<'a, T: Target> {
     pub mir_module: Option<mir::Module>,

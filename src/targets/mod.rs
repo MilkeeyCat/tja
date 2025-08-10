@@ -1,11 +1,11 @@
 pub mod amd64;
 
 use crate::hir::passes::lower::FnLowering;
-use crate::hir::ty::{Storage, TyIdx};
 use crate::mir::{
     BasicBlockPatch, InstructionIdx, Opcode, PhysicalRegister, RegisterClass, StackFrameIdx,
     VregIdx,
 };
+use crate::ty::{Storage, TyIdx};
 
 pub trait RegisterInfo {
     fn get_registers_by_class(&self, class: &RegisterClass) -> &[PhysicalRegister];

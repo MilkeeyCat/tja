@@ -1,10 +1,9 @@
 use super::{
     BasicBlock, BlockIdx, Branch, Instruction, InstructionIdx, LocalIdx, Terminator, Wrapper,
-    basic_block, ty::TyIdx,
+    basic_block,
 };
+use crate::ty::TyIdx;
 use std::collections::{HashMap, HashSet};
-
-pub type FunctionIdx = usize;
 
 #[derive(Debug)]
 struct DefUseBlock {

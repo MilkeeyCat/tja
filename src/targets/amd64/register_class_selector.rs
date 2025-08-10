@@ -1,9 +1,9 @@
 use super::RegisterClass;
 use crate::{
-    hir::ty::Ty,
     mir::{self, Function, Operand, Register, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
+    ty::Ty,
 };
 
 #[derive(Default)]

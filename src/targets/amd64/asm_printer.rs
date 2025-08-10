@@ -1,10 +1,8 @@
 use crate::{
-    hir::{
-        Const, FunctionIdx, Global,
-        ty::{self, Ty, TyIdx},
-    },
+    Const, FunctionIdx, Global,
     mir::{Function, Module},
     targets::{Abi, Target, amd64::Opcode},
+    ty::{self, Ty, TyIdx},
 };
 use std::fmt::Write;
 

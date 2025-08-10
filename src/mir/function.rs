@@ -1,8 +1,8 @@
 use super::{Operand, Register, RegisterClass, StackFrameIdx, VregIdx};
 use crate::{
     dataflow::Liveness,
-    hir::ty::TyIdx,
     mir::{BasicBlock, BlockIdx},
+    ty::TyIdx,
 };
 use std::collections::HashMap;
 

@@ -1,9 +1,5 @@
 use crate::{
-    hir::{
-        self,
-        passes::lower::FnLowering,
-        ty::{self, Ty, TyIdx},
-    },
+    hir::{self, passes::lower::FnLowering},
     mir::{self, InstrBuilder, Instruction, Operand, PhysicalRegister, VregIdx},
     targets::{
         Abi, CallingConvention,
@@ -12,6 +8,7 @@ use crate::{
             address_mode::{AddressMode, Base},
         },
     },
+    ty::{self, Ty, TyIdx},
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]

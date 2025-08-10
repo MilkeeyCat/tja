@@ -1,7 +1,7 @@
 use crate::{
-    hir::ty,
     mir::Module,
     targets::{Target, amd64::AsmPrinter},
+    ty,
 };
 use std::{
     fs::File,
