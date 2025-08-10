@@ -15,7 +15,7 @@ use crate::{
     codegen::allocator::Allocator,
     hir,
     mir::{
-        self, BasicBlockPatch, InstrBuilder, InstructionIdx, Operand, StackFrameIdx, VregIdx,
+        self, BasicBlockPatch, FrameIdx, InstrBuilder, InstructionIdx, Operand, VregIdx,
         passes::two_address::TwoAddressForm,
     },
     pass::FunctionToModuleAdaptor,
@@ -261,7 +261,7 @@ impl super::Target for Target {
         patch: &mut BasicBlockPatch,
         idx: InstructionIdx,
         vreg_idx: VregIdx,
-        frame_idx: StackFrameIdx,
+        frame_idx: FrameIdx,
         size: usize,
     ) {
         patch.add_instruction(
@@ -283,7 +283,7 @@ impl super::Target for Target {
         patch: &mut BasicBlockPatch,
         idx: InstructionIdx,
         vreg_idx: VregIdx,
-        frame_idx: StackFrameIdx,
+        frame_idx: FrameIdx,
         size: usize,
     ) {
         patch.add_instruction(

@@ -1,8 +1,8 @@
 use crate::{
     datastructures::vecset::VecSet,
     mir::{
-        BasicBlockPatch, BlockIdx, Function, InstructionIdx, Operand, PhysicalRegister, Register,
-        RegisterRole, StackFrameIdx, VregIdx,
+        BasicBlockPatch, BlockIdx, FrameIdx, Function, InstructionIdx, Operand, PhysicalRegister,
+        Register, RegisterRole, VregIdx,
     },
     pass::{Context, Pass},
     targets::{Abi, RegisterInfo, Target},
@@ -38,17 +38,13 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
 
             if !allocator.spilled_nodes.is_empty() {
                 let spilled_nodes = std::mem::take(&mut allocator.spilled_nodes);
-                let spills: HashMap<VregIdx, StackFrameIdx> = spilled_nodes
+                let spills: HashMap<VregIdx, FrameIdx> = spilled_nodes
                     .iter()
                     .map(|vreg_idx| {
-                        let idx = func.next_stack_frame_idx;
-
-                        func.next_stack_frame_idx += 1;
-                        func.stack_slots.insert(
-                            idx,
+                        let idx = func.frame_info.create_stack_object(
                             ctx.target
                                 .abi()
-                                .ty_size(ctx.ty_storage, func.vreg_types[&vreg_idx]),
+                                .ty_size(ctx.ty_storage, func.vreg_info.get_vreg(*vreg_idx).ty),
                         );
 
                         (*vreg_idx, idx)
@@ -64,13 +60,12 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                                 && spills.contains_key(idx)
                             {
                                 let frame_idx = spills[idx];
-                                let ty = func.vreg_types[idx];
+                                let ty = func.vreg_info.get_vreg(*idx).ty;
                                 let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
-                                let vreg_idx = func.next_vreg_idx;
-
-                                func.next_vreg_idx += 1;
-                                func.vreg_types.insert(vreg_idx, ty);
-                                func.vreg_classes.insert(vreg_idx, func.vreg_classes[idx]);
+                                let vreg_idx = func.vreg_info.create_vreg_with_class(
+                                    ty,
+                                    func.vreg_info.get_vreg(*idx).class.unwrap(),
+                                );
 
                                 *idx = vreg_idx;
 
@@ -95,11 +90,6 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                     }
 
                     patch.apply(bb);
-                }
-
-                for vreg_idx in spills.keys() {
-                    func.vreg_types.remove(vreg_idx);
-                    func.vreg_classes.remove(vreg_idx);
                 }
 
                 allocator = AllocatorImpl::new(func, ctx, spilled_nodes.into_iter().collect());
@@ -321,7 +311,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         .ctx
                         .target
                         .register_info()
-                        .get_registers_by_class(&self.function.vreg_classes[&idx])
+                        .get_registers_by_class(
+                            &self.function.vreg_info.get_vreg(idx).class.unwrap(),
+                        )
                         .len()
                 {
                     self.spill_worklist.insert(idx);
@@ -373,7 +365,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 .ctx
                 .target
                 .register_info()
-                .get_registers_by_class(&self.function.vreg_classes[&vreg_idx])
+                .get_registers_by_class(&self.function.vreg_info.get_vreg(*vreg_idx).class.unwrap())
                 .len()
         {
             self.enable_moves(
@@ -423,7 +415,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         .ctx
                         .target
                         .register_info()
-                        .get_registers_by_class(&self.function.vreg_classes[idx])
+                        .get_registers_by_class(
+                            &self.function.vreg_info.get_vreg(*idx).class.unwrap(),
+                        )
                         .len()
             {
                 self.freeze_worklist.remove(idx);
@@ -441,7 +435,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                             .ctx
                             .target
                             .register_info()
-                            .get_registers_by_class(&self.function.vreg_classes[&idx])
+                            .get_registers_by_class(
+                                &self.function.vreg_info.get_vreg(idx).class.unwrap(),
+                            )
                             .len()
                 }
                 Register::Physical(_) => true,
@@ -459,7 +455,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                             .ctx
                             .target
                             .register_info()
-                            .get_registers_by_class(&self.function.vreg_classes[&idx])
+                            .get_registers_by_class(
+                                &self.function.vreg_info.get_vreg(idx).class.unwrap(),
+                            )
                             .len() =>
                 {
                     1
@@ -471,7 +469,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 .ctx
                 .target
                 .register_info()
-                .get_registers_by_class(&self.function.vreg_classes[&vreg_idx])
+                .get_registers_by_class(&self.function.vreg_info.get_vreg(vreg_idx).class.unwrap())
                 .len()
     }
 
@@ -502,7 +500,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                     .ctx
                     .target
                     .register_info()
-                    .get_registers_by_class(&self.function.vreg_classes[&idx])
+                    .get_registers_by_class(&self.function.vreg_info.get_vreg(*idx).class.unwrap())
                     .len()
             && self.freeze_worklist.contains(idx)
         {
@@ -605,7 +603,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         .ctx
                         .target
                         .register_info()
-                        .get_registers_by_class(&self.function.vreg_classes[idx])
+                        .get_registers_by_class(
+                            &self.function.vreg_info.get_vreg(*idx).class.unwrap(),
+                        )
                         .len()
             {
                 self.freeze_worklist.remove(idx);
@@ -640,7 +640,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 .ctx
                 .target
                 .register_info()
-                .get_registers_by_class(&self.function.vreg_classes[&vreg_idx])
+                .get_registers_by_class(&self.function.vreg_info.get_vreg(*vreg_idx).class.unwrap())
                 .to_vec();
 
             for r in &self.adj_list[&vreg_idx] {

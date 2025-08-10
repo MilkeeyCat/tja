@@ -16,7 +16,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for MaterializeCopy {
                     let size = match &instr.operands[0] {
                         Operand::Register(r, _) => match r {
                             Register::Virtual(idx) => {
-                                let ty = func.vreg_types[idx];
+                                let ty = func.vreg_info.get_vreg(*idx).ty;
 
                                 ctx.target.abi().ty_size(ctx.ty_storage, ty)
                             }

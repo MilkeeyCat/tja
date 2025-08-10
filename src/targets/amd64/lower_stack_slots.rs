@@ -25,7 +25,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for StackSlotsLowerer {
                                 locations
                                     .entry(*idx)
                                     .or_insert_with(|| {
-                                        stack_offset += func.stack_slots[idx] as isize;
+                                        stack_offset +=
+                                            func.frame_info.get_stack_object(*idx).size as isize;
 
                                         AddressMode {
                                             base: Base::Register(Register::Physical(

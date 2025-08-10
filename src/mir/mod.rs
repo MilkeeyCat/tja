@@ -7,13 +7,10 @@ pub mod passes;
 
 use crate::{FunctionIdx, Global, GlobalIdx, hir};
 pub use basic_block::{BasicBlock, BasicBlockPatch};
-pub use function::Function;
+pub use function::{FrameIdx, Function, RegisterClass, VregIdx};
 pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
 pub use opcode::{GenericOpcode, Opcode};
 
-pub type VregIdx = usize;
-pub type StackFrameIdx = usize;
-pub type RegisterClass = usize;
 pub type PhysicalRegister = usize;
 pub type BlockIdx = hir::BlockIdx;
 pub type OperandIdx = usize;
@@ -51,7 +48,7 @@ impl TryFrom<Operand> for Register {
 #[derive(Debug, Clone)]
 pub enum Operand {
     Register(Register, RegisterRole),
-    Frame(StackFrameIdx),
+    Frame(FrameIdx),
     Global(GlobalIdx),
     Function(FunctionIdx),
     Block(BlockIdx),

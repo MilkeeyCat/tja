@@ -137,11 +137,14 @@ impl CallingConvention for SysVAmd64 {
                         .sum();
 
                     assert_eq!(
-                        lowering.mir_function.vreg_types[&vreg_idx],
+                        lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty,
                         lowering.ty_storage.ptr_ty
                     );
 
-                    let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                    let base = lowering
+                        .mir_function
+                        .vreg_info
+                        .create_vreg(lowering.ty_storage.ptr_ty);
 
                     lowering.get_basic_block().instructions.push(
                         InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
@@ -159,7 +162,10 @@ impl CallingConvention for SysVAmd64 {
                         .into_iter()
                         .zip(std::mem::take(&mut offsets))
                     {
-                        let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                        let ptr_add = lowering
+                            .mir_function
+                            .vreg_info
+                            .create_vreg(lowering.ty_storage.ptr_ty);
                         let bb = lowering.get_basic_block();
 
                         bb.instructions.extend([
@@ -182,7 +188,7 @@ impl CallingConvention for SysVAmd64 {
                     let mut last_offset = None;
 
                     for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets).rev() {
-                        let ty = lowering.mir_function.vreg_types[&vreg_idx];
+                        let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
                         let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
 
                         if let Some(last_offset) = last_offset {
@@ -249,7 +255,10 @@ impl CallingConvention for SysVAmd64 {
             .ty_class(lowering.abi, lowering.ty_storage, ret_ty)
             .contains(&ClassKind::Memory)
         {
-            let vreg_idx = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+            let vreg_idx = lowering
+                .mir_function
+                .vreg_info
+                .create_vreg(lowering.ty_storage.ptr_ty);
             assert_eq!(
                 vreg_idx,
                 vreg_indices
@@ -282,7 +291,10 @@ impl CallingConvention for SysVAmd64 {
             for class in classes {
                 match class {
                     ClassKind::Memory => {
-                        let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                        let base = lowering
+                            .mir_function
+                            .vreg_info
+                            .create_vreg(lowering.ty_storage.ptr_ty);
 
                         lowering.get_basic_block().instructions.push(
                             InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
@@ -302,7 +314,10 @@ impl CallingConvention for SysVAmd64 {
                             .into_iter()
                             .zip(std::mem::take(&mut offsets))
                         {
-                            let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                            let ptr_add = lowering
+                                .mir_function
+                                .vreg_info
+                                .create_vreg(lowering.ty_storage.ptr_ty);
                             let bb = lowering.get_basic_block();
 
                             bb.instructions.extend([
@@ -325,7 +340,7 @@ impl CallingConvention for SysVAmd64 {
                         let mut last_offset = None;
 
                         for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets) {
-                            let ty = lowering.mir_function.vreg_types[&vreg_idx];
+                            let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
                             let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
                             let bb = lowering.get_basic_block();
 
@@ -415,7 +430,10 @@ impl CallingConvention for SysVAmd64 {
                 .contains(&ClassKind::Memory)
             {
                 registers.retain(|r| r != &Register::Rdi);
-                let frame_idx = lowering.create_frame_idx(*ty);
+                let frame_idx = lowering
+                    .mir_function
+                    .frame_info
+                    .create_stack_object(lowering.abi.ty_size(lowering.ty_storage, *ty));
 
                 lowering
                     .get_basic_block()
@@ -453,7 +471,10 @@ impl CallingConvention for SysVAmd64 {
                             .into_iter()
                             .zip(std::mem::take(&mut offsets))
                         {
-                            let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                            let ptr_add = lowering
+                                .mir_function
+                                .vreg_info
+                                .create_vreg(lowering.ty_storage.ptr_ty);
                             let bb = lowering.get_basic_block();
 
                             bb.instructions.extend([
@@ -478,7 +499,7 @@ impl CallingConvention for SysVAmd64 {
                         let mut last_offset = None;
 
                         for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets).rev() {
-                            let ty = lowering.mir_function.vreg_types[&vreg_idx];
+                            let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
                             let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
 
                             if let Some(last_offset) = last_offset {
@@ -579,7 +600,10 @@ impl CallingConvention for SysVAmd64 {
             for class in self.ty_class(lowering.abi, lowering.ty_storage, ty) {
                 match class {
                     ClassKind::Memory => {
-                        let base = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                        let base = lowering
+                            .mir_function
+                            .vreg_info
+                            .create_vreg(lowering.ty_storage.ptr_ty);
 
                         lowering.get_basic_block().instructions.push(
                             InstrBuilder::new(Opcode::Lea64 as mir::Opcode)
@@ -599,7 +623,10 @@ impl CallingConvention for SysVAmd64 {
                             .into_iter()
                             .zip(std::mem::take(&mut offsets))
                         {
-                            let ptr_add = lowering.create_vreg(lowering.ty_storage.ptr_ty);
+                            let ptr_add = lowering
+                                .mir_function
+                                .vreg_info
+                                .create_vreg(lowering.ty_storage.ptr_ty);
                             let bb = lowering.get_basic_block();
 
                             bb.instructions.extend([
@@ -622,7 +649,7 @@ impl CallingConvention for SysVAmd64 {
                         let mut last_offset = None;
 
                         for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets) {
-                            let ty = lowering.mir_function.vreg_types[&vreg_idx];
+                            let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
                             let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
                             let bb = lowering.get_basic_block();
 
@@ -681,7 +708,7 @@ fn get_vregs_for_one_reg<A: Abi>(
         }
 
         let vreg_idx = vreg_indices[0];
-        let ty = lowering.mir_function.vreg_types[&vreg_idx];
+        let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
         let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
 
         if offsets[0] + ty_size > 8 {

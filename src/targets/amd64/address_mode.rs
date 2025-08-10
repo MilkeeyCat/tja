@@ -1,12 +1,12 @@
 use crate::{
     FunctionIdx, GlobalIdx,
-    mir::{Operand, Register, RegisterRole, StackFrameIdx},
+    mir::{FrameIdx, Operand, Register, RegisterRole},
 };
 
 #[derive(Clone, Debug)]
 pub enum Base {
     Register(Register),
-    Frame(StackFrameIdx),
+    Frame(FrameIdx),
     Function(FunctionIdx),
     Global(GlobalIdx),
 }
@@ -23,7 +23,7 @@ impl AddressMode {
     pub fn write(self, operands: &mut Vec<Operand>, idx: usize) {
         let base = match self.base {
             Base::Register(r) => Operand::Register(r, RegisterRole::Use),
-            Base::Frame(stack_frame_idx) => Operand::Frame(stack_frame_idx),
+            Base::Frame(frame_idx) => Operand::Frame(frame_idx),
             Base::Function(idx) => Operand::Function(idx),
             Base::Global(idx) => Operand::Global(idx),
         };

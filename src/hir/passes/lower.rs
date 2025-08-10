@@ -4,7 +4,10 @@ use crate::{
         op::BinOp,
         ty::{self, Ty, TyIdx},
     },
-    mir::{self, BlockIdx, GenericOpcode, InstrBuilder, Opcode, Operand, Register, RegisterRole},
+    mir::{
+        self, BlockIdx, GenericOpcode, InstrBuilder, Opcode, Operand, Register, RegisterRole,
+        function::{FrameInfo, VregInfo},
+    },
     pass::{Context, Pass},
     targets::{Abi, CallingConvention, Target},
 };
@@ -20,11 +23,8 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             hir_function: function,
             mir_function: mir::Function {
                 name: function.name.clone(),
-                next_vreg_idx: 0,
-                vreg_classes: HashMap::new(),
-                vreg_types: HashMap::new(),
-                next_stack_frame_idx: 0,
-                stack_slots: HashMap::new(),
+                vreg_info: VregInfo::default(),
+                frame_info: FrameInfo::default(),
                 blocks: vec![mir::BasicBlock {
                     name: "entry".into(),
                     instructions: vec![],
@@ -102,15 +102,6 @@ pub struct FnLowering<'a, A: Abi> {
 }
 
 impl<'a, A: Abi> FnLowering<'a, A> {
-    pub fn create_vreg(&mut self, ty: TyIdx) -> mir::VregIdx {
-        let vreg_idx = self.mir_function.next_vreg_idx;
-
-        self.mir_function.next_vreg_idx += 1;
-        self.mir_function.vreg_types.insert(vreg_idx, ty);
-
-        vreg_idx
-    }
-
     pub fn get_or_create_vregs(&mut self, operand: hir::Operand) -> &[mir::VregIdx] {
         if self.operand_to_vreg_indices.contains_key(&operand) {
             return &self.operand_to_vreg_indices[&operand];
@@ -130,12 +121,12 @@ impl<'a, A: Abi> FnLowering<'a, A> {
         match &operand {
             hir::Operand::Local(_) => {
                 for ty in types {
-                    vreg_indices.push(self.create_vreg(ty));
+                    vreg_indices.push(self.mir_function.vreg_info.create_vreg(ty));
                 }
             }
             hir::Operand::Const(c, ty) => match c {
                 Const::Global(idx) => {
-                    let vreg_idx = self.create_vreg(*ty);
+                    let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
 
                     self.get_basic_block()
                         .instructions
@@ -146,7 +137,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Function(idx) => {
-                    let vreg_idx = self.create_vreg(*ty);
+                    let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
 
                     self.get_basic_block()
                         .instructions
@@ -157,7 +148,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Int(value) => {
-                    let vreg_idx = self.create_vreg(*ty);
+                    let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
 
                     self.get_basic_block()
                         .instructions
@@ -233,17 +224,6 @@ impl<'a, A: Abi> FnLowering<'a, A> {
         }
     }
 
-    pub fn create_frame_idx(&mut self, ty: TyIdx) -> mir::StackFrameIdx {
-        let idx = self.mir_function.next_stack_frame_idx;
-
-        self.mir_function.next_stack_frame_idx += 1;
-        self.mir_function
-            .stack_slots
-            .insert(idx, self.abi.ty_size(self.ty_storage, ty));
-
-        idx
-    }
-
     pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock {
         &mut self.mir_function.blocks[self.current_bb_idx]
     }
@@ -277,7 +257,10 @@ impl<'a, A: Abi> FnLowering<'a, A> {
             }
             hir::Instruction::Alloca { ty, out } => {
                 let def = self.get_or_create_vreg(hir::Operand::Local(*out));
-                let frame_idx = self.create_frame_idx(*ty);
+                let frame_idx = self
+                    .mir_function
+                    .frame_info
+                    .create_stack_object(self.abi.ty_size(self.ty_storage, *ty));
 
                 self.get_basic_block()
                     .instructions
@@ -367,7 +350,10 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                                     let vreg_idx = if size == 1 {
                                         self.get_or_create_vreg(idx.clone())
                                     } else {
-                                        let def_vreg_idx = self.create_vreg(self.ty_storage.ptr_ty);
+                                        let def_vreg_idx = self
+                                            .mir_function
+                                            .vreg_info
+                                            .create_vreg(self.ty_storage.ptr_ty);
                                         let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
 
                                         self.get_basic_block().instructions.push(
@@ -480,7 +466,10 @@ impl<'a, A: Abi> FnLowering<'a, A> {
     }
 
     fn ptr_add(&mut self, base: mir::Operand, offset: mir::Operand) -> mir::VregIdx {
-        let vreg_idx = self.create_vreg(self.ty_storage.ptr_ty);
+        let vreg_idx = self
+            .mir_function
+            .vreg_info
+            .create_vreg(self.ty_storage.ptr_ty);
 
         self.get_basic_block()
             .instructions

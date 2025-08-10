@@ -2,7 +2,7 @@ use crate::{
     GlobalIdx,
     dataflow::DefsUses,
     hir::{self, BlockIdx},
-    mir::{GenericOpcode, Opcode, Operand, OperandIdx, Register, RegisterRole, StackFrameIdx},
+    mir::{FrameIdx, GenericOpcode, Opcode, Operand, OperandIdx, Register, RegisterRole},
 };
 use std::collections::HashSet;
 
@@ -81,7 +81,7 @@ impl Instruction {
             .into()
     }
 
-    pub fn frame_idx(lhs: Register, rhs: StackFrameIdx) -> Self {
+    pub fn frame_idx(lhs: Register, rhs: FrameIdx) -> Self {
         Builder::new(GenericOpcode::FrameIndex as Opcode)
             .add_def(lhs)
             .add_operand(Operand::Frame(rhs))

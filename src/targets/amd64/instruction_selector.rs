@@ -52,7 +52,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                     Ok(opcode) => match opcode {
                         GenericOpcode::Add => {
                             let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = func.vreg_types[vreg_idx];
+                            let ty = func.vreg_info.get_vreg(**vreg_idx).ty;
                             let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
 
                             instr.opcode = get_add_op(
@@ -109,7 +109,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                         }
                         GenericOpcode::Load => {
                             let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = func.vreg_types[vreg_idx];
+                            let ty = func.vreg_info.get_vreg(**vreg_idx).ty;
                             let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
                             let address_mode = AddressMode {
                                 base: match &instr.operands[1] {
@@ -127,7 +127,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                         }
                         GenericOpcode::Store => {
                             let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = func.vreg_types[vreg_idx];
+                            let ty = func.vreg_info.get_vreg(**vreg_idx).ty;
                             let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
                             let address_mode = AddressMode {
                                 base: match &instr.operands[1] {

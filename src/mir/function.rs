@@ -1,19 +1,87 @@
-use super::{Operand, Register, RegisterClass, StackFrameIdx, VregIdx};
+use super::{Operand, Register};
 use crate::{
     dataflow::Liveness,
     mir::{BasicBlock, BlockIdx},
     ty::TyIdx,
 };
-use std::collections::HashMap;
+
+pub type VregIdx = usize;
+pub type FrameIdx = usize;
+pub type RegisterClass = usize;
+
+#[derive(Default, Debug)]
+pub struct Vreg {
+    pub ty: TyIdx,
+    pub class: Option<RegisterClass>,
+}
+
+#[derive(Default, Debug)]
+pub struct VregInfo {
+    vreg_info: Vec<Vreg>,
+}
+
+impl VregInfo {
+    pub fn create_vreg(&mut self, ty: TyIdx) -> VregIdx {
+        let idx = self.vreg_info.len();
+
+        self.vreg_info.push(Vreg { ty, class: None });
+
+        idx
+    }
+
+    pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RegisterClass) -> VregIdx {
+        let idx = self.vreg_info.len();
+
+        self.vreg_info.push(Vreg {
+            ty,
+            class: Some(class),
+        });
+
+        idx
+    }
+
+    pub fn get_vreg(&self, idx: VregIdx) -> &Vreg {
+        &self.vreg_info[idx]
+    }
+
+    pub fn set_class(&mut self, idx: VregIdx, class: RegisterClass) {
+        self.vreg_info[idx].class = Some(class);
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct StackObject {
+    pub size: usize,
+}
+
+#[derive(Default, Debug)]
+pub struct FrameInfo {
+    objects: Vec<StackObject>,
+}
+
+impl FrameInfo {
+    pub fn create_stack_object(&mut self, size: usize) -> FrameIdx {
+        let idx = self.objects.len();
+
+        self.objects.push(StackObject { size: size });
+
+        idx
+    }
+
+    pub fn get_stack_object(&mut self, idx: FrameIdx) -> &StackObject {
+        &self.objects[idx]
+    }
+
+    pub fn objects_iter(&self) -> impl Iterator<Item = &StackObject> {
+        self.objects.iter()
+    }
+}
 
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
-    pub next_vreg_idx: VregIdx,
-    pub vreg_classes: HashMap<VregIdx, RegisterClass>,
-    pub vreg_types: HashMap<VregIdx, TyIdx>,
-    pub next_stack_frame_idx: StackFrameIdx,
-    pub stack_slots: HashMap<StackFrameIdx, usize>,
+    pub vreg_info: VregInfo,
+    pub frame_info: FrameInfo,
     pub blocks: Vec<BasicBlock>,
 }
 

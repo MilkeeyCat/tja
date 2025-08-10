@@ -1,8 +1,8 @@
 use super::Opcode;
 use crate::{
     mir::{
-        self, BasicBlock, BasicBlockPatch, Function, InstrBuilder, Instruction, Operand,
-        PhysicalRegister, StackFrameIdx, function::FunctionPatch,
+        self, BasicBlock, BasicBlockPatch, FrameIdx, Function, InstrBuilder, Instruction, Operand,
+        PhysicalRegister, function::FunctionPatch,
     },
     pass::{Context, Pass},
     targets::{
@@ -21,8 +21,9 @@ pub struct PrologEpilogInserter;
 impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
         let stack_frame_size = func
-            .stack_slots
-            .values()
+            .frame_info
+            .objects_iter()
+            .map(|object| object.size)
             .sum::<usize>()
             .next_multiple_of(16);
         let regs = func.registers();
@@ -41,8 +42,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                     .then_some(*r1)
             })
             .collect();
-        let mut regs_stack_slots: Vec<StackFrameIdx> =
-            Vec::with_capacity(used_callee_saved_regs.len());
+        let mut regs_stack_slots: Vec<FrameIdx> = Vec::with_capacity(used_callee_saved_regs.len());
 
         let mut bb = BasicBlock {
             name: "prolog".into(),
@@ -74,12 +74,9 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
         }
 
         for r in &used_callee_saved_regs {
-            let idx = func.next_stack_frame_idx;
+            let idx = func.frame_info.create_stack_object(8);
 
             regs_stack_slots.push(idx);
-            func.next_stack_frame_idx += 1;
-            func.stack_slots.insert(idx, 8);
-
             bb.instructions.push(
                 InstrBuilder::new(Opcode::Mov64mr as mir::Opcode)
                     .add_addr_mode(AddressMode {
