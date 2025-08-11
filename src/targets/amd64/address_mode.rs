@@ -22,7 +22,7 @@ pub struct AddressMode {
 impl AddressMode {
     pub fn write(self, operands: &mut Vec<Operand>, idx: usize) {
         let base = match self.base {
-            Base::Register(r) => Operand::Register(r, RegisterRole::Use),
+            Base::Register(reg) => Operand::Register(reg, RegisterRole::Use),
             Base::Frame(frame_idx) => Operand::Frame(frame_idx),
             Base::Function(idx) => Operand::Function(idx),
             Base::Global(idx) => Operand::Global(idx),
@@ -31,7 +31,7 @@ impl AddressMode {
         operands.insert(idx, base);
 
         match self.index {
-            Some(r) => operands.insert(idx + 1, Operand::Register(r, RegisterRole::Use)),
+            Some(reg) => operands.insert(idx + 1, Operand::Register(reg, RegisterRole::Use)),
             None => operands.insert(idx + 1, Operand::Immediate(0)),
         }
 

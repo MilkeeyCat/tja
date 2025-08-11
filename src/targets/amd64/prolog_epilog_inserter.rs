@@ -32,14 +32,16 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             .abi()
             .callee_saved_regs()
             .iter()
-            .filter(|r| **r != Register::Rbp as PhysicalRegister)
-            .filter_map(|r1| {
+            .filter(|reg| **reg != Register::Rbp as PhysicalRegister)
+            .filter_map(|reg1| {
                 regs.iter()
-                    .any(|r| match r {
+                    .any(|reg| match reg {
                         mir::Register::Virtual(_) => false,
-                        mir::Register::Physical(r2) => ctx.target.register_info().overlaps(r1, r2),
+                        mir::Register::Physical(reg2) => {
+                            ctx.target.register_info().overlaps(reg1, reg2)
+                        }
                     })
-                    .then_some(*r1)
+                    .then_some(*reg1)
             })
             .collect();
         let mut regs_stack_slots: Vec<FrameIdx> = Vec::with_capacity(used_callee_saved_regs.len());
@@ -73,7 +75,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             ]);
         }
 
-        for r in &used_callee_saved_regs {
+        for reg in &used_callee_saved_regs {
             let idx = func.frame_info.create_stack_object(8);
 
             regs_stack_slots.push(idx);
@@ -85,7 +87,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                         scale: 1,
                         displacement: None,
                     })
-                    .add_use(mir::Register::Physical(*r))
+                    .add_use(mir::Register::Physical(*reg))
                     .into(),
             );
         }

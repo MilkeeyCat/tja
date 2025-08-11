@@ -143,14 +143,14 @@ impl Builder {
         Self(Instruction::new(opcode))
     }
 
-    pub fn add_def(mut self, r: Register) -> Self {
-        self.0.add_def(r);
+    pub fn add_def(mut self, reg: Register) -> Self {
+        self.0.add_def(reg);
 
         self
     }
 
-    pub fn add_use(mut self, r: Register) -> Self {
-        self.0.add_use(r);
+    pub fn add_use(mut self, reg: Register) -> Self {
+        self.0.add_use(reg);
 
         self
     }

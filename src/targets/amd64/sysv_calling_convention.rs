@@ -182,7 +182,7 @@ impl CallingConvention for SysVAmd64 {
                     }
                 }
                 ClassKind::Integer => {
-                    let r = registers.pop().unwrap();
+                    let reg = registers.pop().unwrap();
                     let (vreg_indices, offsets) =
                         get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
                     let mut last_offset = None;
@@ -194,7 +194,7 @@ impl CallingConvention for SysVAmd64 {
                         if let Some(last_offset) = last_offset {
                             lowering.get_basic_block().instructions.push(
                                 InstrBuilder::new(Opcode::Shl64ri as mir::Opcode)
-                                    .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                    .add_use(mir::Register::Physical(reg as PhysicalRegister))
                                     .add_operand(Operand::Immediate(
                                         (last_offset - offset) as u64 * 8,
                                     ))
@@ -202,7 +202,7 @@ impl CallingConvention for SysVAmd64 {
                             );
                         }
 
-                        let r = match (r, ty_size) {
+                        let reg = match (reg, ty_size) {
                             (Register::Rax, 8) => Register::Rax,
                             (Register::Rax, 4) => Register::Eax,
                             (Register::Rax, 2) => Register::Ax,
@@ -220,7 +220,7 @@ impl CallingConvention for SysVAmd64 {
                             .get_basic_block()
                             .instructions
                             .push(Instruction::copy(
-                                mir::Register::Physical(r as PhysicalRegister),
+                                mir::Register::Physical(reg as PhysicalRegister),
                                 Operand::not_def(mir::Register::Virtual(vreg_idx)),
                             ));
                         last_offset = Some(offset);
@@ -274,7 +274,7 @@ impl CallingConvention for SysVAmd64 {
                     mir::Register::Virtual(vreg_idx),
                     Operand::not_def(mir::Register::Physical(Register::Rdi as PhysicalRegister)),
                 ));
-            registers.retain(|r| r != &Register::Rdi);
+            registers.retain(|reg| reg != &Register::Rdi);
         }
 
         for ((ty, mut classes), mut vreg_indices) in tys
@@ -334,7 +334,7 @@ impl CallingConvention for SysVAmd64 {
                         }
                     }
                     ClassKind::Integer => {
-                        let r = registers.pop().unwrap();
+                        let reg = registers.pop().unwrap();
                         let (vreg_indices, offsets) =
                             get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
                         let mut last_offset = None;
@@ -347,7 +347,7 @@ impl CallingConvention for SysVAmd64 {
                             if let Some(last_offset) = last_offset {
                                 bb.instructions.push(
                                     InstrBuilder::new(Opcode::Shr64ri as mir::Opcode)
-                                        .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                        .add_use(mir::Register::Physical(reg as PhysicalRegister))
                                         .add_operand(Operand::Immediate(
                                             (offset - last_offset) as u64 * 8,
                                         ))
@@ -355,7 +355,7 @@ impl CallingConvention for SysVAmd64 {
                                 );
                             }
 
-                            let r = match (r, ty_size) {
+                            let reg = match (reg, ty_size) {
                                 (Register::R9, 8) => Register::R9,
                                 (Register::R9, 4) => Register::R9d,
                                 (Register::R9, 2) => Register::R9w,
@@ -391,7 +391,7 @@ impl CallingConvention for SysVAmd64 {
 
                             bb.instructions.push(Instruction::copy(
                                 mir::Register::Virtual(vreg_idx),
-                                Operand::not_def(mir::Register::Physical(r as PhysicalRegister)),
+                                Operand::not_def(mir::Register::Physical(reg as PhysicalRegister)),
                             ));
 
                             last_offset = Some(offset);
@@ -429,7 +429,7 @@ impl CallingConvention for SysVAmd64 {
                 .ty_class(lowering.abi, lowering.ty_storage, *ty)
                 .contains(&ClassKind::Memory)
             {
-                registers.retain(|r| r != &Register::Rdi);
+                registers.retain(|reg| reg != &Register::Rdi);
                 let frame_idx = lowering
                     .mir_function
                     .frame_info
@@ -493,7 +493,7 @@ impl CallingConvention for SysVAmd64 {
                         stack_offset += lowering.abi.ty_size(lowering.ty_storage, ty);
                     }
                     ClassKind::Integer => {
-                        let r = registers.pop().unwrap();
+                        let reg = registers.pop().unwrap();
                         let (vreg_indices, offsets) =
                             get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
                         let mut last_offset = None;
@@ -505,7 +505,7 @@ impl CallingConvention for SysVAmd64 {
                             if let Some(last_offset) = last_offset {
                                 lowering.get_basic_block().instructions.push(
                                     InstrBuilder::new(Opcode::Shl64ri as mir::Opcode)
-                                        .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                        .add_use(mir::Register::Physical(reg as PhysicalRegister))
                                         .add_operand(Operand::Immediate(
                                             (last_offset - offset) as u64 * 8,
                                         ))
@@ -513,7 +513,7 @@ impl CallingConvention for SysVAmd64 {
                                 );
                             }
 
-                            let r = match (r, ty_size) {
+                            let reg = match (reg, ty_size) {
                                 (Register::R9, 8) => Register::R9,
                                 (Register::R9, 4) => Register::R9d,
                                 (Register::R9, 2) => Register::R9w,
@@ -551,7 +551,7 @@ impl CallingConvention for SysVAmd64 {
                                 .get_basic_block()
                                 .instructions
                                 .push(Instruction::copy(
-                                    mir::Register::Physical(r as PhysicalRegister),
+                                    mir::Register::Physical(reg as PhysicalRegister),
                                     Operand::not_def(mir::Register::Virtual(vreg_idx)),
                                 ));
                             last_offset = Some(offset);
@@ -580,7 +580,7 @@ impl CallingConvention for SysVAmd64 {
             .caller_saved_regs()
             .to_vec()
             .into_iter()
-            .map(|r| mir::Register::Physical(r))
+            .map(|reg| mir::Register::Physical(reg))
             .collect();
         lowering.get_basic_block().instructions.push(instr);
 
@@ -643,7 +643,7 @@ impl CallingConvention for SysVAmd64 {
                         }
                     }
                     ClassKind::Integer => {
-                        let r = registers.pop().unwrap();
+                        let reg = registers.pop().unwrap();
                         let (vreg_indices, offsets) =
                             get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
                         let mut last_offset = None;
@@ -656,7 +656,7 @@ impl CallingConvention for SysVAmd64 {
                             if let Some(last_offset) = last_offset {
                                 bb.instructions.push(
                                     InstrBuilder::new(Opcode::Shr64ri as mir::Opcode)
-                                        .add_use(mir::Register::Physical(r as PhysicalRegister))
+                                        .add_use(mir::Register::Physical(reg as PhysicalRegister))
                                         .add_operand(Operand::Immediate(
                                             (offset - last_offset) as u64 * 8,
                                         ))
@@ -664,7 +664,7 @@ impl CallingConvention for SysVAmd64 {
                                 );
                             }
 
-                            let r = match (r, ty_size) {
+                            let reg = match (reg, ty_size) {
                                 (Register::Rax, 8) => Register::Rax,
                                 (Register::Rax, 4) => Register::Eax,
                                 (Register::Rax, 2) => Register::Ax,
@@ -680,7 +680,7 @@ impl CallingConvention for SysVAmd64 {
 
                             bb.instructions.push(Instruction::copy(
                                 mir::Register::Virtual(vreg_idx),
-                                Operand::not_def(mir::Register::Physical(r as PhysicalRegister)),
+                                Operand::not_def(mir::Register::Physical(reg as PhysicalRegister)),
                             ));
 
                             last_offset = Some(offset);

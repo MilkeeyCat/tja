@@ -39,7 +39,7 @@ impl TryFrom<Operand> for Register {
 
     fn try_from(value: Operand) -> Result<Self, Self::Error> {
         match value {
-            Operand::Register(r, _) => Ok(r),
+            Operand::Register(reg, _) => Ok(reg),
             _ => Err(()),
         }
     }

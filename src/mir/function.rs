@@ -131,9 +131,9 @@ impl Function {
         for bb in &self.blocks {
             for instr in &bb.instructions {
                 for operand in &instr.operands {
-                    if let Operand::Register(r, _) = operand {
-                        if !registers.contains(r) {
-                            registers.push(r.clone());
+                    if let Operand::Register(reg, _) = operand {
+                        if !registers.contains(reg) {
+                            registers.push(reg.clone());
                         }
                     }
                 }

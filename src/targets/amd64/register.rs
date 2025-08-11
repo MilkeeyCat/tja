@@ -349,10 +349,10 @@ impl Register {
         }
     }
 
-    pub fn contains(&self, r: Register) -> bool {
+    pub fn contains(&self, reg: Register) -> bool {
         self.subregs()
             .iter()
-            .any(|other| other == &r || other.contains(r))
+            .any(|other| other == &reg || other.contains(reg))
     }
 }
 

@@ -13,9 +13,9 @@ fn register<T: Target, W: Write>(
     match operands {
         [Operand::Register(register, _)] => match register {
             Register::Virtual(_) => unreachable!(),
-            Register::Physical(r) => Ok(printer.target.register_info().get_name(r).to_string()),
+            Register::Physical(reg) => Ok(printer.target.register_info().get_name(reg).to_string()),
         },
-        a => unreachable!("{a:?}"),
+        _ => unreachable!(),
     }
 }
 

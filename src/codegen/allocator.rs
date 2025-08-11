@@ -185,8 +185,8 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
         let mut degree = HashMap::new();
         let mut adj_list = HashMap::new();
 
-        for r in func.registers() {
-            if let Register::Virtual(vreg_idx) = r {
+        for reg in func.registers() {
+            if let Register::Virtual(vreg_idx) = reg {
                 degree.insert(vreg_idx, 0);
                 adj_list.insert(vreg_idx, Default::default());
             }
@@ -256,9 +256,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 if self.ctx.target.is_move_op(instr.opcode) {
                     live = &live - &defs_uses.uses;
 
-                    for r in defs_uses.defs.union(&defs_uses.uses) {
+                    for reg in defs_uses.defs.union(&defs_uses.uses) {
                         self.move_list
-                            .entry(r.clone())
+                            .entry(reg.clone())
                             .or_default()
                             .insert((bb_idx, instr_idx));
                     }
@@ -283,9 +283,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
         }
     }
 
-    fn node_moves(&self, r: &Register) -> VecSet<(BlockIdx, InstructionIdx)> {
+    fn node_moves(&self, reg: &Register) -> VecSet<(BlockIdx, InstructionIdx)> {
         self.move_list
-            .get(r)
+            .get(reg)
             .cloned()
             .unwrap_or_default()
             .intersection(
@@ -299,13 +299,13 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             .collect()
     }
 
-    fn move_related(&self, r: &Register) -> bool {
-        !self.node_moves(r).is_empty()
+    fn move_related(&self, reg: &Register) -> bool {
+        !self.node_moves(reg).is_empty()
     }
 
     fn make_worklist(&mut self) {
-        for r in self.function.registers() {
-            if let Register::Virtual(idx) = r {
+        for reg in self.function.registers() {
+            if let Register::Virtual(idx) = reg {
                 if self.degree[&idx]
                     >= self
                         .ctx
@@ -317,7 +317,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         .len()
                 {
                     self.spill_worklist.insert(idx);
-                } else if self.move_related(&r) {
+                } else if self.move_related(&reg) {
                     self.freeze_worklist.insert(idx);
                 } else {
                     self.simplify_worklist.push(idx);
@@ -390,8 +390,8 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
 
         self.select_stack.push(vreg_idx);
 
-        for r in self.adjacent(&vreg_idx) {
-            if let Register::Virtual(idx) = r {
+        for reg in self.adjacent(&vreg_idx) {
+            if let Register::Virtual(idx) = reg {
                 self.decrement_degree(&idx);
             }
         }
@@ -407,9 +407,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
         }
     }
 
-    fn add_work_list(&mut self, r: &Register) {
-        if let Register::Virtual(idx) = r {
-            if !self.move_related(r)
+    fn add_work_list(&mut self, reg: &Register) {
+        if let Register::Virtual(idx) = reg {
+            if !self.move_related(reg)
                 && self.degree[idx]
                     < self
                         .ctx
@@ -448,7 +448,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
     fn briggs_strat(&self, nodes: HashSet<Register>, vreg_idx: VregIdx) -> bool {
         nodes
             .into_iter()
-            .map(|r| match r {
+            .map(|reg| match reg {
                 Register::Virtual(idx)
                     if self.degree[&idx]
                         >= self
@@ -590,14 +590,14 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             self.frozen_moves.insert(mv);
 
             let defs_uses = self.function.blocks[mv.0].instructions[mv.1].defs_uses();
-            let r = if defs_uses.defs.iter().next().unwrap() == &Register::Virtual(*vreg_idx) {
+            let reg = if defs_uses.defs.iter().next().unwrap() == &Register::Virtual(*vreg_idx) {
                 defs_uses.uses.iter().next().unwrap()
             } else {
                 defs_uses.defs.iter().next().unwrap()
             };
 
-            if let Register::Virtual(idx) = r
-                && self.node_moves(r).is_empty()
+            if let Register::Virtual(idx) = reg
+                && self.node_moves(reg).is_empty()
                 && self.degree[idx]
                     < self
                         .ctx
@@ -643,8 +643,8 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 .get_registers_by_class(&self.function.vreg_info.get_vreg(*vreg_idx).class.unwrap())
                 .to_vec();
 
-            for r in &self.adj_list[&vreg_idx] {
-                let r = match self.get_alias(r) {
+            for reg in &self.adj_list[&vreg_idx] {
+                let reg = match self.get_alias(reg) {
                     Register::Virtual(vreg_idx) => {
                         if self.colored_nodes.contains(&vreg_idx) {
                             Some(self.color[&vreg_idx])
@@ -652,29 +652,29 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                             None
                         }
                     }
-                    Register::Physical(r) => Some(r),
+                    Register::Physical(reg) => Some(reg),
                 };
 
-                if let Some(v) = r {
+                if let Some(v) = reg {
                     colors.retain(|u| !self.ctx.target.register_info().overlaps(u, &v));
                 }
             }
 
-            if let Some(r) = colors.into_iter().next() {
+            if let Some(reg) = colors.into_iter().next() {
                 self.colored_nodes.insert(*vreg_idx);
-                self.color.insert(*vreg_idx, r);
+                self.color.insert(*vreg_idx, reg);
             } else {
                 self.spilled_nodes.push(*vreg_idx);
             }
         }
 
         for vreg_idx in &self.coalesced_nodes {
-            let r = match self.get_alias(&Register::Virtual(*vreg_idx)) {
+            let reg = match self.get_alias(&Register::Virtual(*vreg_idx)) {
                 Register::Virtual(vreg_idx) => self.color[&vreg_idx],
-                Register::Physical(r) => r,
+                Register::Physical(reg) => reg,
             };
 
-            self.color.insert(*vreg_idx, r);
+            self.color.insert(*vreg_idx, reg);
         }
     }
 }

@@ -14,14 +14,14 @@ impl<'a, T: Target> Pass<'a, Function, T> for MaterializeCopy {
             for instr in &mut bb.instructions {
                 if instr.is_copy() {
                     let size = match &instr.operands[0] {
-                        Operand::Register(r, _) => match r {
+                        Operand::Register(reg, _) => match reg {
                             Register::Virtual(idx) => {
                                 let ty = func.vreg_info.get_vreg(*idx).ty;
 
                                 ctx.target.abi().ty_size(ctx.ty_storage, ty)
                             }
-                            Register::Physical(r) => {
-                                ctx.target.register_info().get_register_size(r)
+                            Register::Physical(reg) => {
+                                ctx.target.register_info().get_register_size(reg)
                             }
                         },
                         _ => unreachable!(),
