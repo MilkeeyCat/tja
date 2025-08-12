@@ -9,6 +9,10 @@ pub struct TwoAddressForm;
 
 impl<'a, T: Target> Pass<'a, Function, T> for TwoAddressForm {
     fn run(&self, func: &mut Function, _ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         for bb in &mut func.blocks {
             let mut patch = BasicBlockPatch::new();
 

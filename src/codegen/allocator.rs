@@ -14,6 +14,10 @@ pub struct Allocator;
 
 impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         let mut allocator = AllocatorImpl::new(func, ctx, HashSet::new());
 
         loop {

@@ -161,6 +161,10 @@ impl Function {
     pub fn get_block_mut(&mut self, idx: BlockIdx) -> &mut BasicBlock {
         &mut self.blocks[*idx]
     }
+
+    pub fn is_declaration(&self) -> bool {
+        self.blocks.is_empty()
+    }
 }
 
 impl Wrapper<'_, &mut Function> {

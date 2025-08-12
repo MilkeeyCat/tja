@@ -10,6 +10,10 @@ pub struct MaterializeCopy;
 
 impl<'a, T: Target> Pass<'a, Function, T> for MaterializeCopy {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         for bb in &mut func.blocks {
             for instr in &mut bb.instructions {
                 if instr.is_copy() {

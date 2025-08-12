@@ -11,6 +11,10 @@ pub struct StackSlotsLowerer;
 
 impl<'a, T: Target> Pass<'a, Function, T> for StackSlotsLowerer {
     fn run(&self, func: &mut Function, _ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         let mut locations = HashMap::new();
         let mut stack_offset: isize = 0;
 

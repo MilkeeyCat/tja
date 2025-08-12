@@ -38,6 +38,12 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             },
         };
 
+        if lowering.hir_function.is_declaration() {
+            ctx.mir_function = Some(lowering.mir_function);
+
+            return;
+        }
+
         let vreg_indices = (0..lowering.hir_function.params_count)
             .into_iter()
             .map(|local_idx| {

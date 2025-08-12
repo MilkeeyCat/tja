@@ -107,6 +107,10 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         fn_idx: FunctionIdx,
         module: &Module,
     ) -> std::fmt::Result {
+        if func.is_declaration() {
+            return Ok(());
+        }
+
         write!(self.buf, ".global {}\n", func.name)?;
         write!(self.buf, "{}:\n", func.name)?;
 

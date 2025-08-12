@@ -143,6 +143,10 @@ impl Function {
 
         registers
     }
+
+    pub fn is_declaration(&self) -> bool {
+        self.blocks.is_empty()
+    }
 }
 
 pub struct FunctionPatch {

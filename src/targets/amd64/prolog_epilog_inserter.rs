@@ -20,6 +20,10 @@ pub struct PrologEpilogInserter;
 
 impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         let stack_frame_size = func
             .frame_info
             .objects_iter()

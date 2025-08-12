@@ -47,6 +47,10 @@ pub struct InstructionSelection;
 
 impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         for bb in &mut func.blocks {
             for instr in &mut bb.instructions {
                 match GenericOpcode::try_from(instr.opcode) {

@@ -11,6 +11,10 @@ pub struct SelectRegisterClass;
 
 impl<'a, T: Target> Pass<'a, Function, T> for SelectRegisterClass {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
+        if func.is_declaration() {
+            return;
+        }
+
         for block in &func.blocks {
             for instr in &block.instructions {
                 for operand in &instr.operands {
