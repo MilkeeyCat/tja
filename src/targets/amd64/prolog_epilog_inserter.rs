@@ -24,12 +24,6 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             return;
         }
 
-        let stack_frame_size = func
-            .frame_info
-            .objects_iter()
-            .map(|object| object.size)
-            .sum::<usize>()
-            .next_multiple_of(16);
         let regs = func.registers();
         let used_callee_saved_regs: Vec<PhysicalRegister> = ctx
             .target
@@ -48,8 +42,16 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                     .then_some(*reg1)
             })
             .collect();
-        let mut regs_stack_slots: Vec<FrameIdx> = Vec::with_capacity(used_callee_saved_regs.len());
-
+        let regs_stack_slots: Vec<FrameIdx> = used_callee_saved_regs
+            .iter()
+            .map(|_| func.frame_info.create_stack_object(8))
+            .collect();
+        let stack_frame_size = func
+            .frame_info
+            .objects_iter()
+            .map(|object| object.size)
+            .sum::<usize>()
+            .next_multiple_of(16);
         let mut bb = BasicBlock {
             name: "prolog".into(),
             instructions: vec![
@@ -73,14 +75,11 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             ]);
         }
 
-        for reg in &used_callee_saved_regs {
-            let idx = func.frame_info.create_stack_object(8);
-
-            regs_stack_slots.push(idx);
+        for (reg, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
             bb.instructions.push(
                 InstrBuilder::new(Opcode::Mov64mr.into())
                     .add_addr_mode(AddressMode {
-                        base: Base::Frame(idx),
+                        base: Base::Frame(*frame_idx),
                         index: None,
                         scale: 1,
                         displacement: None,
@@ -112,11 +111,11 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                     Instruction::new(Opcode::Leave.into()),
                 );
 
-                for (r, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
+                for (reg, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
                     patch.add_instruction(
                         InstructionIdx(bb.instructions.len() - 1),
                         InstrBuilder::new(Opcode::Mov64rm.into())
-                            .add_use(mir::Register::Physical(*r))
+                            .add_use(mir::Register::Physical(*reg))
                             .add_addr_mode(AddressMode {
                                 base: Base::Frame(*frame_idx),
                                 index: None,
