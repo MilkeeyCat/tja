@@ -38,16 +38,16 @@ impl<'a, 'pass, U, T: Target> PassManager<'a, 'pass, U, T> {
     }
 }
 
-pub struct FunctionToModuleAdaptor<'a, 'pass, U, T: Target>(PassManager<'a, 'pass, U, T>);
+pub struct FunctionToModuleAdapter<'a, 'pass, U, T: Target>(PassManager<'a, 'pass, U, T>);
 
-impl<'a, 'pass, U, T: Target> FunctionToModuleAdaptor<'a, 'pass, U, T> {
+impl<'a, 'pass, U, T: Target> FunctionToModuleAdapter<'a, 'pass, U, T> {
     pub fn new(pass_manager: PassManager<'a, 'pass, U, T>) -> Self {
         Self(pass_manager)
     }
 }
 
 impl<'a, 'pass, T: Target> Pass<'a, hir::Module, T>
-    for FunctionToModuleAdaptor<'a, 'pass, hir::Function, T>
+    for FunctionToModuleAdapter<'a, 'pass, hir::Function, T>
 {
     fn run(&self, module: &mut hir::Module, ctx: &mut Context<'a, T>) {
         for func in &mut module.functions {
@@ -59,7 +59,7 @@ impl<'a, 'pass, T: Target> Pass<'a, hir::Module, T>
 }
 
 impl<'a, 'pass, T: Target> Pass<'a, mir::Module, T>
-    for FunctionToModuleAdaptor<'a, 'pass, mir::Function, T>
+    for FunctionToModuleAdapter<'a, 'pass, mir::Function, T>
 {
     fn run(&self, module: &mut mir::Module, ctx: &mut Context<'a, T>) {
         for func in &mut module.functions {

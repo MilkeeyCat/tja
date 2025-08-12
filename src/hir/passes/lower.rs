@@ -484,9 +484,9 @@ impl<A: Abi> LocalStorage for FnLowering<'_, A> {
 }
 
 #[derive(Default)]
-pub struct LowerFunctionToModuleAdaptor;
+pub struct LowerFunctionToModuleAdapter;
 
-impl<'a, T: Target> Pass<'a, hir::Module, T> for LowerFunctionToModuleAdaptor {
+impl<'a, T: Target> Pass<'a, hir::Module, T> for LowerFunctionToModuleAdapter {
     fn run(&self, module: &mut hir::Module, ctx: &mut Context<'a, T>) {
         ctx.mir_module = Some(mir::Module {
             name: module.name.clone(),

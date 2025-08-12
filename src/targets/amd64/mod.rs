@@ -18,7 +18,7 @@ use crate::{
         self, BasicBlockPatch, FrameIdx, InstrBuilder, InstructionIdx, Operand, VregIdx,
         passes::two_address::TwoAddressForm,
     },
-    pass::FunctionToModuleAdaptor,
+    pass::FunctionToModuleAdapter,
     targets::amd64::{
         address_mode::{AddressMode, Base},
         instruction_selector::InstructionSelection,
@@ -234,7 +234,7 @@ impl Target {
     }
 
     pub fn add_hir_passes(&self, pass_manager: &mut hir::pass::ModulePassManager<'_, '_, Self>) {
-        pass_manager.add_pass(hir::passes::lower::LowerFunctionToModuleAdaptor::default());
+        pass_manager.add_pass(hir::passes::lower::LowerFunctionToModuleAdapter::default());
     }
 
     pub fn add_mir_passes<'a>(
@@ -251,7 +251,7 @@ impl Target {
         fn_pass_manager.add_pass(PrologEpilogInserter::default());
         fn_pass_manager.add_pass(StackSlotsLowerer::default());
 
-        pass_manager.add_pass(FunctionToModuleAdaptor::new(fn_pass_manager));
+        pass_manager.add_pass(FunctionToModuleAdapter::new(fn_pass_manager));
     }
 }
 
