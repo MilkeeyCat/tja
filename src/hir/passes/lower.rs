@@ -6,7 +6,7 @@ use crate::{
     },
     mir::{
         self, BlockIdx, GenericOpcode, InstrBuilder, Operand, Register, RegisterRole,
-        function::{FrameInfo, VregInfo},
+        function::{FrameInfo, FunctionPatch, VregInfo},
     },
     pass::{Context, Pass},
     targets::{Abi, CallingConvention, Target},
@@ -25,16 +25,17 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
                 name: function.name.clone(),
                 vreg_info: VregInfo::default(),
                 frame_info: FrameInfo::default(),
-                blocks: vec![mir::BasicBlock {
-                    name: "entry".into(),
-                    instructions: vec![],
-                    successors: HashSet::from([BlockIdx(1)]),
-                }],
+                blocks: Vec::new(),
             },
             operand_to_vreg_indices: HashMap::new(),
             ty_to_offsets: HashMap::new(),
             abi: ctx.target.abi(),
-            current_bb_idx: BlockIdx(0),
+            current_bb_idx: None,
+            entry_bb: mir::BasicBlock {
+                name: "entry".into(),
+                instructions: vec![],
+                successors: HashSet::from([BlockIdx(1)]),
+            },
         };
 
         let vreg_indices = (0..lowering.hir_function.params_count)
@@ -58,7 +59,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             .push(mir::Instruction::br(BlockIdx(1)));
 
         for (idx, bb) in function.blocks.iter().enumerate() {
-            lowering.current_bb_idx = BlockIdx(idx + 1);
+            lowering.current_bb_idx = Some(BlockIdx(idx));
             lowering.mir_function.blocks.push(mir::BasicBlock {
                 name: bb.name.clone(),
                 instructions: Vec::new(),
@@ -72,21 +73,10 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             lowering.lower_terminator(&bb.terminator);
         }
 
-        for bb in lowering.mir_function.blocks.iter_mut().skip(1) {
-            bb.successors = std::mem::take(&mut bb.successors)
-                .into_iter()
-                .map(|idx| BlockIdx(*idx + 1))
-                .collect();
+        let mut patch = FunctionPatch::new();
 
-            for instr in &mut bb.instructions {
-                for operand in &mut instr.operands {
-                    if let mir::Operand::Block(idx) = operand {
-                        *idx = BlockIdx(**idx + 1);
-                    }
-                }
-            }
-        }
-
+        patch.add_basic_block(BlockIdx(0), lowering.entry_bb);
+        patch.apply(&mut lowering.mir_function);
         ctx.mir_function = Some(lowering.mir_function);
     }
 }
@@ -98,7 +88,8 @@ pub struct FnLowering<'a, A: Abi> {
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
     pub ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
     pub abi: &'a A,
-    current_bb_idx: BlockIdx,
+    current_bb_idx: Option<BlockIdx>,
+    entry_bb: mir::BasicBlock,
 }
 
 impl<'a, A: Abi> FnLowering<'a, A> {
@@ -225,7 +216,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
     }
 
     pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock {
-        &mut self.mir_function.blocks[*self.current_bb_idx]
+        self.current_bb_idx
+            .map(|idx| &mut self.mir_function.blocks[*idx])
+            .unwrap_or_else(|| &mut self.entry_bb)
     }
 
     fn lower_instruction(&mut self, instruction: &hir::Instruction) {
