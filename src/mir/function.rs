@@ -1,15 +1,16 @@
 use super::{Operand, Register};
 use crate::{
     dataflow::Liveness,
+    macros::usize_wrapper,
     mir::{BasicBlock, BlockIdx},
     ty::TyIdx,
 };
 
-pub type VregIdx = usize;
-pub type FrameIdx = usize;
-pub type RegisterClass = usize;
+usize_wrapper! {VregIdx}
+usize_wrapper! {FrameIdx}
+usize_wrapper! {RegisterClass}
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Vreg {
     pub ty: TyIdx,
     pub class: Option<RegisterClass>,
@@ -26,7 +27,7 @@ impl VregInfo {
 
         self.vreg_info.push(Vreg { ty, class: None });
 
-        idx
+        VregIdx(idx)
     }
 
     pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RegisterClass) -> VregIdx {
@@ -37,15 +38,15 @@ impl VregInfo {
             class: Some(class),
         });
 
-        idx
+        VregIdx(idx)
     }
 
     pub fn get_vreg(&self, idx: VregIdx) -> &Vreg {
-        &self.vreg_info[idx]
+        &self.vreg_info[*idx]
     }
 
     pub fn set_class(&mut self, idx: VregIdx, class: RegisterClass) {
-        self.vreg_info[idx].class = Some(class);
+        self.vreg_info[*idx].class = Some(class);
     }
 }
 
@@ -65,11 +66,11 @@ impl FrameInfo {
 
         self.objects.push(StackObject { size: size });
 
-        idx
+        FrameIdx(idx)
     }
 
     pub fn get_stack_object(&mut self, idx: FrameIdx) -> &StackObject {
-        &self.objects[idx]
+        &self.objects[*idx]
     }
 
     pub fn objects_iter(&self) -> impl Iterator<Item = &StackObject> {
@@ -99,7 +100,7 @@ impl Function {
                 let live_out = block
                     .successors
                     .iter()
-                    .map(|id| liveness[*id].ins.clone())
+                    .map(|id| liveness[**id].ins.clone())
                     .reduce(|acc, el| acc.union(&el).cloned().collect())
                     .unwrap_or_default();
                 // in[v] = use(v) ∪ (out[v] - def(v))
@@ -162,15 +163,15 @@ impl FunctionPatch {
     pub fn apply(self, func: &mut Function) {
         let mut new_basic_blocks = self.new_basic_blocks;
 
-        new_basic_blocks.sort_by_key(|(instr_idx, _)| (*instr_idx));
+        new_basic_blocks.sort_by_key(|(instr_idx, _)| (**instr_idx));
 
         for (bb_idx, bb) in new_basic_blocks.into_iter().rev() {
-            for bb in &mut func.blocks[bb_idx..] {
+            for bb in &mut func.blocks[*bb_idx..] {
                 for instr in &mut bb.instructions {
                     for operand in &mut instr.operands {
                         if let Operand::Block(idx) = operand {
-                            if *idx >= bb_idx {
-                                *idx += 1;
+                            if **idx >= *bb_idx {
+                                *idx = BlockIdx(**idx + 1);
                             }
                         }
                     }
@@ -178,10 +179,10 @@ impl FunctionPatch {
 
                 bb.successors = std::mem::take(&mut bb.successors)
                     .into_iter()
-                    .map(|idx| idx + 1)
+                    .map(|idx| BlockIdx(*idx + 1))
                     .collect();
             }
-            func.blocks.insert(bb_idx, bb);
+            func.blocks.insert(*bb_idx, bb);
         }
     }
 }

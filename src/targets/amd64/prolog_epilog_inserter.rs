@@ -1,8 +1,8 @@
 use super::Opcode;
 use crate::{
     mir::{
-        self, BasicBlock, BasicBlockPatch, FrameIdx, Function, InstrBuilder, Instruction, Operand,
-        PhysicalRegister, function::FunctionPatch,
+        self, BasicBlock, BasicBlockPatch, BlockIdx, FrameIdx, Function, InstrBuilder, Instruction,
+        InstructionIdx, Operand, PhysicalRegister, function::FunctionPatch,
     },
     pass::{Context, Pass},
     targets::{
@@ -32,7 +32,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             .abi()
             .callee_saved_regs()
             .iter()
-            .filter(|reg| **reg != Register::Rbp as PhysicalRegister)
+            .filter(|reg| **reg != Register::Rbp.into())
             .filter_map(|reg1| {
                 regs.iter()
                     .any(|reg| match reg {
@@ -49,27 +49,21 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
         let mut bb = BasicBlock {
             name: "prolog".into(),
             instructions: vec![
-                InstrBuilder::new(Opcode::Push64r as mir::Opcode)
-                    .add_use(mir::Register::Physical(Register::Rbp as PhysicalRegister))
+                InstrBuilder::new(Opcode::Push64r.into())
+                    .add_use(mir::Register::Physical(Register::Rbp.into()))
                     .into(),
             ],
-            successors: HashSet::from([1]),
+            successors: HashSet::from([BlockIdx(1)]),
         };
 
         if stack_frame_size > 0 {
             bb.instructions.extend([
-                InstrBuilder::new(Opcode::Mov64rr as mir::Opcode)
-                    .add_def(mir::Register::Physical(
-                        Register::Rbp as mir::PhysicalRegister,
-                    ))
-                    .add_use(mir::Register::Physical(
-                        Register::Rsp as mir::PhysicalRegister,
-                    ))
+                InstrBuilder::new(Opcode::Mov64rr.into())
+                    .add_def(mir::Register::Physical(Register::Rbp.into()))
+                    .add_use(mir::Register::Physical(Register::Rsp.into()))
                     .into(),
-                InstrBuilder::new(Opcode::Sub64ri as mir::Opcode)
-                    .add_use(mir::Register::Physical(
-                        Register::Rsp as mir::PhysicalRegister,
-                    ))
+                InstrBuilder::new(Opcode::Sub64ri.into())
+                    .add_use(mir::Register::Physical(Register::Rsp.into()))
                     .add_operand(Operand::Immediate(stack_frame_size as u64))
                     .into(),
             ]);
@@ -80,7 +74,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
 
             regs_stack_slots.push(idx);
             bb.instructions.push(
-                InstrBuilder::new(Opcode::Mov64mr as mir::Opcode)
+                InstrBuilder::new(Opcode::Mov64mr.into())
                     .add_addr_mode(AddressMode {
                         base: Base::Frame(idx),
                         index: None,
@@ -93,31 +87,31 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
         }
 
         bb.instructions.push(
-            InstrBuilder::new(Opcode::Jmp as mir::Opcode)
-                .add_operand(Operand::Block(1))
+            InstrBuilder::new(Opcode::Jmp.into())
+                .add_operand(BlockIdx(1).into())
                 .into(),
         );
 
         let mut patch = FunctionPatch::new();
 
-        patch.add_basic_block(0, bb);
+        patch.add_basic_block(BlockIdx(0), bb);
         patch.apply(func);
 
         for bb in &mut func.blocks {
             let terminator = bb.instructions.last().unwrap();
 
-            if terminator.opcode == Opcode::Ret as mir::Opcode {
+            if terminator.opcode == Opcode::Ret.into() {
                 let mut patch = BasicBlockPatch::new();
 
                 patch.add_instruction(
-                    bb.instructions.len() - 1,
-                    Instruction::new(Opcode::Leave as mir::Opcode),
+                    InstructionIdx(bb.instructions.len() - 1),
+                    Instruction::new(Opcode::Leave.into()),
                 );
 
                 for (r, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
                     patch.add_instruction(
-                        bb.instructions.len() - 1,
-                        InstrBuilder::new(Opcode::Mov64rm as mir::Opcode)
+                        InstructionIdx(bb.instructions.len() - 1),
+                        InstrBuilder::new(Opcode::Mov64rm.into())
                             .add_use(mir::Register::Physical(*r))
                             .add_addr_mode(AddressMode {
                                 base: Base::Frame(*frame_idx),

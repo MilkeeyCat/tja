@@ -1,12 +1,11 @@
 use crate::{
-    GlobalIdx,
     dataflow::DefsUses,
-    hir::{self, BlockIdx},
-    mir::{FrameIdx, GenericOpcode, Opcode, Operand, OperandIdx, Register, RegisterRole},
+    macros::usize_wrapper,
+    mir::{BlockIdx, FrameIdx, GenericOpcode, Opcode, Operand, OperandIdx, Register, RegisterRole},
 };
 use std::collections::HashSet;
 
-pub type InstructionIdx = hir::InstructionIdx;
+usize_wrapper! {InstructionIdx}
 
 #[derive(Debug)]
 pub struct Instruction {
@@ -29,7 +28,7 @@ impl Instruction {
     }
 
     pub fn is_copy(&self) -> bool {
-        self.opcode == GenericOpcode::Copy as Opcode
+        self.opcode == GenericOpcode::Copy.into()
     }
 
     pub fn defs_uses(&self) -> DefsUses {
@@ -82,7 +81,7 @@ impl Instruction {
     }
 
     pub fn frame_idx(lhs: Register, rhs: FrameIdx) -> Self {
-        Builder::new(GenericOpcode::FrameIndex as Opcode)
+        Builder::new(GenericOpcode::FrameIndex.into())
             .add_def(lhs)
             .add_operand(Operand::Frame(rhs))
             .into()
@@ -94,7 +93,7 @@ impl Instruction {
             Operand::Register(_, _) | Operand::Immediate(_)
         ));
 
-        Builder::new(GenericOpcode::PtrAdd as Opcode)
+        Builder::new(GenericOpcode::PtrAdd.into())
             .add_def(out)
             .add_operand(lhs)
             .add_operand(rhs)
@@ -102,34 +101,36 @@ impl Instruction {
     }
 
     pub fn load(lhs: Register, rhs: Operand) -> Self {
-        Builder::new(GenericOpcode::Load as Opcode)
+        Builder::new(GenericOpcode::Load.into())
             .add_def(lhs)
             .add_operand(rhs)
             .into()
     }
 
     pub fn store(lhs: Register, rhs: Operand) -> Self {
-        Builder::new(GenericOpcode::Store as Opcode)
+        Builder::new(GenericOpcode::Store.into())
             .add_use(lhs)
             .add_operand(rhs)
             .into()
     }
 
     pub fn br(idx: BlockIdx) -> Self {
-        Builder::new(GenericOpcode::Br as Opcode)
+        Builder::new(GenericOpcode::Br.into())
             .add_operand(Operand::Block(idx))
             .into()
     }
 
-    pub fn global_value(lhs: Register, rhs: GlobalIdx) -> Self {
-        Builder::new(GenericOpcode::GlobalValue as Opcode)
+    pub fn global_value(lhs: Register, rhs: Operand) -> Self {
+        assert!(matches!(rhs, Operand::Global(..) | Operand::Function(..)));
+
+        Builder::new(GenericOpcode::GlobalValue.into())
             .add_def(lhs)
-            .add_operand(Operand::Global(rhs))
+            .add_operand(rhs)
             .into()
     }
 
     pub fn copy(lhs: Register, rhs: Operand) -> Self {
-        Builder::new(GenericOpcode::Copy as Opcode)
+        Builder::new(GenericOpcode::Copy.into())
             .add_def(lhs)
             .add_operand(rhs)
             .into()

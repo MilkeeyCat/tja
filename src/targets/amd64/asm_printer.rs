@@ -29,7 +29,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         write!(self.buf, ".section .text\n")?;
 
         for (idx, func) in module.functions.iter().enumerate() {
-            self.emit_fn(func, idx, module)?;
+            self.emit_fn(func, FunctionIdx(idx), module)?;
         }
 
         Ok(())
@@ -37,8 +37,8 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
 
     fn emit_const(&mut self, c: Const, ty: TyIdx, module: &Module) -> std::fmt::Result {
         match c {
-            Const::Global(idx) => write!(self.buf, "\t.quad {}\n", module.globals[idx].name)?,
-            Const::Function(idx) => write!(self.buf, "\t.quad {}\n", module.functions[idx].name)?,
+            Const::Global(idx) => write!(self.buf, "\t.quad {}\n", module.globals[*idx].name)?,
+            Const::Function(idx) => write!(self.buf, "\t.quad {}\n", module.functions[*idx].name)?,
             Const::Int(value) => {
                 let prefix = match self.ty_storage.get_ty(ty) {
                     Ty::I8 => ".byte",

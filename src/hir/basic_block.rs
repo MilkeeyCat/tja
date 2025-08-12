@@ -2,9 +2,12 @@ use super::{
     Branch, Function, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
     op::{BinOp, CmpOp},
 };
-use crate::ty::{self, Ty, TyIdx};
+use crate::{
+    macros::usize_wrapper,
+    ty::{self, Ty, TyIdx},
+};
 
-pub type BlockIdx = usize;
+usize_wrapper! {BlockIdx}
 
 #[derive(Debug)]
 pub struct BasicBlock {
@@ -34,7 +37,7 @@ impl<'ctx> Wrapper<'ctx> {
         Self {
             ty_storage,
             fn_locals: &mut func.locals,
-            block: &mut func.blocks[idx],
+            block: &mut func.blocks[*idx],
         }
     }
 
@@ -160,12 +163,12 @@ impl<'ctx> Wrapper<'ctx> {
         let idx = self.fn_locals.len();
         self.fn_locals.push(ty);
 
-        idx
+        LocalIdx(idx)
     }
 }
 
 impl LocalStorage for Wrapper<'_> {
     fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
-        self.fn_locals[idx]
+        self.fn_locals[*idx]
     }
 }

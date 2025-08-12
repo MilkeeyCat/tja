@@ -1,7 +1,7 @@
 use super::{AsmPrinter, Condition};
 use crate::{
     FunctionIdx,
-    mir::{GenericOpcode, Module, Operand, Register},
+    mir::{self, GenericOpcode, Module, Operand, Register},
     targets::{RegisterInfo, Target},
 };
 use std::fmt::Write;
@@ -37,8 +37,8 @@ fn memory<T: Target, W: Write>(
                 Operand::Register(_, _) => {
                     write!(&mut result, "{}", register(printer, &[base.clone()])?)?
                 }
-                Operand::Global(idx) => write!(&mut result, "{}", module.globals[*idx].name)?,
-                Operand::Function(idx) => write!(&mut result, "{}", module.functions[*idx].name)?,
+                Operand::Global(idx) => write!(&mut result, "{}", module.globals[**idx].name)?,
+                Operand::Function(idx) => write!(&mut result, "{}", module.functions[**idx].name)?,
                 _ => unreachable!(),
             };
 
@@ -234,11 +234,17 @@ macro_rules! opcodes {
             }
         }
 
-        impl From<usize> for Opcode {
-            fn from(value: usize) -> Self {
-                assert!(value >= GenericOpcode::Num as usize && value < Self::Num as usize);
+        impl From<mir::Opcode> for Opcode {
+            fn from(value: mir::Opcode) -> Self {
+                assert!(*value >= GenericOpcode::Num as usize && *value < Self::Num as usize);
 
                 unsafe { std::mem::transmute::<_, Self>(value) }
+            }
+        }
+
+        impl Into<mir::Opcode> for Opcode {
+            fn into(self) -> mir::Opcode {
+                mir::Opcode(self as usize)
             }
         }
     };

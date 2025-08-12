@@ -1,6 +1,6 @@
 use super::RegisterClass;
 use crate::{
-    mir::{self, Function, Operand, Register, RegisterRole},
+    mir::{Function, Operand, Register, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
     ty::Ty,
@@ -27,7 +27,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for SelectRegisterClass {
                             }
                         };
 
-                        func.vreg_info.set_class(*idx, class as mir::RegisterClass);
+                        func.vreg_info.set_class(*idx, class.into());
                     }
                 }
             }

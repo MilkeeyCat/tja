@@ -102,82 +102,88 @@ pub enum RegisterClass {
     Gpr8,
 }
 
+impl Into<mir::RegisterClass> for RegisterClass {
+    fn into(self) -> mir::RegisterClass {
+        mir::RegisterClass(self as usize)
+    }
+}
+
 pub struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::PhysicalRegister>>);
 
 impl RegisterInfo {
     fn new() -> Self {
         Self(HashMap::from([
             (
-                RegisterClass::Gpr64 as mir::RegisterClass,
+                RegisterClass::Gpr64.into(),
                 vec![
-                    Register::R15 as mir::PhysicalRegister,
-                    Register::R14 as mir::PhysicalRegister,
-                    Register::R13 as mir::PhysicalRegister,
-                    Register::R12 as mir::PhysicalRegister,
-                    Register::R11 as mir::PhysicalRegister,
-                    Register::R10 as mir::PhysicalRegister,
-                    Register::R9 as mir::PhysicalRegister,
-                    Register::Rcx as mir::PhysicalRegister,
-                    Register::Rdx as mir::PhysicalRegister,
-                    Register::Rsi as mir::PhysicalRegister,
-                    Register::Rdi as mir::PhysicalRegister,
-                    Register::Rax as mir::PhysicalRegister,
-                    //Register::R8 as mir::Register,
+                    Register::R15.into(),
+                    Register::R14.into(),
+                    Register::R13.into(),
+                    Register::R12.into(),
+                    Register::R11.into(),
+                    Register::R10.into(),
+                    Register::R9.into(),
+                    Register::Rcx.into(),
+                    Register::Rdx.into(),
+                    Register::Rsi.into(),
+                    Register::Rdi.into(),
+                    Register::Rax.into(),
+                    //Register::R8.into(),
                 ],
             ),
             (
-                RegisterClass::Gpr32 as mir::RegisterClass,
+                RegisterClass::Gpr32.into(),
                 vec![
-                    Register::R15d as mir::PhysicalRegister,
-                    Register::R14d as mir::PhysicalRegister,
-                    Register::R13d as mir::PhysicalRegister,
-                    Register::R12d as mir::PhysicalRegister,
-                    Register::R11d as mir::PhysicalRegister,
-                    Register::R10d as mir::PhysicalRegister,
-                    Register::R9d as mir::PhysicalRegister,
-                    Register::Ecx as mir::PhysicalRegister,
-                    Register::Edx as mir::PhysicalRegister,
-                    Register::Esi as mir::PhysicalRegister,
-                    Register::Edi as mir::PhysicalRegister,
-                    Register::Eax as mir::PhysicalRegister,
-                    //Register::R8d as mir::Register,
+                    Register::R15d.into(),
+                    Register::R14d.into(),
+                    Register::R13d.into(),
+                    Register::R12d.into(),
+                    Register::R11d.into(),
+                    Register::R10d.into(),
+                    Register::R9d.into(),
+                    Register::Ecx.into(),
+                    Register::Edx.into(),
+                    Register::Esi.into(),
+                    Register::Edi.into(),
+                    Register::Eax.into(),
+                    //Register::R8d.into(),
                 ],
             ),
             (
-                RegisterClass::Gpr16 as mir::RegisterClass,
+                RegisterClass::Gpr16.into(),
                 vec![
-                    Register::R15w as mir::PhysicalRegister,
-                    Register::R14w as mir::PhysicalRegister,
-                    Register::R13w as mir::PhysicalRegister,
-                    Register::R12w as mir::PhysicalRegister,
-                    Register::R11w as mir::PhysicalRegister,
-                    Register::R10w as mir::PhysicalRegister,
-                    Register::R9w as mir::PhysicalRegister,
-                    Register::Cx as mir::PhysicalRegister,
-                    Register::Dx as mir::PhysicalRegister,
-                    Register::Si as mir::PhysicalRegister,
-                    Register::Di as mir::PhysicalRegister,
-                    Register::Ax as mir::PhysicalRegister,
-                    //Register::R8w as mir::Register,
+                    Register::R15w.into(),
+                    Register::R14w.into(),
+                    Register::R13w.into(),
+                    Register::R12w.into(),
+                    Register::R11w.into(),
+                    Register::R10w.into(),
+                    Register::R9w.into(),
+                    Register::Cx.into(),
+                    Register::Dx.into(),
+                    Register::Si.into(),
+                    Register::Di.into(),
+                    Register::Ax.into(),
+                    //Register::R8w.into(),
                 ],
             ),
             (
-                RegisterClass::Gpr8 as mir::RegisterClass,
+                RegisterClass::Gpr8.into(),
                 vec![
-                    Register::R15b as mir::PhysicalRegister,
-                    Register::R14b as mir::PhysicalRegister,
-                    Register::R13b as mir::PhysicalRegister,
-                    Register::R12b as mir::PhysicalRegister,
-                    Register::R11b as mir::PhysicalRegister,
-                    Register::R10b as mir::PhysicalRegister,
-                    Register::R9b as mir::PhysicalRegister,
-                    Register::Cl as mir::PhysicalRegister,
-                    Register::Dl as mir::PhysicalRegister,
-                    Register::Sil as mir::PhysicalRegister,
-                    Register::Dil as mir::PhysicalRegister,
-                    Register::Ah as mir::PhysicalRegister,
-                    Register::Al as mir::PhysicalRegister,
-                    //Register::R8b as mir::Register,
+                    Register::R15b.into(),
+                    Register::R14b.into(),
+                    Register::R13b.into(),
+                    Register::R12b.into(),
+                    Register::R11b.into(),
+                    Register::R10b.into(),
+                    Register::R9b.into(),
+                    Register::Cl.into(),
+                    Register::Dl.into(),
+                    Register::Sil.into(),
+                    Register::Dil.into(),
+                    Register::Ah.into(),
+                    Register::Al.into(),
+                    //Register::R8b.into(),
                 ],
             ),
         ]))
@@ -266,7 +272,7 @@ impl super::Target for Target {
     ) {
         patch.add_instruction(
             idx,
-            InstrBuilder::new(get_store_op(size) as mir::Opcode)
+            InstrBuilder::new(get_store_op(size).into())
                 .add_addr_mode(AddressMode {
                     base: Base::Frame(frame_idx),
                     index: None,
@@ -288,7 +294,7 @@ impl super::Target for Target {
     ) {
         patch.add_instruction(
             idx,
-            InstrBuilder::new(get_load_op(size) as mir::Opcode)
+            InstrBuilder::new(get_load_op(size).into())
                 .add_def(mir::Register::Virtual(vreg_idx))
                 .add_addr_mode(AddressMode {
                     base: Base::Frame(frame_idx),

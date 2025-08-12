@@ -1,7 +1,7 @@
 use super::{Function, GlobalIdx, Wrapper};
-use crate::{Const, FunctionIdx, Global, ty::TyIdx};
+use crate::{Const, FunctionIdx, Global, macros::usize_wrapper, ty::TyIdx};
 
-pub type ModuleIdx = usize;
+usize_wrapper! {ModuleIdx}
 
 #[derive(Debug)]
 pub struct Module {
@@ -23,7 +23,7 @@ impl Module {
         let idx = self.globals.len();
         self.globals.push(Global { name, ty, value });
 
-        idx
+        GlobalIdx(idx)
     }
 
     pub fn create_fn(&mut self, name: String, params: Vec<TyIdx>, ret_ty: TyIdx) -> FunctionIdx {
@@ -36,11 +36,11 @@ impl Module {
             locals: params,
         });
 
-        idx
+        FunctionIdx(idx)
     }
 
     pub fn get_fn_mut(&mut self, idx: FunctionIdx) -> &mut Function {
-        &mut self.functions[idx]
+        &mut self.functions[*idx]
     }
 }
 
@@ -48,7 +48,7 @@ impl Wrapper<'_, &mut Module> {
     pub fn get_fn(&mut self, idx: FunctionIdx) -> Wrapper<'_, &mut Function> {
         Wrapper {
             ty_storage: self.ty_storage,
-            inner: &mut self.inner.functions[idx],
+            inner: &mut self.inner.functions[*idx],
         }
     }
 }

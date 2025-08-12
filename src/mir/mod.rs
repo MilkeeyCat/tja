@@ -5,15 +5,16 @@ mod opcode;
 pub mod pass;
 pub mod passes;
 
-use crate::{FunctionIdx, Global, GlobalIdx, hir};
+use crate::{FunctionIdx, Global, GlobalIdx, macros::usize_wrapper};
 pub use basic_block::{BasicBlock, BasicBlockPatch};
+use derive_more::From;
 pub use function::{FrameIdx, Function, RegisterClass, VregIdx};
 pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
 pub use opcode::{GenericOpcode, Opcode};
 
-pub type PhysicalRegister = usize;
-pub type BlockIdx = hir::BlockIdx;
-pub type OperandIdx = usize;
+usize_wrapper! {PhysicalRegister}
+usize_wrapper! {BlockIdx}
+usize_wrapper! {OperandIdx}
 
 #[derive(Debug)]
 pub struct Module {
@@ -45,13 +46,15 @@ impl TryFrom<Operand> for Register {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, From)]
 pub enum Operand {
+    #[from(ignore)]
     Register(Register, RegisterRole),
     Frame(FrameIdx),
     Global(GlobalIdx),
     Function(FunctionIdx),
     Block(BlockIdx),
+    #[from(ignore)]
     Immediate(u64),
 }
 

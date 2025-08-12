@@ -1,6 +1,6 @@
 use super::OperandKind;
 use crate::{
-    mir::{Function, Opcode, Operand, Register},
+    mir::{Function, Operand, Register},
     pass::{Context, Pass},
     targets::{Abi, RegisterInfo, Target},
 };
@@ -64,7 +64,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for MaterializeCopy {
                         _ => unreachable!(),
                     };
 
-                    instr.opcode = opcode as Opcode;
+                    instr.opcode = opcode.into();
                 }
             }
         }

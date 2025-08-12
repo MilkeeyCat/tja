@@ -1,11 +1,11 @@
 use crate::{
     hir::{
-        self, Const, LocalStorage,
+        self, Const, LocalIdx, LocalStorage,
         op::BinOp,
         ty::{self, Ty, TyIdx},
     },
     mir::{
-        self, BlockIdx, GenericOpcode, InstrBuilder, Opcode, Operand, Register, RegisterRole,
+        self, BlockIdx, GenericOpcode, InstrBuilder, Operand, Register, RegisterRole,
         function::{FrameInfo, VregInfo},
     },
     pass::{Context, Pass},
@@ -28,20 +28,20 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
                 blocks: vec![mir::BasicBlock {
                     name: "entry".into(),
                     instructions: vec![],
-                    successors: HashSet::from([1]),
+                    successors: HashSet::from([BlockIdx(1)]),
                 }],
             },
             operand_to_vreg_indices: HashMap::new(),
             ty_to_offsets: HashMap::new(),
             abi: ctx.target.abi(),
-            current_bb_idx: 0,
+            current_bb_idx: BlockIdx(0),
         };
 
         let vreg_indices = (0..lowering.hir_function.params_count)
             .into_iter()
             .map(|local_idx| {
                 lowering
-                    .get_or_create_vregs(hir::Operand::Local(local_idx))
+                    .get_or_create_vregs(LocalIdx(local_idx).into())
                     .to_vec()
             })
             .collect();
@@ -55,10 +55,10 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
         lowering
             .get_basic_block()
             .instructions
-            .push(mir::Instruction::br(1));
+            .push(mir::Instruction::br(BlockIdx(1)));
 
         for (idx, bb) in function.blocks.iter().enumerate() {
-            lowering.current_bb_idx = idx + 1;
+            lowering.current_bb_idx = BlockIdx(idx + 1);
             lowering.mir_function.blocks.push(mir::BasicBlock {
                 name: bb.name.clone(),
                 instructions: Vec::new(),
@@ -75,13 +75,13 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
         for bb in lowering.mir_function.blocks.iter_mut().skip(1) {
             bb.successors = std::mem::take(&mut bb.successors)
                 .into_iter()
-                .map(|idx| idx + 1)
+                .map(|idx| BlockIdx(*idx + 1))
                 .collect();
 
             for instr in &mut bb.instructions {
                 for operand in &mut instr.operands {
                     if let mir::Operand::Block(idx) = operand {
-                        *idx += 1;
+                        *idx = BlockIdx(**idx + 1);
                     }
                 }
             }
@@ -108,7 +108,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
         }
 
         let ty = match operand {
-            hir::Operand::Local(idx) => self.hir_function.locals[idx],
+            hir::Operand::Local(idx) => self.hir_function.locals[*idx],
             hir::Operand::Const(_, ty) => ty,
         };
 
@@ -132,7 +132,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                         .instructions
                         .push(mir::Instruction::global_value(
                             Register::Virtual(vreg_idx),
-                            *idx,
+                            (*idx).into(),
                         ));
                     vreg_indices.push(vreg_idx);
                 }
@@ -143,7 +143,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                         .instructions
                         .push(mir::Instruction::global_value(
                             Register::Virtual(vreg_idx),
-                            *idx,
+                            (*idx).into(),
                         ));
                     vreg_indices.push(vreg_idx);
                 }
@@ -225,7 +225,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
     }
 
     pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock {
-        &mut self.mir_function.blocks[self.current_bb_idx]
+        &mut self.mir_function.blocks[*self.current_bb_idx]
     }
 
     fn lower_instruction(&mut self, instruction: &hir::Instruction) {
@@ -248,7 +248,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 };
 
                 self.get_basic_block().instructions.push(
-                    InstrBuilder::new(opcode as Opcode)
+                    InstrBuilder::new(opcode.into())
                         .add_def(Register::Virtual(def))
                         .add_use(Register::Virtual(lhs))
                         .add_use(Register::Virtual(rhs))
@@ -290,7 +290,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
             hir::Instruction::Load { ptr, out } => {
                 let base = self.get_or_create_vreg(ptr.clone());
                 let vregs = self.get_or_create_vregs(hir::Operand::Local(*out)).to_vec();
-                let offsets = self.ty_to_offsets[&self.hir_function.locals[*out]].to_vec();
+                let offsets = self.ty_to_offsets[&self.hir_function.locals[**out]].to_vec();
 
                 for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
                     let ptr_add = self.ptr_add(
@@ -358,7 +358,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                                         self.get_basic_block().instructions.push(
                                             mir::Instruction::binary(
-                                                GenericOpcode::Mul as Opcode,
+                                                GenericOpcode::Mul.into(),
                                                 Register::Virtual(def_vreg_idx),
                                                 Operand::not_def(Register::Virtual(lhs_vreg_idx)),
                                                 Operand::Immediate(size as u64),
@@ -418,7 +418,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 let ret = out.map(|out| {
                     (
                         self.get_or_create_vregs(hir::Operand::Local(out)).to_vec(),
-                        self.hir_function.locals[out],
+                        self.hir_function.locals[*out],
                     )
                 });
 
@@ -447,7 +447,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                 self.get_basic_block()
                     .instructions
-                    .push(mir::Instruction::new(GenericOpcode::Return as mir::Opcode));
+                    .push(mir::Instruction::new(GenericOpcode::Return.into()));
             }
             hir::Terminator::Br(branch) => match branch {
                 hir::Branch::Conditional {
@@ -458,8 +458,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 hir::Branch::Unconditional { block_idx } => {
                     let bb = self.get_basic_block();
 
-                    bb.successors = HashSet::from([*block_idx]);
-                    bb.instructions.push(mir::Instruction::br(*block_idx));
+                    bb.successors = HashSet::from([BlockIdx(**block_idx)]);
+                    bb.instructions
+                        .push(mir::Instruction::br(BlockIdx(**block_idx)));
                 }
             },
         }
@@ -485,7 +486,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
 impl<A: Abi> LocalStorage for FnLowering<'_, A> {
     fn get_local_ty(&self, idx: hir::LocalIdx) -> TyIdx {
-        self.hir_function.locals[idx]
+        self.hir_function.locals[*idx]
     }
 }
 

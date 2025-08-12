@@ -32,7 +32,7 @@ impl Function {
         self.blocks
             .push(BasicBlock::new(name.unwrap_or_else(|| idx.to_string())));
 
-        idx
+        BlockIdx(idx)
     }
 
     fn defs_uses(&self) -> Vec<DefUseBlock> {
@@ -44,7 +44,10 @@ impl Function {
 
             for instruction in &block.instructions {
                 blocks.push(DefUseBlock {
-                    defs: HashSet::from(instruction.def().map(|def| [def]).unwrap_or_default()),
+                    defs: instruction
+                        .def()
+                        .map(|def| HashSet::from([def]))
+                        .unwrap_or_default(),
                     uses: instruction.uses(),
                     next: HashSet::from([blocks.len() + 1]),
                 });
@@ -156,7 +159,7 @@ impl Function {
     }
 
     pub fn get_block_mut(&mut self, idx: BlockIdx) -> &mut BasicBlock {
-        &mut self.blocks[idx]
+        &mut self.blocks[*idx]
     }
 }
 
@@ -165,7 +168,7 @@ impl Wrapper<'_, &mut Function> {
         basic_block::Wrapper {
             ty_storage: self.ty_storage,
             fn_locals: &mut self.inner.locals,
-            block: &mut self.inner.blocks[idx],
+            block: &mut self.inner.blocks[*idx],
         }
     }
 }
@@ -194,7 +197,7 @@ impl Patch {
         self.next_local += 1;
         self.new_locals.push(ty);
 
-        idx
+        LocalIdx(idx)
     }
 
     pub fn add_instruction(
@@ -227,20 +230,20 @@ impl Patch {
         func.locals.extend(self.new_locals.into_iter());
 
         for ((block_idx, instr_idx), instr) in self.instr_patch_map.into_iter() {
-            func.blocks[block_idx].instructions[instr_idx] = instr;
+            func.blocks[*block_idx].instructions[*instr_idx] = instr;
         }
 
         for (idx, term) in self.term_patch_map.into_iter() {
-            func.blocks[idx].terminator = term;
+            func.blocks[*idx].terminator = term;
         }
 
         self.new_instructions
-            .sort_by_key(|(block_idx, instr_idx, _)| (*block_idx, *instr_idx));
+            .sort_by_key(|(block_idx, instr_idx, _)| (**block_idx, **instr_idx));
 
         for (block_idx, instr_idx, instruction) in self.new_instructions.into_iter().rev() {
-            func.blocks[block_idx]
+            func.blocks[*block_idx]
                 .instructions
-                .insert(instr_idx, instruction);
+                .insert(*instr_idx, instruction);
         }
     }
 }

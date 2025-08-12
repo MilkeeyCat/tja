@@ -7,6 +7,7 @@ pub mod passes;
 
 use crate::{
     Const, GlobalIdx,
+    macros::usize_wrapper,
     ty::{self, TyIdx},
 };
 pub use basic_block::{BasicBlock, BlockIdx};
@@ -19,12 +20,13 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-pub type LocalIdx = usize;
-pub type InstructionIdx = usize;
+usize_wrapper! {LocalIdx}
+usize_wrapper! {InstructionIdx}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::From)]
 pub enum Operand {
     Local(LocalIdx),
+    #[from(ignore)]
     Const(Const, TyIdx),
 }
 
@@ -208,13 +210,13 @@ impl Context {
         let idx = self.modules.len();
         self.modules.push(Module::new(name));
 
-        idx
+        ModuleIdx(idx)
     }
 
     pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<'_, &mut Module> {
         Wrapper {
             ty_storage: &mut self.ty_storage,
-            inner: &mut self.modules[idx],
+            inner: &mut self.modules[*idx],
         }
     }
 }

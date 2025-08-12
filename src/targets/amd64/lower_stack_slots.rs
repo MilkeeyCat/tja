@@ -1,6 +1,6 @@
 use super::address_mode::{AddressMode, Base};
 use crate::{
-    mir::{Function, Operand, PhysicalRegister, Register},
+    mir::{Function, Operand, Register},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -30,7 +30,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for StackSlotsLowerer {
 
                                         AddressMode {
                                             base: Base::Register(Register::Physical(
-                                                super::Register::Rbp as PhysicalRegister,
+                                                super::Register::Rbp.into(),
                                             )),
                                             index: None,
                                             scale: 1,

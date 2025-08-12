@@ -1,3 +1,5 @@
+use crate::mir::PhysicalRegister;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(usize)]
 pub enum Register {
@@ -354,12 +356,22 @@ impl Register {
             .iter()
             .any(|other| other == &reg || other.contains(reg))
     }
+
+    pub const fn into_physical_reg(self) -> PhysicalRegister {
+        PhysicalRegister(self as usize)
+    }
 }
 
-impl From<usize> for Register {
-    fn from(value: usize) -> Self {
-        assert!(value < Self::Num as usize);
+impl From<PhysicalRegister> for Register {
+    fn from(value: PhysicalRegister) -> Self {
+        assert!(*value < Self::Num as usize);
 
         unsafe { std::mem::transmute::<_, Self>(value) }
+    }
+}
+
+impl Into<PhysicalRegister> for Register {
+    fn into(self) -> PhysicalRegister {
+        self.into_physical_reg()
     }
 }

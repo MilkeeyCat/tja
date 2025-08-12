@@ -65,28 +65,32 @@ impl Abi for SysVAmd64 {
     }
 
     fn callee_saved_regs(&self) -> &'static [PhysicalRegister] {
-        &[
-            Register::Rbx as PhysicalRegister,
-            Register::Rsp as PhysicalRegister,
-            Register::Rbp as PhysicalRegister,
-            Register::R12 as PhysicalRegister,
-            Register::R13 as PhysicalRegister,
-            Register::R14 as PhysicalRegister,
-            Register::R15 as PhysicalRegister,
-        ]
+        const {
+            &[
+                Register::Rbx.into_physical_reg(),
+                Register::Rsp.into_physical_reg(),
+                Register::Rbp.into_physical_reg(),
+                Register::R12.into_physical_reg(),
+                Register::R13.into_physical_reg(),
+                Register::R14.into_physical_reg(),
+                Register::R15.into_physical_reg(),
+            ]
+        }
     }
 
     fn caller_saved_regs(&self) -> &'static [PhysicalRegister] {
-        &[
-            Register::Rax as PhysicalRegister,
-            Register::Rcx as PhysicalRegister,
-            Register::Rdx as PhysicalRegister,
-            Register::Rsi as PhysicalRegister,
-            Register::Rdi as PhysicalRegister,
-            Register::R8 as PhysicalRegister,
-            Register::R9 as PhysicalRegister,
-            Register::R10 as PhysicalRegister,
-            Register::R11 as PhysicalRegister,
-        ]
+        const {
+            &[
+                Register::Rax.into_physical_reg(),
+                Register::Rcx.into_physical_reg(),
+                Register::Rdx.into_physical_reg(),
+                Register::Rsi.into_physical_reg(),
+                Register::Rdi.into_physical_reg(),
+                Register::R8.into_physical_reg(),
+                Register::R9.into_physical_reg(),
+                Register::R10.into_physical_reg(),
+                Register::R11.into_physical_reg(),
+            ]
+        }
     }
 }
