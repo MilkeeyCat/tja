@@ -58,21 +58,21 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                 InstrBuilder::new(Opcode::Push64r.into())
                     .add_use(mir::Register::Physical(Register::Rbp.into()))
                     .into(),
+                InstrBuilder::new(Opcode::Mov64rr.into())
+                    .add_def(mir::Register::Physical(Register::Rbp.into()))
+                    .add_use(mir::Register::Physical(Register::Rsp.into()))
+                    .into(),
             ],
             successors: HashSet::from([BlockIdx(1)]),
         };
 
         if stack_frame_size > 0 {
-            bb.instructions.extend([
-                InstrBuilder::new(Opcode::Mov64rr.into())
-                    .add_def(mir::Register::Physical(Register::Rbp.into()))
-                    .add_use(mir::Register::Physical(Register::Rsp.into()))
-                    .into(),
+            bb.instructions.push(
                 InstrBuilder::new(Opcode::Sub64ri.into())
                     .add_use(mir::Register::Physical(Register::Rsp.into()))
                     .add_operand(Operand::Immediate(stack_frame_size as u64))
                     .into(),
-            ]);
+            );
         }
 
         for (reg, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
