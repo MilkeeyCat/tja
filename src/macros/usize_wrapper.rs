@@ -1,7 +1,7 @@
 macro_rules! usize_wrapper {
     ($name: ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display)]
-        pub struct $name(pub(crate) usize);
+        pub struct $name(pub usize);
 
         impl std::ops::Deref for $name {
             type Target = usize;
