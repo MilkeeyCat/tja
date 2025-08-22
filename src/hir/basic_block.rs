@@ -3,16 +3,19 @@ use super::{
     op::{BinOp, CmpOp},
 };
 use crate::{
-    macros::usize_wrapper,
+    hir::InstructionIdx,
     ty::{self, Ty, TyIdx},
 };
+use index_vec::{IndexVec, define_index_type};
 
-usize_wrapper! {BlockIdx}
+define_index_type! {
+    pub struct BlockIdx = usize;
+}
 
 #[derive(Debug)]
 pub struct BasicBlock {
     pub name: String,
-    pub instructions: Vec<Instruction>,
+    pub instructions: IndexVec<InstructionIdx, Instruction>,
     pub terminator: Terminator,
 }
 
@@ -20,7 +23,7 @@ impl BasicBlock {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            instructions: Vec::new(),
+            instructions: IndexVec::new(),
             terminator: Terminator::Return(None),
         }
     }
@@ -28,7 +31,7 @@ impl BasicBlock {
 
 pub struct Wrapper<'ctx> {
     pub ty_storage: &'ctx mut ty::Storage,
-    pub fn_locals: &'ctx mut Vec<TyIdx>,
+    pub fn_locals: &'ctx mut IndexVec<LocalIdx, TyIdx>,
     pub block: &'ctx mut BasicBlock,
 }
 
@@ -37,7 +40,7 @@ impl<'ctx> Wrapper<'ctx> {
         Self {
             ty_storage,
             fn_locals: &mut func.locals,
-            block: &mut func.blocks[*idx],
+            block: &mut func.blocks[idx],
         }
     }
 
@@ -163,12 +166,12 @@ impl<'ctx> Wrapper<'ctx> {
         let idx = self.fn_locals.len();
         self.fn_locals.push(ty);
 
-        LocalIdx(idx)
+        idx.into()
     }
 }
 
 impl LocalStorage for Wrapper<'_> {
     fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
-        self.fn_locals[*idx]
+        self.fn_locals[idx]
     }
 }

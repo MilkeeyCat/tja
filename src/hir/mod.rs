@@ -7,12 +7,12 @@ pub mod passes;
 
 use crate::{
     Const, GlobalIdx,
-    macros::usize_wrapper,
     ty::{self, TyIdx},
 };
 pub use basic_block::{BasicBlock, BlockIdx};
 pub use derive_more::From;
 pub use function::{Function, Patch};
+use index_vec::{IndexVec, define_index_type};
 pub use module::{Module, ModuleIdx};
 use op::{BinOp, CmpOp};
 use std::{
@@ -20,8 +20,13 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-usize_wrapper! {LocalIdx}
-usize_wrapper! {InstructionIdx}
+define_index_type! {
+    pub struct LocalIdx = usize;
+}
+
+define_index_type! {
+    pub struct InstructionIdx = usize;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::From)]
 pub enum Operand {
@@ -195,14 +200,14 @@ impl Terminator {
 
 pub struct Context {
     pub ty_storage: ty::Storage,
-    pub modules: Vec<Module>,
+    pub modules: IndexVec<ModuleIdx, Module>,
 }
 
 impl Context {
     pub fn new() -> Self {
         Self {
             ty_storage: ty::Storage::new(),
-            modules: Vec::new(),
+            modules: IndexVec::new(),
         }
     }
 
@@ -210,13 +215,13 @@ impl Context {
         let idx = self.modules.len();
         self.modules.push(Module::new(name));
 
-        ModuleIdx(idx)
+        idx.into()
     }
 
     pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<'_, &mut Module> {
         Wrapper {
             ty_storage: &mut self.ty_storage,
-            inner: &mut self.modules[*idx],
+            inner: &mut self.modules[idx],
         }
     }
 }

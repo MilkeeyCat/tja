@@ -29,7 +29,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         write!(self.buf, ".section .text\n")?;
 
         for (idx, func) in module.functions.iter().enumerate() {
-            self.emit_fn(func, FunctionIdx(idx), module)?;
+            self.emit_fn(func, idx.into(), module)?;
         }
 
         Ok(())
@@ -37,8 +37,8 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
 
     fn emit_const(&mut self, c: Const, ty: TyIdx, module: &Module) -> std::fmt::Result {
         match c {
-            Const::Global(idx) => write!(self.buf, "\t.quad {}\n", module.globals[*idx].name)?,
-            Const::Function(idx) => write!(self.buf, "\t.quad {}\n", module.functions[*idx].name)?,
+            Const::Global(idx) => write!(self.buf, "\t.quad {}\n", module.globals[idx].name)?,
+            Const::Function(idx) => write!(self.buf, "\t.quad {}\n", module.functions[idx].name)?,
             Const::Int(value) => {
                 let prefix = match self.ty_storage.get_ty(ty) {
                     Ty::I8 => ".byte",
@@ -115,7 +115,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         write!(self.buf, "{}:\n", func.name)?;
 
         for (bb_idx, bb) in func.blocks.iter().enumerate() {
-            write!(self.buf, ".L{fn_idx}_{bb_idx}:\n")?;
+            write!(self.buf, ".L{}_{bb_idx}:\n", fn_idx.raw())?;
 
             for instr in &bb.instructions {
                 write!(self.buf, "\t")?;
@@ -124,7 +124,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                     self,
                     module,
                     fn_idx,
-                    &instr.operands,
+                    instr.operands.as_raw_slice(),
                 )?;
 
                 write!(self.buf, "\n")?;

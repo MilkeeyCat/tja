@@ -1,6 +1,8 @@
-use crate::macros::usize_wrapper;
+use index_vec::{IndexVec, define_index_type, index_vec};
 
-usize_wrapper! {TyIdx}
+define_index_type! {
+    pub struct TyIdx = usize;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty {
@@ -36,19 +38,19 @@ pub struct Storage {
     pub i32_ty: TyIdx,
     pub i64_ty: TyIdx,
     pub ptr_ty: TyIdx,
-    types: Vec<Ty>,
+    types: IndexVec<TyIdx, Ty>,
 }
 
 impl Storage {
     pub fn new() -> Self {
         Self {
-            void_ty: TyIdx(0),
-            i8_ty: TyIdx(1),
-            i16_ty: TyIdx(2),
-            i32_ty: TyIdx(3),
-            i64_ty: TyIdx(4),
-            ptr_ty: TyIdx(5),
-            types: vec![Ty::Void, Ty::I8, Ty::I16, Ty::I32, Ty::I64, Ty::Ptr],
+            void_ty: 0.into(),
+            i8_ty: 1.into(),
+            i16_ty: 2.into(),
+            i32_ty: 3.into(),
+            i64_ty: 4.into(),
+            ptr_ty: 5.into(),
+            types: index_vec![Ty::Void, Ty::I8, Ty::I16, Ty::I32, Ty::I64, Ty::Ptr],
         }
     }
 
@@ -63,10 +65,10 @@ impl Storage {
                 idx
             };
 
-        TyIdx(idx)
+        idx.into()
     }
 
     pub fn get_ty(&self, idx: TyIdx) -> &Ty {
-        &self.types[*idx]
+        &self.types[idx]
     }
 }

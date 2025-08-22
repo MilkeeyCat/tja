@@ -1,21 +1,25 @@
 use super::{Function, GlobalIdx, Wrapper};
-use crate::{Const, FunctionIdx, Global, macros::usize_wrapper, ty::TyIdx};
+use crate::{Const, FunctionIdx, Global, ty::TyIdx};
+use index_vec::IndexVec;
+use index_vec::define_index_type;
 
-usize_wrapper! {ModuleIdx}
+define_index_type! {
+    pub struct ModuleIdx = usize;
+}
 
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub globals: Vec<Global>,
-    pub functions: Vec<Function>,
+    pub globals: IndexVec<GlobalIdx, Global>,
+    pub functions: IndexVec<FunctionIdx, Function>,
 }
 
 impl Module {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            globals: Vec::new(),
-            functions: Vec::new(),
+            globals: IndexVec::new(),
+            functions: IndexVec::new(),
         }
     }
 
@@ -23,7 +27,7 @@ impl Module {
         let idx = self.globals.len();
         self.globals.push(Global { name, ty, value });
 
-        GlobalIdx(idx)
+        idx.into()
     }
 
     pub fn create_fn(&mut self, name: String, params: Vec<TyIdx>, ret_ty: TyIdx) -> FunctionIdx {
@@ -32,15 +36,15 @@ impl Module {
             name,
             ret_ty,
             params_count: params.len(),
-            blocks: Vec::new(),
-            locals: params,
+            blocks: IndexVec::new(),
+            locals: params.into_iter().collect(),
         });
 
-        FunctionIdx(idx)
+        idx.into()
     }
 
     pub fn get_fn_mut(&mut self, idx: FunctionIdx) -> &mut Function {
-        &mut self.functions[*idx]
+        &mut self.functions[idx]
     }
 }
 
@@ -48,7 +52,7 @@ impl Wrapper<'_, &mut Module> {
     pub fn get_fn(&mut self, idx: FunctionIdx) -> Wrapper<'_, &mut Function> {
         Wrapper {
             ty_storage: self.ty_storage,
-            inner: &mut self.inner.functions[*idx],
+            inner: &mut self.inner.functions[idx],
         }
     }
 }

@@ -11,6 +11,7 @@ use crate::{
     pass::{Context, Pass},
     targets::{Abi, CallingConvention, Target},
 };
+use index_vec::IndexVec;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
@@ -25,7 +26,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
                 name: function.name.clone(),
                 vreg_info: VregInfo::default(),
                 frame_info: FrameInfo::default(),
-                blocks: Vec::new(),
+                blocks: IndexVec::new(),
             },
             operand_to_vreg_indices: HashMap::new(),
             ty_to_offsets: HashMap::new(),
@@ -33,8 +34,8 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             current_bb_idx: None,
             entry_bb: mir::BasicBlock {
                 name: "entry".into(),
-                instructions: vec![],
-                successors: HashSet::from([BlockIdx(1)]),
+                instructions: IndexVec::new(),
+                successors: HashSet::from([1.into()]),
             },
         };
 
@@ -48,27 +49,30 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             .into_iter()
             .map(|local_idx| {
                 lowering
-                    .get_or_create_vregs(LocalIdx(local_idx).into())
+                    .get_or_create_vregs(LocalIdx::new(local_idx).into())
                     .to_vec()
             })
             .collect();
-        let tys = lowering.hir_function.locals[..lowering.hir_function.params_count].to_vec();
+        let tys =
+            lowering.hir_function.locals[..lowering.hir_function.params_count.into()].to_vec();
         let ret_ty = lowering.hir_function.ret_ty;
 
-        lowering
-            .abi
-            .calling_convention()
-            .lower_params(&mut lowering, vreg_indices, tys, ret_ty);
+        lowering.abi.calling_convention().lower_params(
+            &mut lowering,
+            vreg_indices,
+            tys.raw,
+            ret_ty,
+        );
         lowering
             .get_basic_block()
             .instructions
-            .push(mir::Instruction::br(BlockIdx(1)));
+            .push(mir::Instruction::br(1.into()));
 
         for (idx, bb) in function.blocks.iter().enumerate() {
-            lowering.current_bb_idx = Some(BlockIdx(idx));
+            lowering.current_bb_idx = Some(idx.into());
             lowering.mir_function.blocks.push(mir::BasicBlock {
                 name: bb.name.clone(),
-                instructions: Vec::new(),
+                instructions: IndexVec::new(),
                 successors: HashSet::new(),
             });
 
@@ -81,7 +85,7 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
 
         let mut patch = FunctionPatch::new();
 
-        patch.add_basic_block(BlockIdx(0), lowering.entry_bb);
+        patch.add_basic_block(0.into(), lowering.entry_bb);
         patch.apply(&mut lowering.mir_function);
         ctx.mir_function = Some(lowering.mir_function);
     }
@@ -105,7 +109,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
         }
 
         let ty = match operand {
-            hir::Operand::Local(idx) => self.hir_function.locals[*idx],
+            hir::Operand::Local(idx) => self.hir_function.locals[idx],
             hir::Operand::Const(_, ty) => ty,
         };
 
@@ -223,7 +227,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
     pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock {
         self.current_bb_idx
-            .map(|idx| &mut self.mir_function.blocks[*idx])
+            .map(|idx| &mut self.mir_function.blocks[idx])
             .unwrap_or_else(|| &mut self.entry_bb)
     }
 
@@ -289,7 +293,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
             hir::Instruction::Load { ptr, out } => {
                 let base = self.get_or_create_vreg(ptr.clone());
                 let vregs = self.get_or_create_vregs(hir::Operand::Local(*out)).to_vec();
-                let offsets = self.ty_to_offsets[&self.hir_function.locals[**out]].to_vec();
+                let offsets = self.ty_to_offsets[&self.hir_function.locals[*out]].to_vec();
 
                 for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
                     let ptr_add = self.ptr_add(
@@ -417,7 +421,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 let ret = out.map(|out| {
                     (
                         self.get_or_create_vregs(hir::Operand::Local(out)).to_vec(),
-                        self.hir_function.locals[*out],
+                        self.hir_function.locals[out],
                     )
                 });
 
@@ -457,9 +461,9 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 hir::Branch::Unconditional { block_idx } => {
                     let bb = self.get_basic_block();
 
-                    bb.successors = HashSet::from([BlockIdx(**block_idx)]);
+                    bb.successors = HashSet::from([block_idx.raw().into()]);
                     bb.instructions
-                        .push(mir::Instruction::br(BlockIdx(**block_idx)));
+                        .push(mir::Instruction::br(block_idx.raw().into()));
                 }
             },
         }
@@ -485,7 +489,7 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
 impl<A: Abi> LocalStorage for FnLowering<'_, A> {
     fn get_local_ty(&self, idx: hir::LocalIdx) -> TyIdx {
-        self.hir_function.locals[*idx]
+        self.hir_function.locals[idx]
     }
 }
 
@@ -497,7 +501,7 @@ impl<'a, T: Target> Pass<'a, hir::Module, T> for LowerFunctionToModuleAdapter {
         ctx.mir_module = Some(mir::Module {
             name: module.name.clone(),
             globals: module.globals.clone(),
-            functions: Vec::new(),
+            functions: IndexVec::new(),
         });
 
         for function in &mut module.functions {

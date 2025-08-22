@@ -323,7 +323,7 @@ impl InstrBuilder {
     pub fn add_addr_mode(mut self, addr_mode: AddressMode) -> Self {
         let len = self.0.operands.len();
 
-        addr_mode.write(&mut self.0.operands, len);
+        addr_mode.write(&mut self.0.operands, len.into());
 
         self
     }

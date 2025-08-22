@@ -5,10 +5,17 @@ use crate::{
     mir::{BasicBlock, BlockIdx},
     ty::TyIdx,
 };
+use index_vec::{IndexVec, define_index_type, index_vec};
 
-usize_wrapper! {VregIdx}
-usize_wrapper! {FrameIdx}
 usize_wrapper! {RegisterClass}
+
+define_index_type! {
+    pub struct VregIdx = usize;
+}
+
+define_index_type! {
+    pub struct FrameIdx = usize;
+}
 
 #[derive(Debug)]
 pub struct Vreg {
@@ -18,7 +25,7 @@ pub struct Vreg {
 
 #[derive(Default, Debug)]
 pub struct VregInfo {
-    vreg_info: Vec<Vreg>,
+    vreg_info: IndexVec<VregIdx, Vreg>,
 }
 
 impl VregInfo {
@@ -27,7 +34,7 @@ impl VregInfo {
 
         self.vreg_info.push(Vreg { ty, class: None });
 
-        VregIdx(idx)
+        idx.into()
     }
 
     pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RegisterClass) -> VregIdx {
@@ -38,15 +45,15 @@ impl VregInfo {
             class: Some(class),
         });
 
-        VregIdx(idx)
+        idx.into()
     }
 
     pub fn get_vreg(&self, idx: VregIdx) -> &Vreg {
-        &self.vreg_info[*idx]
+        &self.vreg_info[idx]
     }
 
     pub fn set_class(&mut self, idx: VregIdx, class: RegisterClass) {
-        self.vreg_info[*idx].class = Some(class);
+        self.vreg_info[idx].class = Some(class);
     }
 }
 
@@ -57,7 +64,7 @@ pub struct StackObject {
 
 #[derive(Default, Debug)]
 pub struct FrameInfo {
-    objects: Vec<StackObject>,
+    objects: IndexVec<FrameIdx, StackObject>,
 }
 
 impl FrameInfo {
@@ -66,11 +73,11 @@ impl FrameInfo {
 
         self.objects.push(StackObject { size: size });
 
-        FrameIdx(idx)
+        idx.into()
     }
 
     pub fn get_stack_object(&mut self, idx: FrameIdx) -> &StackObject {
-        &self.objects[*idx]
+        &self.objects[idx]
     }
 
     pub fn objects_iter(&self) -> impl Iterator<Item = &StackObject> {
@@ -83,13 +90,13 @@ pub struct Function {
     pub name: String,
     pub vreg_info: VregInfo,
     pub frame_info: FrameInfo,
-    pub blocks: Vec<BasicBlock>,
+    pub blocks: IndexVec<BlockIdx, BasicBlock>,
 }
 
 impl Function {
-    pub fn liveness(&self) -> Vec<Liveness> {
+    pub fn liveness(&self) -> IndexVec<BlockIdx, Liveness> {
         let defs_uses: Vec<_> = self.blocks.iter().map(|bb| bb.defs_uses()).collect();
-        let mut liveness = vec![Liveness::default(); defs_uses.len()];
+        let mut liveness = index_vec![Liveness::default(); defs_uses.len()];
 
         loop {
             let mut done = true;
@@ -100,7 +107,7 @@ impl Function {
                 let live_out = block
                     .successors
                     .iter()
-                    .map(|id| liveness[**id].ins.clone())
+                    .map(|id| liveness[*id].ins.clone())
                     .reduce(|acc, el| acc.union(&el).cloned().collect())
                     .unwrap_or_default();
                 // in[v] = use(v) ∪ (out[v] - def(v))
@@ -167,15 +174,15 @@ impl FunctionPatch {
     pub fn apply(self, func: &mut Function) {
         let mut new_basic_blocks = self.new_basic_blocks;
 
-        new_basic_blocks.sort_by_key(|(instr_idx, _)| (**instr_idx));
+        new_basic_blocks.sort_by_key(|(instr_idx, _)| (*instr_idx));
 
         for (bb_idx, bb) in new_basic_blocks.into_iter().rev() {
-            for bb in &mut func.blocks[*bb_idx..] {
+            for bb in &mut func.blocks[bb_idx..] {
                 for instr in &mut bb.instructions {
                     for operand in &mut instr.operands {
                         if let Operand::Block(idx) = operand {
-                            if **idx >= *bb_idx {
-                                *idx = BlockIdx(**idx + 1);
+                            if *idx >= bb_idx {
+                                *idx = BlockIdx::new(idx.raw() + 1);
                             }
                         }
                     }
@@ -183,10 +190,10 @@ impl FunctionPatch {
 
                 bb.successors = std::mem::take(&mut bb.successors)
                     .into_iter()
-                    .map(|idx| BlockIdx(*idx + 1))
+                    .map(|idx| BlockIdx::new(idx.raw() + 1))
                     .collect();
             }
-            func.blocks.insert(*bb_idx, bb);
+            func.blocks.insert(bb_idx, bb);
         }
     }
 }

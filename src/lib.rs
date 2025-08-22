@@ -10,10 +10,15 @@ pub mod targets;
 pub mod ty;
 
 use crate::ty::TyIdx;
-use macros::usize_wrapper;
+use index_vec::define_index_type;
 
-usize_wrapper! {GlobalIdx}
-usize_wrapper! {FunctionIdx}
+define_index_type! {
+    pub struct GlobalIdx = usize;
+}
+
+define_index_type! {
+    pub struct FunctionIdx = usize;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Const {

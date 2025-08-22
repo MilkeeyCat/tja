@@ -77,7 +77,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                                     RegisterRole::Def => {
                                         ctx.target.store_reg_to_stack_slot(
                                             &mut patch,
-                                            InstructionIdx(instr_idx + 1),
+                                            InstructionIdx::new(instr_idx + 1),
                                             vreg_idx,
                                             frame_idx,
                                             size,
@@ -86,7 +86,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                                     RegisterRole::Use => {
                                         ctx.target.load_reg_from_stack_slot(
                                             &mut patch,
-                                            InstructionIdx(instr_idx),
+                                            instr_idx.into(),
                                             vreg_idx,
                                             frame_idx,
                                             size,
@@ -113,7 +113,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                 }
 
                 for (idx, patch) in patches {
-                    patch.apply(&mut func.blocks[*idx]);
+                    patch.apply(&mut func.blocks[idx]);
                 }
 
                 for bb in &mut func.blocks {
@@ -268,11 +268,11 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         self.move_list
                             .entry(reg.clone())
                             .or_default()
-                            .insert((BlockIdx(bb_idx), InstructionIdx(instr_idx)));
+                            .insert((bb_idx.into(), instr_idx.into()));
                     }
 
                     self.worklist_moves
-                        .insert((BlockIdx(bb_idx), InstructionIdx(instr_idx)));
+                        .insert((bb_idx.into(), instr_idx.into()));
                 }
 
                 for def in &defs_uses.defs {
@@ -521,7 +521,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
     fn coalesce(&mut self) {
         let (bb_idx, instr_idx) = self.worklist_moves.pop().unwrap();
 
-        let mv = &self.function.blocks[*bb_idx].instructions[*instr_idx];
+        let mv = &self.function.blocks[bb_idx].instructions[instr_idx];
         let (x, y) = {
             let defs_uses = mv.defs_uses();
 
@@ -598,7 +598,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
 
             self.frozen_moves.insert(mv);
 
-            let defs_uses = self.function.blocks[*mv.0].instructions[*mv.1].defs_uses();
+            let defs_uses = self.function.blocks[mv.0].instructions[mv.1].defs_uses();
             let reg = if defs_uses.defs.iter().next().unwrap() == &Register::Virtual(*vreg_idx) {
                 defs_uses.uses.iter().next().unwrap()
             } else {
@@ -607,7 +607,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
 
             if let Register::Virtual(idx) = reg
                 && self.node_moves(reg).is_empty()
-                && self.degree[idx]
+                && self.degree[&idx]
                     < self
                         .ctx
                         .target
@@ -617,7 +617,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         )
                         .len()
             {
-                self.freeze_worklist.remove(idx);
+                self.freeze_worklist.remove(&idx);
                 self.simplify_worklist.push(*idx);
             }
         }

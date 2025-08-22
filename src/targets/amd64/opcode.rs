@@ -37,8 +37,8 @@ fn memory<T: Target, W: Write>(
                 Operand::Register(_, _) => {
                     write!(&mut result, "{}", register(printer, &[base.clone()])?)?
                 }
-                Operand::Global(idx) => write!(&mut result, "{}", module.globals[**idx].name)?,
-                Operand::Function(idx) => write!(&mut result, "{}", module.functions[**idx].name)?,
+                Operand::Global(idx) => write!(&mut result, "{}", module.globals[*idx].name)?,
+                Operand::Function(idx) => write!(&mut result, "{}", module.functions[*idx].name)?,
                 _ => unreachable!(),
             };
 
@@ -178,7 +178,7 @@ impl label {
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
-            [Operand::Block(idx)] => Ok(format!(".L{fn_idx}_{idx}")),
+            [Operand::Block(idx)] => Ok(format!(".L{}_{}", fn_idx.raw(), idx.raw())),
             _ => unreachable!(),
         }
     }

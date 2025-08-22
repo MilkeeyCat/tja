@@ -131,17 +131,13 @@ impl CallingConvention for SysVAmd64 {
                         .into_iter()
                         .map(|local_idx| {
                             lowering
-                                .get_or_create_vregs(LocalIdx(local_idx).into())
+                                .get_or_create_vregs(LocalIdx::new(local_idx).into())
                                 .len()
                         })
                         .sum();
 
                     assert_eq!(
-                        lowering
-                            .mir_function
-                            .vreg_info
-                            .get_vreg(VregIdx(vreg_idx))
-                            .ty,
+                        lowering.mir_function.vreg_info.get_vreg(vreg_idx.into()).ty,
                         lowering.ty_storage.ptr_ty
                     );
 
@@ -154,7 +150,7 @@ impl CallingConvention for SysVAmd64 {
                         InstrBuilder::new(Opcode::Lea64.into())
                             .add_def(mir::Register::Virtual(base))
                             .add_addr_mode(AddressMode {
-                                base: Base::Register(mir::Register::Virtual(VregIdx(vreg_idx))),
+                                base: Base::Register(mir::Register::Virtual(vreg_idx.into())),
                                 index: None,
                                 scale: 1,
                                 displacement: None,
@@ -264,11 +260,11 @@ impl CallingConvention for SysVAmd64 {
                 .vreg_info
                 .create_vreg(lowering.ty_storage.ptr_ty);
             assert_eq!(
-                *vreg_idx,
+                vreg_idx.raw(),
                 vreg_indices
                     .iter()
                     .map(|vreg_indices| vreg_indices.len())
-                    .sum()
+                    .sum::<usize>()
             );
 
             lowering
@@ -568,7 +564,7 @@ impl CallingConvention for SysVAmd64 {
 
         if stack_offset > 0 {
             lowering.get_basic_block().instructions.insert(
-                adj_stack_pos,
+                adj_stack_pos.into(),
                 InstrBuilder::new(Opcode::Sub64ri.into())
                     .add_use(mir::Register::Physical(Register::Rsp.into()))
                     .add_operand(Operand::Immediate(stack_offset as u64))

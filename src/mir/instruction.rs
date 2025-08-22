@@ -1,16 +1,18 @@
 use crate::{
     dataflow::DefsUses,
-    macros::usize_wrapper,
     mir::{BlockIdx, FrameIdx, GenericOpcode, Opcode, Operand, OperandIdx, Register, RegisterRole},
 };
+use index_vec::{IndexVec, define_index_type};
 use std::collections::HashSet;
 
-usize_wrapper! {InstructionIdx}
+define_index_type! {
+    pub struct InstructionIdx = usize;
+}
 
 #[derive(Debug)]
 pub struct Instruction {
     pub opcode: Opcode,
-    pub operands: Vec<Operand>,
+    pub operands: IndexVec<OperandIdx, Operand>,
     pub tied_operands: Option<(OperandIdx, OperandIdx)>,
     pub implicit_defs: HashSet<Register>,
     pub implicit_uses: HashSet<Register>,
@@ -20,7 +22,7 @@ impl Instruction {
     pub fn new(opcode: Opcode) -> Self {
         Self {
             opcode,
-            operands: Vec::new(),
+            operands: IndexVec::new(),
             tied_operands: None,
             implicit_defs: HashSet::new(),
             implicit_uses: HashSet::new(),

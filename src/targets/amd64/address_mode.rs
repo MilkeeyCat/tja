@@ -1,7 +1,8 @@
 use crate::{
     FunctionIdx, GlobalIdx,
-    mir::{FrameIdx, Operand, Register, RegisterRole},
+    mir::{FrameIdx, Operand, OperandIdx, Register, RegisterRole},
 };
+use index_vec::IndexVec;
 
 #[derive(Clone, Debug)]
 pub enum Base {
@@ -20,7 +21,7 @@ pub struct AddressMode {
 }
 
 impl AddressMode {
-    pub fn write(self, operands: &mut Vec<Operand>, idx: usize) {
+    pub fn write(self, operands: &mut IndexVec<OperandIdx, Operand>, idx: OperandIdx) {
         let base = match self.base {
             Base::Register(reg) => Operand::Register(reg, RegisterRole::Use),
             Base::Frame(frame_idx) => Operand::Frame(frame_idx),

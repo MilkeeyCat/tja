@@ -1,5 +1,5 @@
 use crate::{
-    mir::{BasicBlockPatch, Function, Instruction, InstructionIdx, Operand, RegisterRole},
+    mir::{BasicBlockPatch, Function, Instruction, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -19,15 +19,15 @@ impl<'a, T: Target> Pass<'a, Function, T> for TwoAddressForm {
             for (idx, instr) in &mut bb.instructions.iter_mut().enumerate() {
                 if let Some((lhs, rhs)) = std::mem::take(&mut instr.tied_operands) {
                     patch.add_instruction(
-                        InstructionIdx(idx),
+                        idx.into(),
                         Instruction::copy(
-                            instr.operands[*lhs].clone().try_into().unwrap(),
-                            instr.operands[*rhs].clone(),
+                            instr.operands[lhs].clone().try_into().unwrap(),
+                            instr.operands[rhs].clone(),
                         ),
                     );
-                    instr.operands.remove(*rhs);
+                    instr.operands.remove(rhs);
 
-                    let reg = match instr.operands[*lhs].clone() {
+                    let reg = match instr.operands[lhs].clone() {
                         Operand::Register(r, RegisterRole::Def) => r,
                         _ => unreachable!(),
                     };

@@ -2,12 +2,13 @@ use crate::{
     dataflow::DefsUses,
     mir::{BlockIdx, Instruction, InstructionIdx},
 };
+use index_vec::IndexVec;
 use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct BasicBlock {
     pub name: String,
-    pub instructions: Vec<Instruction>,
+    pub instructions: IndexVec<InstructionIdx, Instruction>,
     pub successors: HashSet<BlockIdx>,
 }
 
@@ -61,16 +62,16 @@ impl BasicBlockPatch {
             .into_iter()
             .collect();
 
-        instr_indices.sort_by_key(|instr_idx| **instr_idx);
+        instr_indices.sort_by_key(|instr_idx| *instr_idx);
 
         for instr_idx in instr_indices.into_iter().rev() {
             for _ in deleted_instructions.extract_if(.., |idx| *idx == instr_idx) {
-                bb.instructions.remove(*instr_idx);
+                bb.instructions.remove(instr_idx);
             }
 
             for (instr_idx, instr) in new_instructions.extract_if(.., |(idx, _)| *idx == instr_idx)
             {
-                bb.instructions.insert(*instr_idx, instr);
+                bb.instructions.insert(instr_idx, instr);
             }
         }
     }

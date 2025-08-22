@@ -1,6 +1,6 @@
 use super::OperandKind;
 use crate::{
-    mir::{Function, GenericOpcode, Opcode, Operand, OperandIdx, RegisterRole},
+    mir::{Function, GenericOpcode, Opcode, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::{
         Abi, Target,
@@ -65,7 +65,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                                 (&instr.operands[1]).into(),
                                 size,
                             );
-                            instr.tied_operands = Some((OperandIdx(0), OperandIdx(1)));
+                            instr.tied_operands = Some((0.into(), 1.into()));
                         }
                         GenericOpcode::Sub => unimplemented!(),
                         GenericOpcode::Mul => unimplemented!(),
@@ -83,8 +83,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             };
 
                             instr.opcode = super::Opcode::Lea64.into();
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 1);
+                            instr.operands.remove(1.into());
+                            address_mode.write(&mut instr.operands, 1.into());
                         }
                         GenericOpcode::PtrAdd => {
                             let base = match &instr.operands[1] {
@@ -108,9 +108,9 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             };
 
                             instr.opcode = super::Opcode::Lea64.into();
-                            instr.operands.remove(2);
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 1);
+                            instr.operands.remove(2.into());
+                            instr.operands.remove(1.into());
+                            address_mode.write(&mut instr.operands, 1.into());
                         }
                         GenericOpcode::Load => {
                             let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
@@ -127,8 +127,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             };
 
                             instr.opcode = get_load_op(size).into();
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 1);
+                            instr.operands.remove(1.into());
+                            address_mode.write(&mut instr.operands, 1.into());
                         }
                         GenericOpcode::Store => {
                             let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
@@ -145,8 +145,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             };
 
                             instr.opcode = get_store_op(size).into();
-                            instr.operands.remove(1);
-                            address_mode.write(&mut instr.operands, 0);
+                            instr.operands.remove(1.into());
+                            address_mode.write(&mut instr.operands, 0.into());
                         }
                         GenericOpcode::Br => {
                             instr.opcode = super::Opcode::Jmp.into();
@@ -164,8 +164,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                                 };
 
                                 instr.opcode = super::Opcode::Lea64.into();
-                                instr.operands.remove(1);
-                                address_mode.write(&mut instr.operands, 1);
+                                instr.operands.remove(1.into());
+                                address_mode.write(&mut instr.operands, 1.into());
                             }
                             Operand::Global(idx) => {
                                 let address_mode = AddressMode {
@@ -176,8 +176,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                                 };
 
                                 instr.opcode = super::Opcode::Lea64.into();
-                                instr.operands.remove(1);
-                                address_mode.write(&mut instr.operands, 1);
+                                instr.operands.remove(1.into());
+                                address_mode.write(&mut instr.operands, 1.into());
                             }
                             _ => unreachable!(),
                         },

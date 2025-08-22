@@ -13,6 +13,7 @@ use crate::{
         },
     },
 };
+use index_vec::index_vec;
 use std::collections::HashSet;
 
 #[derive(Default)]
@@ -54,7 +55,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             .next_multiple_of(16);
         let mut bb = BasicBlock {
             name: "prolog".into(),
-            instructions: vec![
+            instructions: index_vec![
                 InstrBuilder::new(Opcode::Push64r.into())
                     .add_use(mir::Register::Physical(Register::Rbp.into()))
                     .into(),
@@ -63,7 +64,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                     .add_use(mir::Register::Physical(Register::Rsp.into()))
                     .into(),
             ],
-            successors: HashSet::from([BlockIdx(1)]),
+            successors: HashSet::from([1.into()]),
         };
 
         if stack_frame_size > 0 {
@@ -91,13 +92,13 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
 
         bb.instructions.push(
             InstrBuilder::new(Opcode::Jmp.into())
-                .add_operand(BlockIdx(1).into())
+                .add_operand(BlockIdx::new(1).into())
                 .into(),
         );
 
         let mut patch = FunctionPatch::new();
 
-        patch.add_basic_block(BlockIdx(0), bb);
+        patch.add_basic_block(0.into(), bb);
         patch.apply(func);
 
         for bb in &mut func.blocks {
@@ -107,13 +108,13 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                 let mut patch = BasicBlockPatch::new();
 
                 patch.add_instruction(
-                    InstructionIdx(bb.instructions.len() - 1),
+                    InstructionIdx::new(bb.instructions.len() - 1),
                     Instruction::new(Opcode::Leave.into()),
                 );
 
                 for (reg, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
                     patch.add_instruction(
-                        InstructionIdx(bb.instructions.len() - 1),
+                        InstructionIdx::new(bb.instructions.len() - 1),
                         InstrBuilder::new(Opcode::Mov64rm.into())
                             .add_use(mir::Register::Physical(*reg))
                             .add_addr_mode(AddressMode {

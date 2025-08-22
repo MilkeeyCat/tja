@@ -1,6 +1,6 @@
 use super::address_mode::{AddressMode, Base};
 use crate::{
-    mir::{Function, Operand, Register},
+    mir::{Function, Operand, OperandIdx, Register},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -51,12 +51,12 @@ impl<'a, T: Target> Pass<'a, Function, T> for StackSlotsLowerer {
 
                     match address_mode {
                         Some((address_mode, idx)) => {
-                            instr.operands.remove(idx + 3);
-                            instr.operands.remove(idx + 2);
-                            instr.operands.remove(idx + 1);
-                            instr.operands.remove(idx);
+                            instr.operands.remove(OperandIdx::new(idx + 3));
+                            instr.operands.remove(OperandIdx::new(idx + 2));
+                            instr.operands.remove(OperandIdx::new(idx + 1));
+                            instr.operands.remove(idx.into());
 
-                            address_mode.write(&mut instr.operands, idx);
+                            address_mode.write(&mut instr.operands, idx.into());
                         }
                         None => break,
                     }

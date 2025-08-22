@@ -3,6 +3,7 @@ use super::{
     basic_block,
 };
 use crate::ty::TyIdx;
+use index_vec::IndexVec;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -17,8 +18,8 @@ pub struct Function {
     pub name: String,
     pub ret_ty: TyIdx,
     pub params_count: usize,
-    pub blocks: Vec<BasicBlock>,
-    pub locals: Vec<TyIdx>,
+    pub blocks: IndexVec<BlockIdx, BasicBlock>,
+    pub locals: IndexVec<LocalIdx, TyIdx>,
 }
 
 impl Function {
@@ -32,14 +33,14 @@ impl Function {
         self.blocks
             .push(BasicBlock::new(name.unwrap_or_else(|| idx.to_string())));
 
-        BlockIdx(idx)
+        idx.into()
     }
 
     fn defs_uses(&self) -> Vec<DefUseBlock> {
         let mut basic_block_to_def_use_block = HashMap::new();
         let mut blocks = Vec::new();
 
-        for (i, block) in self.blocks.iter().enumerate() {
+        for (idx, block) in self.blocks.iter().enumerate() {
             let last_blocks_len = blocks.len();
 
             for instruction in &block.instructions {
@@ -74,22 +75,23 @@ impl Function {
                 block.next.clear();
             }
 
-            basic_block_to_def_use_block.insert(i, blocks.len() - 1);
+            basic_block_to_def_use_block.insert(BlockIdx::new(idx), blocks.len() - 1);
         }
 
-        for (i, block) in self.blocks.iter().enumerate() {
+        for (idx, block) in self.blocks.iter().enumerate() {
             match &block.terminator {
                 Terminator::Br(branch) => match branch {
                     Branch::Conditional {
                         iftrue, iffalse, ..
                     } => {
-                        blocks[basic_block_to_def_use_block[&i]].next = HashSet::from([
-                            basic_block_to_def_use_block[&iftrue],
-                            basic_block_to_def_use_block[&iffalse],
-                        ]);
+                        blocks[basic_block_to_def_use_block[&BlockIdx::new(idx)]].next =
+                            HashSet::from([
+                                basic_block_to_def_use_block[&iftrue],
+                                basic_block_to_def_use_block[&iffalse],
+                            ]);
                     }
                     Branch::Unconditional { block_idx } => {
-                        blocks[basic_block_to_def_use_block[&i]].next =
+                        blocks[basic_block_to_def_use_block[&BlockIdx::new(idx)]].next =
                             HashSet::from([basic_block_to_def_use_block[&block_idx]]);
                     }
                 },
@@ -159,7 +161,7 @@ impl Function {
     }
 
     pub fn get_block_mut(&mut self, idx: BlockIdx) -> &mut BasicBlock {
-        &mut self.blocks[*idx]
+        &mut self.blocks[idx]
     }
 
     pub fn is_declaration(&self) -> bool {
@@ -172,7 +174,7 @@ impl Wrapper<'_, &mut Function> {
         basic_block::Wrapper {
             ty_storage: self.ty_storage,
             fn_locals: &mut self.inner.locals,
-            block: &mut self.inner.blocks[*idx],
+            block: &mut self.inner.blocks[idx],
         }
     }
 }
@@ -201,7 +203,7 @@ impl Patch {
         self.next_local += 1;
         self.new_locals.push(ty);
 
-        LocalIdx(idx)
+        idx.into()
     }
 
     pub fn add_instruction(
@@ -234,20 +236,20 @@ impl Patch {
         func.locals.extend(self.new_locals.into_iter());
 
         for ((block_idx, instr_idx), instr) in self.instr_patch_map.into_iter() {
-            func.blocks[*block_idx].instructions[*instr_idx] = instr;
+            func.blocks[block_idx].instructions[instr_idx] = instr;
         }
 
         for (idx, term) in self.term_patch_map.into_iter() {
-            func.blocks[*idx].terminator = term;
+            func.blocks[idx].terminator = term;
         }
 
         self.new_instructions
-            .sort_by_key(|(block_idx, instr_idx, _)| (**block_idx, **instr_idx));
+            .sort_by_key(|(block_idx, instr_idx, _)| (*block_idx, *instr_idx));
 
         for (block_idx, instr_idx, instruction) in self.new_instructions.into_iter().rev() {
-            func.blocks[*block_idx]
+            func.blocks[block_idx]
                 .instructions
-                .insert(*instr_idx, instruction);
+                .insert(instr_idx, instruction);
         }
     }
 }

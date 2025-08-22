@@ -9,18 +9,25 @@ use crate::{FunctionIdx, Global, GlobalIdx, macros::usize_wrapper};
 pub use basic_block::{BasicBlock, BasicBlockPatch};
 use derive_more::From;
 pub use function::{FrameIdx, Function, RegisterClass, VregIdx};
+use index_vec::{IndexVec, define_index_type};
 pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
 pub use opcode::{GenericOpcode, Opcode};
 
 usize_wrapper! {PhysicalRegister}
-usize_wrapper! {BlockIdx}
-usize_wrapper! {OperandIdx}
+
+define_index_type! {
+    pub struct OperandIdx = usize;
+}
+
+define_index_type! {
+    pub struct BlockIdx = usize;
+}
 
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub globals: Vec<Global>,
-    pub functions: Vec<Function>,
+    pub globals: IndexVec<GlobalIdx, Global>,
+    pub functions: IndexVec<FunctionIdx, Function>,
 }
 
 #[derive(Debug, Clone)]
