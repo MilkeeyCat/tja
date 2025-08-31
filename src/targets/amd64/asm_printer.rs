@@ -50,31 +50,36 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
 
                 write!(self.buf, "\t{prefix} {value}\n")?;
             }
-            Const::Aggregate(consts) => {
-                let fields = match self.ty_storage.get_ty(ty) {
-                    Ty::Struct(fields) => fields,
-                    _ => unreachable!(),
-                }
-                .clone();
+            Const::Aggregate(consts) => match self.ty_storage.get_ty(ty).clone() {
+                Ty::Struct(fields) => {
+                    let mut last_offset_plus_size = 0;
 
-                let mut last_offset_plus_size = 0;
+                    for (i, (c, ty)) in consts.into_iter().zip(fields.iter().cloned()).enumerate() {
+                        let field_offset =
+                            self.target.abi().field_offset(self.ty_storage, &fields, i);
 
-                for (i, (c, ty)) in consts.into_iter().zip(fields.iter().cloned()).enumerate() {
-                    let field_offset = self.target.abi().field_offset(self.ty_storage, &fields, i);
+                        if field_offset > last_offset_plus_size {
+                            write!(
+                                self.buf,
+                                "\t.zero {}\n",
+                                field_offset - last_offset_plus_size
+                            )?;
+                        }
 
-                    if field_offset > last_offset_plus_size {
-                        write!(
-                            self.buf,
-                            "\t.zero {}\n",
-                            field_offset - last_offset_plus_size
-                        )?;
+                        self.emit_const(c, ty, module)?;
+                        last_offset_plus_size =
+                            field_offset + self.target.abi().ty_size(self.ty_storage, ty);
                     }
-
-                    self.emit_const(c, ty, module)?;
-                    last_offset_plus_size =
-                        field_offset + self.target.abi().ty_size(self.ty_storage, ty);
                 }
-            }
+                Ty::Array { ty, len } => {
+                    assert_eq!(consts.len(), len);
+
+                    for c in consts {
+                        self.emit_const(c, ty, module)?;
+                    }
+                }
+                _ => unreachable!(),
+            },
         };
 
         Ok(())
