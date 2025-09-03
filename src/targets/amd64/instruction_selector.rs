@@ -1,46 +1,14 @@
-use super::OperandKind;
 use crate::{
-    mir::{Function, GenericOpcode, Opcode, Operand, RegisterRole},
+    mir::{Function, GenericOpcode, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::{
         Abi, Target,
         amd64::{
             address_mode::{AddressMode, Base},
-            opcode::{get_load_op, get_store_op},
+            opcode::{get_add_op, get_load_op, get_store_op},
         },
     },
 };
-
-fn get_add_op(dest: OperandKind, src: OperandKind, size: usize) -> Opcode {
-    (match (dest, src, size) {
-        (OperandKind::Register, OperandKind::Register, 1) => super::Opcode::Add8rr,
-        (OperandKind::Register, OperandKind::Memory, 1) => super::Opcode::Add8rm,
-        (OperandKind::Memory, OperandKind::Register, 1) => super::Opcode::Add8mr,
-        (OperandKind::Memory, OperandKind::Immediate, 1) => super::Opcode::Add8mi,
-        (OperandKind::Register, OperandKind::Immediate, 1) => super::Opcode::Add8ri,
-
-        (OperandKind::Register, OperandKind::Register, 2) => super::Opcode::Add16rr,
-        (OperandKind::Register, OperandKind::Memory, 2) => super::Opcode::Add16rm,
-        (OperandKind::Memory, OperandKind::Register, 2) => super::Opcode::Add16mr,
-        (OperandKind::Memory, OperandKind::Immediate, 2) => super::Opcode::Add16mi,
-        (OperandKind::Register, OperandKind::Immediate, 2) => super::Opcode::Add16ri,
-
-        (OperandKind::Register, OperandKind::Register, 4) => super::Opcode::Add32rr,
-        (OperandKind::Register, OperandKind::Memory, 4) => super::Opcode::Add32rm,
-        (OperandKind::Memory, OperandKind::Register, 4) => super::Opcode::Add32mr,
-        (OperandKind::Memory, OperandKind::Immediate, 4) => super::Opcode::Add32mi,
-        (OperandKind::Register, OperandKind::Immediate, 4) => super::Opcode::Add32ri,
-
-        (OperandKind::Register, OperandKind::Register, 8) => super::Opcode::Add64rr,
-        (OperandKind::Register, OperandKind::Memory, 8) => super::Opcode::Add64rm,
-        (OperandKind::Memory, OperandKind::Register, 8) => super::Opcode::Add64mr,
-        (OperandKind::Memory, OperandKind::Immediate, 8) => super::Opcode::Add64mi,
-        (OperandKind::Register, OperandKind::Immediate, 8) => super::Opcode::Add64ri,
-
-        _ => unreachable!(),
-    })
-    .into()
-}
 
 #[derive(Default)]
 pub struct InstructionSelection;
