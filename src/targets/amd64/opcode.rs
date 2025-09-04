@@ -11,10 +11,9 @@ fn register<T: Target, W: Write>(
     operands: &[Operand],
 ) -> Result<String, std::fmt::Error> {
     match operands {
-        [Operand::Register(register, _)] => match register {
-            Register::Virtual(_) => unreachable!(),
-            Register::Physical(reg) => Ok(printer.target.register_info().get_name(reg).to_string()),
-        },
+        [Operand::Register(Register::Physical(reg), _)] => {
+            Ok(printer.target.register_info().get_name(reg).to_string())
+        }
         _ => unreachable!(),
     }
 }
@@ -74,9 +73,9 @@ fn memory<T: Target, W: Write>(
 }
 
 #[allow(non_camel_case_types)]
-struct r8;
+struct r;
 
-impl r8 {
+impl r {
     const MIR_LENGTH: usize = 1;
 
     fn from_operands<T: Target, W: Write>(
@@ -88,6 +87,9 @@ impl r8 {
         register(printer, operands)
     }
 }
+
+#[allow(non_camel_case_types)]
+type r8 = r;
 
 #[allow(non_camel_case_types)]
 type r16 = r8;
