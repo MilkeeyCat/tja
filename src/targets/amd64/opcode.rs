@@ -148,24 +148,37 @@ impl ccode {
     }
 }
 
-#[allow(non_camel_case_types)]
-struct imm;
+macro_rules! imm_operand {
+    ($name: ident, $ty: ty) => {
+        #[allow(non_camel_case_types)]
+        struct $name;
 
-impl imm {
-    const MIR_LENGTH: usize = 1;
+        impl $name {
+            const MIR_LENGTH: usize = 1;
 
-    fn from_operands<T: Target, W: Write>(
-        _printer: &AsmPrinter<T, W>,
-        _module: &Module,
-        _fn_idx: FunctionIdx,
-        operands: &[Operand],
-    ) -> Result<String, std::fmt::Error> {
-        match operands {
-            [Operand::Immediate(value)] => Ok(value.to_string()),
-            _ => unreachable!(),
+            fn from_operands<T: Target, W: Write>(
+                _printer: &AsmPrinter<T, W>,
+                _module: &Module,
+                _fn_idx: FunctionIdx,
+                operands: &[Operand],
+            ) -> Result<String, std::fmt::Error> {
+                match operands {
+                    [Operand::Immediate(value)] => {
+                        assert!((<$ty>::MIN..<$ty>::MAX).contains(&(*value as $ty)));
+
+                        Ok(value.to_string())
+                    }
+                    _ => unreachable!(),
+                }
+            }
         }
-    }
+    };
 }
+
+imm_operand!(imm8, i8);
+imm_operand!(imm16, i16);
+imm_operand!(imm32, i32);
+imm_operand!(imm64, i64);
 
 #[allow(non_camel_case_types)]
 struct label;
@@ -256,99 +269,99 @@ opcodes! {
     Mov8rr = "mov {dest}, {src}", (dest = r8, src = r8);
     Mov8rm = "mov {dest}, {src}", (dest = r8, src = m8);
     Mov8mr = "mov {dest}, {src}", (dest = m8, src = r8);
-    Mov8mi = "mov {dest}, {src}", (dest = m8, src = imm);
-    Mov8ri = "mov {dest}, {src}", (dest = r8, src = imm);
+    Mov8mi = "mov {dest}, {src}", (dest = m8, src = imm8);
+    Mov8ri = "mov {dest}, {src}", (dest = r8, src = imm8);
 
     Mov16rr = "mov {dest}, {src}", (dest = r16, src = r16);
     Mov16rm = "mov {dest}, {src}", (dest = r16, src = m16);
     Mov16mr = "mov {dest}, {src}", (dest = m16, src = r16);
-    Mov16mi = "mov {dest}, {src}", (dest = m16, src = imm);
-    Mov16ri = "mov {dest}, {src}", (dest = r16, src = imm);
+    Mov16mi = "mov {dest}, {src}", (dest = m16, src = imm16);
+    Mov16ri = "mov {dest}, {src}", (dest = r16, src = imm16);
 
     Mov32rr = "mov {dest}, {src}", (dest = r32, src = r32);
     Mov32rm = "mov {dest}, {src}", (dest = r32, src = m32);
     Mov32mr = "mov {dest}, {src}", (dest = m32, src = r32);
-    Mov32mi = "mov {dest}, {src}", (dest = m32, src = imm);
-    Mov32ri = "mov {dest}, {src}", (dest = r32, src = imm);
+    Mov32mi = "mov {dest}, {src}", (dest = m32, src = imm32);
+    Mov32ri = "mov {dest}, {src}", (dest = r32, src = imm32);
 
     Mov64rr = "mov {dest}, {src}", (dest = r64, src = r64);
     Mov64rm = "mov {dest}, {src}", (dest = r64, src = m64);
     Mov64mr = "mov {dest}, {src}", (dest = m64, src = r64);
-    Mov64mi = "mov {dest}, {src}", (dest = m64, src = imm);
-    Mov64ri = "mov {dest}, {src}", (dest = r64, src = imm);
+    Mov64mi = "mov {dest}, {src}", (dest = m64, src = imm64);
+    Mov64ri = "mov {dest}, {src}", (dest = r64, src = imm64);
 
     Add8rr = "add {dest}, {src}", (dest = r8, src = r8);
     Add8rm = "add {dest}, {src}", (dest = r8, src = m8);
     Add8mr = "add {dest}, {src}", (dest = m8, src = r8);
-    Add8mi = "add {dest}, {src}", (dest = m8, src = imm);
-    Add8ri = "add {dest}, {src}", (dest = r8, src = imm);
+    Add8mi = "add {dest}, {src}", (dest = m8, src = imm8);
+    Add8ri = "add {dest}, {src}", (dest = r8, src = imm8);
 
     Add16rr = "add {dest}, {src}", (dest = r16, src = r16);
     Add16rm = "add {dest}, {src}", (dest = r16, src = m16);
     Add16mr = "add {dest}, {src}", (dest = m16, src = r16);
-    Add16mi = "add {dest}, {src}", (dest = m16, src = imm);
-    Add16ri = "add {dest}, {src}", (dest = r16, src = imm);
+    Add16mi = "add {dest}, {src}", (dest = m16, src = imm16);
+    Add16ri = "add {dest}, {src}", (dest = r16, src = imm16);
 
     Add32rr = "add {dest}, {src}", (dest = r32, src = r32);
     Add32rm = "add {dest}, {src}", (dest = r32, src = m32);
     Add32mr = "add {dest}, {src}", (dest = m32, src = r32);
-    Add32mi = "add {dest}, {src}", (dest = m32, src = imm);
-    Add32ri = "add {dest}, {src}", (dest = r32, src = imm);
+    Add32mi = "add {dest}, {src}", (dest = m32, src = imm32);
+    Add32ri = "add {dest}, {src}", (dest = r32, src = imm32);
 
     Add64rr = "add {dest}, {src}", (dest = r64, src = r64);
     Add64rm = "add {dest}, {src}", (dest = r64, src = m64);
     Add64mr = "add {dest}, {src}", (dest = m64, src = r64);
-    Add64mi = "add {dest}, {src}", (dest = m64, src = imm);
-    Add64ri = "add {dest}, {src}", (dest = r64, src = imm);
+    Add64mi = "add {dest}, {src}", (dest = m64, src = imm64);
+    Add64ri = "add {dest}, {src}", (dest = r64, src = imm64);
 
     Sub8rr = "sub {dest}, {src}", (dest = r8, src = r8);
     Sub8rm = "sub {dest}, {src}", (dest = r8, src = m8);
     Sub8mr = "sub {dest}, {src}", (dest = m8, src = r8);
-    Sub8mi = "sub {dest}, {src}", (dest = m8, src = imm);
-    Sub8ri = "sub {dest}, {src}", (dest = r8, src = imm);
+    Sub8mi = "sub {dest}, {src}", (dest = m8, src = imm8);
+    Sub8ri = "sub {dest}, {src}", (dest = r8, src = imm8);
 
     Sub16rr = "sub {dest}, {src}", (dest = r16, src = r16);
     Sub16rm = "sub {dest}, {src}", (dest = r16, src = m16);
     Sub16mr = "sub {dest}, {src}", (dest = m16, src = r16);
-    Sub16mi = "sub {dest}, {src}", (dest = m16, src = imm);
-    Sub16ri = "sub {dest}, {src}", (dest = r16, src = imm);
+    Sub16mi = "sub {dest}, {src}", (dest = m16, src = imm16);
+    Sub16ri = "sub {dest}, {src}", (dest = r16, src = imm16);
 
     Sub32rr = "sub {dest}, {src}", (dest = r32, src = r32);
     Sub32rm = "sub {dest}, {src}", (dest = r32, src = m32);
     Sub32mr = "sub {dest}, {src}", (dest = m32, src = r32);
-    Sub32mi = "sub {dest}, {src}", (dest = m32, src = imm);
-    Sub32ri = "sub {dest}, {src}", (dest = r32, src = imm);
+    Sub32mi = "sub {dest}, {src}", (dest = m32, src = imm32);
+    Sub32ri = "sub {dest}, {src}", (dest = r32, src = imm32);
 
     Sub64rr = "sub {dest}, {src}", (dest = r64, src = r64);
     Sub64rm = "sub {dest}, {src}", (dest = r64, src = m64);
     Sub64mr = "sub {dest}, {src}", (dest = m64, src = r64);
-    Sub64mi = "sub {dest}, {src}", (dest = m64, src = imm);
-    Sub64ri = "sub {dest}, {src}", (dest = r64, src = imm);
+    Sub64mi = "sub {dest}, {src}", (dest = m64, src = imm64);
+    Sub64ri = "sub {dest}, {src}", (dest = r64, src = imm64);
 
-    Test8ri = "test {lhs}, {rhs}", (lhs = r8, rhs = imm);
-    Test8mi = "test {lhs}, {rhs}", (lhs = m8, rhs = imm);
+    Test8ri = "test {lhs}, {rhs}", (lhs = r8, rhs = imm8);
+    Test8mi = "test {lhs}, {rhs}", (lhs = m8, rhs = imm8);
     Test8rr = "test {lhs}, {rhs}", (lhs = r8, rhs = r8);
     Test8mr = "test {lhs}, {rhs}", (lhs = m8, rhs = r8);
 
-    Test16ri = "test {lhs}, {rhs}", (lhs = r16, rhs = imm);
-    Test16mi = "test {lhs}, {rhs}", (lhs = m16, rhs = imm);
+    Test16ri = "test {lhs}, {rhs}", (lhs = r16, rhs = imm16);
+    Test16mi = "test {lhs}, {rhs}", (lhs = m16, rhs = imm16);
     Test16rr = "test {lhs}, {rhs}", (lhs = r16, rhs = r16);
     Test16mr = "test {lhs}, {rhs}", (lhs = m16, rhs = r16);
 
-    Test32ri = "test {lhs}, {rhs}", (lhs = r32, rhs = imm);
-    Test32mi = "test {lhs}, {rhs}", (lhs = m32, rhs = imm);
+    Test32ri = "test {lhs}, {rhs}", (lhs = r32, rhs = imm32);
+    Test32mi = "test {lhs}, {rhs}", (lhs = m32, rhs = imm32);
     Test32rr = "test {lhs}, {rhs}", (lhs = r32, rhs = r32);
     Test32mr = "test {lhs}, {rhs}", (lhs = m32, rhs = r32);
 
-    Test64ri = "test {lhs}, {rhs}", (lhs = r64, rhs = imm);
-    Test64mi = "test {lhs}, {rhs}", (lhs = m64, rhs = imm);
+    Test64ri = "test {lhs}, {rhs}", (lhs = r64, rhs = imm64);
+    Test64mi = "test {lhs}, {rhs}", (lhs = m64, rhs = imm64);
     Test64rr = "test {lhs}, {rhs}", (lhs = r64, rhs = r64);
     Test64mr = "test {lhs}, {rhs}", (lhs = m64, rhs = r64);
 
     Lea64 = "lea {lhs}, {rhs}", (lhs = r64, rhs = m64);
 
-    Shl64ri = "shl {lhs}, {rhs}", (lhs = r64, rhs = imm);
-    Shr64ri = "shr {lhs}, {rhs}", (lhs = r64, rhs = imm);
+    Shl64ri = "shl {lhs}, {rhs}", (lhs = r64, rhs = imm64);
+    Shr64ri = "shr {lhs}, {rhs}", (lhs = r64, rhs = imm64);
 
     Push64r = "push {src}", (src = r64);
 
