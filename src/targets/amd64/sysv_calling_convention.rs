@@ -193,7 +193,7 @@ impl CallingConvention for SysVAmd64 {
 
                         if let Some(last_offset) = last_offset {
                             lowering.get_basic_block().instructions.push(
-                                InstrBuilder::new(Opcode::Shl64ri.into())
+                                InstrBuilder::new(Opcode::Shl64r8i.into())
                                     .add_use(mir::Register::Physical(reg.into()))
                                     .add_operand(Operand::Immediate(
                                         (last_offset - offset) as u64 * 8,
@@ -346,7 +346,7 @@ impl CallingConvention for SysVAmd64 {
 
                             if let Some(last_offset) = last_offset {
                                 bb.instructions.push(
-                                    InstrBuilder::new(Opcode::Shr64ri.into())
+                                    InstrBuilder::new(Opcode::Shr64r8i.into())
                                         .add_use(mir::Register::Physical(reg.into()))
                                         .add_operand(Operand::Immediate(
                                             (offset - last_offset) as u64 * 8,
@@ -504,7 +504,7 @@ impl CallingConvention for SysVAmd64 {
 
                             if let Some(last_offset) = last_offset {
                                 lowering.get_basic_block().instructions.push(
-                                    InstrBuilder::new(Opcode::Shl64ri.into())
+                                    InstrBuilder::new(Opcode::Shl64r8i.into())
                                         .add_use(mir::Register::Physical(reg.into()))
                                         .add_operand(Operand::Immediate(
                                             (last_offset - offset) as u64 * 8,
@@ -655,7 +655,7 @@ impl CallingConvention for SysVAmd64 {
 
                             if let Some(last_offset) = last_offset {
                                 bb.instructions.push(
-                                    InstrBuilder::new(Opcode::Shr64ri.into())
+                                    InstrBuilder::new(Opcode::Shr64r8i.into())
                                         .add_use(mir::Register::Physical(reg.into()))
                                         .add_operand(Operand::Immediate(
                                             (offset - last_offset) as u64 * 8,

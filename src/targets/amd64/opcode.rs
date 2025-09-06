@@ -287,7 +287,6 @@ opcodes! {
     Mov64rr = "mov {dest}, {src}", (dest = r64, src = r64);
     Mov64rm = "mov {dest}, {src}", (dest = r64, src = m64);
     Mov64mr = "mov {dest}, {src}", (dest = m64, src = r64);
-    Mov64mi = "mov {dest}, {src}", (dest = m64, src = imm64);
     Mov64ri = "mov {dest}, {src}", (dest = r64, src = imm64);
 
     Add8rr = "add {dest}, {src}", (dest = r8, src = r8);
@@ -353,15 +352,13 @@ opcodes! {
     Test32rr = "test {lhs}, {rhs}", (lhs = r32, rhs = r32);
     Test32mr = "test {lhs}, {rhs}", (lhs = m32, rhs = r32);
 
-    Test64ri = "test {lhs}, {rhs}", (lhs = r64, rhs = imm64);
-    Test64mi = "test {lhs}, {rhs}", (lhs = m64, rhs = imm64);
     Test64rr = "test {lhs}, {rhs}", (lhs = r64, rhs = r64);
     Test64mr = "test {lhs}, {rhs}", (lhs = m64, rhs = r64);
 
     Lea64 = "lea {lhs}, {rhs}", (lhs = r64, rhs = m64);
 
-    Shl64ri = "shl {lhs}, {rhs}", (lhs = r64, rhs = imm64);
-    Shr64ri = "shr {lhs}, {rhs}", (lhs = r64, rhs = imm64);
+    Shl64r8i = "shl {lhs}, {rhs}", (lhs = r64, rhs = imm8);
+    Shr64r8i = "shr {lhs}, {rhs}", (lhs = r64, rhs = imm8);
 
     Push64r = "push {src}", (src = r64);
 
