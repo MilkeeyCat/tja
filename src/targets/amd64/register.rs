@@ -176,9 +176,7 @@ impl Register {
             Self::Num => unreachable!(),
         }
     }
-}
 
-impl Register {
     fn subregs(&self) -> &[Self] {
         match self {
             Self::Rax => &[Self::Eax],
