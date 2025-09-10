@@ -1,5 +1,6 @@
 from typing import Self
 
+
 class Register:
     name: str
     bits: int
@@ -15,5 +16,6 @@ class Register:
             self.subregs = subregs
 
         REGISTERS.append(self)
+
 
 REGISTERS: list[Register] = []

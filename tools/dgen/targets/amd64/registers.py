@@ -44,6 +44,7 @@ SP = Register("sp", 16, [SPL])
 ESP = Register("esp", 32, [SP])
 RSP = Register("rsp", 64, [ESP])
 
+
 def define_extended_regs(n: int) -> list[Register]:
     byte = Register(f"r{n}b", 8, [])
     word = Register(f"r{n}w", 16, [byte])
@@ -51,6 +52,7 @@ def define_extended_regs(n: int) -> list[Register]:
     qword = Register(f"r{n}", 64, [dword])
 
     return [byte, word, dword, qword]
+
 
 [R15B, R15W, R15D, R15] = define_extended_regs(15)
 
