@@ -7,6 +7,8 @@ fn generate_target_info(target: &'static str) -> io::Result<()> {
         .arg("dgen.main")
         .arg("-t")
         .arg(target)
+        .arg("-o")
+        .arg(std::env::var("OUT_DIR").unwrap())
         .spawn()?;
 
     assert!(child.wait()?.success());

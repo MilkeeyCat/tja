@@ -10,4 +10,5 @@ if __name__ == "__main__":
     target = cast(str, args.t)
     out = cast(str, args.o)
 
-    _ = importlib.import_module(f".targets.{target}", "dgen")
+    module = importlib.import_module(f".targets.{target}", "dgen")
+    module.generate(out)

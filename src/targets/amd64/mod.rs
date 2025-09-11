@@ -9,6 +9,7 @@ mod opcode;
 mod prolog_epilog_inserter;
 pub mod register;
 mod register_class_selector;
+mod register_info;
 mod sysv_calling_convention;
 
 use crate::{
@@ -27,6 +28,7 @@ use crate::{
         opcode::{get_load_op, get_store_op},
         prolog_epilog_inserter::PrologEpilogInserter,
         register_class_selector::SelectRegisterClass,
+        register_info::RegisterInfo,
     },
 };
 use abi::SysVAmd64;
@@ -34,7 +36,8 @@ pub use asm_printer::AsmPrinter;
 use derive_more::Display;
 pub use opcode::Opcode;
 pub use register::Register;
-use std::collections::HashMap;
+
+include!(concat!(env!("OUT_DIR"), "/amd64/register_classes.rs"));
 
 #[derive(Debug, Clone, Copy)]
 enum OperandKind {
@@ -94,129 +97,9 @@ impl From<usize> for Condition {
     }
 }
 
-#[repr(usize)]
-pub enum RegisterClass {
-    Gpr64,
-    Gpr32,
-    Gpr16,
-    Gpr8,
-}
-
 impl Into<mir::RegisterClass> for RegisterClass {
     fn into(self) -> mir::RegisterClass {
         mir::RegisterClass(self as usize)
-    }
-}
-
-pub struct RegisterInfo(HashMap<mir::RegisterClass, Vec<mir::PhysicalRegister>>);
-
-impl RegisterInfo {
-    fn new() -> Self {
-        Self(HashMap::from([
-            (
-                RegisterClass::Gpr64.into(),
-                vec![
-                    Register::R15.into(),
-                    Register::R14.into(),
-                    Register::R13.into(),
-                    Register::R12.into(),
-                    Register::R11.into(),
-                    Register::R10.into(),
-                    Register::R9.into(),
-                    Register::R8.into(),
-                    Register::Rbx.into(),
-                    Register::Rcx.into(),
-                    Register::Rdx.into(),
-                    Register::Rsi.into(),
-                    Register::Rdi.into(),
-                    Register::Rax.into(),
-                ],
-            ),
-            (
-                RegisterClass::Gpr32.into(),
-                vec![
-                    Register::R15d.into(),
-                    Register::R14d.into(),
-                    Register::R13d.into(),
-                    Register::R12d.into(),
-                    Register::R11d.into(),
-                    Register::R10d.into(),
-                    Register::R9d.into(),
-                    Register::R8d.into(),
-                    Register::Ebx.into(),
-                    Register::Ecx.into(),
-                    Register::Edx.into(),
-                    Register::Esi.into(),
-                    Register::Edi.into(),
-                    Register::Eax.into(),
-                ],
-            ),
-            (
-                RegisterClass::Gpr16.into(),
-                vec![
-                    Register::R15w.into(),
-                    Register::R14w.into(),
-                    Register::R13w.into(),
-                    Register::R12w.into(),
-                    Register::R11w.into(),
-                    Register::R10w.into(),
-                    Register::R9w.into(),
-                    Register::R8w.into(),
-                    Register::Bx.into(),
-                    Register::Cx.into(),
-                    Register::Dx.into(),
-                    Register::Si.into(),
-                    Register::Di.into(),
-                    Register::Ax.into(),
-                ],
-            ),
-            (
-                RegisterClass::Gpr8.into(),
-                vec![
-                    Register::R15b.into(),
-                    Register::R14b.into(),
-                    Register::R13b.into(),
-                    Register::R12b.into(),
-                    Register::R11b.into(),
-                    Register::R10b.into(),
-                    Register::R9b.into(),
-                    Register::R8b.into(),
-                    Register::Bh.into(),
-                    Register::Bl.into(),
-                    Register::Cl.into(),
-                    Register::Dl.into(),
-                    Register::Sil.into(),
-                    Register::Dil.into(),
-                    Register::Ah.into(),
-                    Register::Al.into(),
-                ],
-            ),
-        ]))
-    }
-}
-
-impl super::RegisterInfo for RegisterInfo {
-    fn get_registers_by_class(&self, class: &mir::RegisterClass) -> &[mir::PhysicalRegister] {
-        &self.0[class]
-    }
-
-    fn overlaps(&self, a: &mir::PhysicalRegister, b: &mir::PhysicalRegister) -> bool {
-        let a: Register = (*a).into();
-        let b: Register = (*b).into();
-
-        a == b || a.contains(b) || b.contains(a)
-    }
-
-    fn get_name(&self, r: &mir::PhysicalRegister) -> &'static str {
-        let r: Register = (*r).into();
-
-        r.name()
-    }
-
-    fn get_register_size(&self, r: &mir::PhysicalRegister) -> usize {
-        let r: Register = (*r).into();
-
-        r.size()
     }
 }
 
