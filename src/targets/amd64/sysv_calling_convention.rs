@@ -113,124 +113,130 @@ impl CallingConvention for SysVAmd64 {
     fn lower_ret<A: Abi>(
         &self,
         lowering: &mut FnLowering<A>,
-        mut vreg_indices: Vec<mir::VregIdx>,
-        ty: TyIdx,
+        operand: Option<(Vec<mir::VregIdx>, TyIdx)>,
     ) {
-        let mut registers = vec![Register::Rdx, Register::Rax];
-        let mut offsets = lowering.ty_to_offsets[&ty].clone();
+        if let Some((mut vreg_indices, ty)) = operand {
+            let mut registers = vec![Register::Rdx, Register::Rax];
+            let mut offsets = lowering.ty_to_offsets[&ty].clone();
 
-        assert!(vreg_indices.len() == offsets.len());
+            assert!(vreg_indices.len() == offsets.len());
 
-        for class in self
-            .ty_class(lowering.abi, lowering.ty_storage, ty)
-            .into_iter()
-        {
-            match class {
-                ClassKind::Memory => {
-                    let vreg_idx: usize = (0..lowering.hir_function.params_count)
-                        .into_iter()
-                        .map(|local_idx| {
-                            lowering
-                                .get_or_create_vregs(LocalIdx::new(local_idx).into())
-                                .len()
-                        })
-                        .sum();
-
-                    assert_eq!(
-                        lowering.mir_function.vreg_info.get_vreg(vreg_idx.into()).ty,
-                        lowering.ty_storage.ptr_ty
-                    );
-
-                    let base = lowering
-                        .mir_function
-                        .vreg_info
-                        .create_vreg(lowering.ty_storage.ptr_ty);
-
-                    lowering.get_basic_block().instructions.push(
-                        InstrBuilder::new(Opcode::Lea64.into())
-                            .add_def(mir::Register::Virtual(base))
-                            .add_addr_mode(AddressMode {
-                                base: Base::Register(mir::Register::Virtual(vreg_idx.into())),
-                                index: None,
-                                scale: 1,
-                                displacement: None,
+            for class in self
+                .ty_class(lowering.abi, lowering.ty_storage, ty)
+                .into_iter()
+            {
+                match class {
+                    ClassKind::Memory => {
+                        let vreg_idx: usize = (0..lowering.hir_function.params_count)
+                            .into_iter()
+                            .map(|local_idx| {
+                                lowering
+                                    .get_or_create_vregs(LocalIdx::new(local_idx).into())
+                                    .len()
                             })
-                            .into(),
-                    );
+                            .sum();
 
-                    for (vreg_idx, offset) in std::mem::take(&mut vreg_indices)
-                        .into_iter()
-                        .zip(std::mem::take(&mut offsets))
-                    {
-                        let ptr_add = lowering
+                        assert_eq!(
+                            lowering.mir_function.vreg_info.get_vreg(vreg_idx.into()).ty,
+                            lowering.ty_storage.ptr_ty
+                        );
+
+                        let base = lowering
                             .mir_function
                             .vreg_info
                             .create_vreg(lowering.ty_storage.ptr_ty);
-                        let bb = lowering.get_basic_block();
 
-                        bb.instructions.extend([
-                            Instruction::ptr_add(
-                                mir::Register::Virtual(ptr_add),
-                                Operand::not_def(mir::Register::Virtual(base)),
-                                mir::Operand::Immediate(offset as u64),
-                            ),
-                            Instruction::store(
-                                mir::Register::Virtual(vreg_idx),
-                                Operand::not_def(mir::Register::Virtual(ptr_add)),
-                            ),
-                        ]);
-                    }
-                }
-                ClassKind::Integer => {
-                    let reg = registers.pop().unwrap();
-                    let (vreg_indices, offsets) =
-                        get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
-                    let mut last_offset = None;
+                        lowering.get_basic_block().instructions.push(
+                            InstrBuilder::new(Opcode::Lea64.into())
+                                .add_def(mir::Register::Virtual(base))
+                                .add_addr_mode(AddressMode {
+                                    base: Base::Register(mir::Register::Virtual(vreg_idx.into())),
+                                    index: None,
+                                    scale: 1,
+                                    displacement: None,
+                                })
+                                .into(),
+                        );
 
-                    for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets).rev() {
-                        let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
-                        let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
+                        for (vreg_idx, offset) in std::mem::take(&mut vreg_indices)
+                            .into_iter()
+                            .zip(std::mem::take(&mut offsets))
+                        {
+                            let ptr_add = lowering
+                                .mir_function
+                                .vreg_info
+                                .create_vreg(lowering.ty_storage.ptr_ty);
+                            let bb = lowering.get_basic_block();
 
-                        if let Some(last_offset) = last_offset {
-                            lowering.get_basic_block().instructions.push(
-                                InstrBuilder::new(Opcode::Shl64r8i.into())
-                                    .add_use(mir::Register::Physical(reg.into()))
-                                    .add_operand(Operand::Immediate(
-                                        (last_offset - offset) as u64 * 8,
-                                    ))
-                                    .into(),
-                            );
+                            bb.instructions.extend([
+                                Instruction::ptr_add(
+                                    mir::Register::Virtual(ptr_add),
+                                    Operand::not_def(mir::Register::Virtual(base)),
+                                    mir::Operand::Immediate(offset as u64),
+                                ),
+                                Instruction::store(
+                                    mir::Register::Virtual(vreg_idx),
+                                    Operand::not_def(mir::Register::Virtual(ptr_add)),
+                                ),
+                            ]);
                         }
-
-                        let reg = match (reg, ty_size) {
-                            (Register::Rax, 8) => Register::Rax,
-                            (Register::Rax, 4) => Register::Eax,
-                            (Register::Rax, 2) => Register::Ax,
-                            (Register::Rax, 1) => Register::Al,
-
-                            (Register::Rdx, 8) => Register::Rdx,
-                            (Register::Rdx, 4) => Register::Edx,
-                            (Register::Rdx, 2) => Register::Dx,
-                            (Register::Rdx, 1) => Register::Dl,
-
-                            _ => unreachable!(),
-                        };
-
-                        lowering
-                            .get_basic_block()
-                            .instructions
-                            .push(Instruction::copy(
-                                mir::Register::Physical(reg.into()),
-                                Operand::not_def(mir::Register::Virtual(vreg_idx)),
-                            ));
-                        last_offset = Some(offset);
                     }
+                    ClassKind::Integer => {
+                        let reg = registers.pop().unwrap();
+                        let (vreg_indices, offsets) =
+                            get_vregs_for_one_reg(lowering, &mut vreg_indices, &mut offsets);
+                        let mut last_offset = None;
+
+                        for (vreg_idx, offset) in vreg_indices.into_iter().zip(offsets).rev() {
+                            let ty = lowering.mir_function.vreg_info.get_vreg(vreg_idx).ty;
+                            let ty_size = lowering.abi.ty_size(lowering.ty_storage, ty);
+
+                            if let Some(last_offset) = last_offset {
+                                lowering.get_basic_block().instructions.push(
+                                    InstrBuilder::new(Opcode::Shl64r8i.into())
+                                        .add_use(mir::Register::Physical(reg.into()))
+                                        .add_operand(Operand::Immediate(
+                                            (last_offset - offset) as u64 * 8,
+                                        ))
+                                        .into(),
+                                );
+                            }
+
+                            let reg = match (reg, ty_size) {
+                                (Register::Rax, 8) => Register::Rax,
+                                (Register::Rax, 4) => Register::Eax,
+                                (Register::Rax, 2) => Register::Ax,
+                                (Register::Rax, 1) => Register::Al,
+
+                                (Register::Rdx, 8) => Register::Rdx,
+                                (Register::Rdx, 4) => Register::Edx,
+                                (Register::Rdx, 2) => Register::Dx,
+                                (Register::Rdx, 1) => Register::Dl,
+
+                                _ => unreachable!(),
+                            };
+
+                            lowering
+                                .get_basic_block()
+                                .instructions
+                                .push(Instruction::copy(
+                                    mir::Register::Physical(reg.into()),
+                                    Operand::not_def(mir::Register::Virtual(vreg_idx)),
+                                ));
+                            last_offset = Some(offset);
+                        }
+                    }
+                    _ => unimplemented!(),
                 }
-                _ => unimplemented!(),
             }
+
+            assert!(vreg_indices.is_empty() && offsets.is_empty());
         }
 
-        assert!(vreg_indices.is_empty() && offsets.is_empty());
+        lowering
+            .get_basic_block()
+            .instructions
+            .push(mir::Instruction::new(Opcode::Ret.into()));
     }
 
     fn lower_params<A: Abi>(

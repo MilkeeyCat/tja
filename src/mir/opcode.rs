@@ -14,7 +14,6 @@ pub enum GenericOpcode {
     Load,
     Store,
     Br,
-    Return,
     GlobalValue,
     Copy,
 

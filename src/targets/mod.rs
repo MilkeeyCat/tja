@@ -43,8 +43,7 @@ pub trait CallingConvention {
     fn lower_ret<A: Abi>(
         &self,
         lowering: &mut FnLowering<A>,
-        vreg_indices: Vec<VregIdx>,
-        ty: TyIdx,
+        operand: Option<(Vec<VregIdx>, TyIdx)>,
     );
     fn lower_params<A: Abi>(
         &self,

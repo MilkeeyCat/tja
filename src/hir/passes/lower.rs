@@ -440,17 +440,13 @@ impl<'a, A: Abi> FnLowering<'a, A> {
     fn lower_terminator(&mut self, terminator: &hir::Terminator) {
         match terminator {
             hir::Terminator::Return(value) => {
-                if let Some(value) = value {
-                    let vreg_indices = self.get_or_create_vregs(value.clone()).to_vec();
+                let operand = value.clone().map(|value| {
+                    let ty = value.ty(self);
 
-                    self.abi
-                        .calling_convention()
-                        .lower_ret(self, vreg_indices, value.ty(self));
-                }
+                    (self.get_or_create_vregs(value).to_vec(), ty)
+                });
 
-                self.get_basic_block()
-                    .instructions
-                    .push(mir::Instruction::new(GenericOpcode::Return.into()));
+                self.abi.calling_convention().lower_ret(self, operand);
             }
             hir::Terminator::Br(branch) => match branch {
                 hir::Branch::Conditional {

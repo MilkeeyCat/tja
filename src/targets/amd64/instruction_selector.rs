@@ -119,9 +119,6 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                         GenericOpcode::Br => {
                             instr.opcode = super::Opcode::Jmp.into();
                         }
-                        GenericOpcode::Return => {
-                            instr.opcode = super::Opcode::Ret.into();
-                        }
                         GenericOpcode::GlobalValue => match instr.operands[1] {
                             Operand::Function(idx) => {
                                 let address_mode = AddressMode {
