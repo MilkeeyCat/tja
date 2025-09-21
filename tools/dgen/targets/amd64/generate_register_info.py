@@ -1,7 +1,7 @@
 from io import TextIOWrapper
 
 from dgen.base.register import REGISTERS
-from dgen.base.constraints import REGISTER_CLASSES
+from dgen.base.instruction import REGISTER_CLASSES
 
 
 def generate_register_info(buf: TextIOWrapper):

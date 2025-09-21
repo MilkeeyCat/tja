@@ -1,6 +1,6 @@
 from io import TextIOWrapper
 
-from dgen.base.constraints import REGISTER_CLASSES
+from dgen.base.instruction import REGISTER_CLASSES
 
 
 def generate_register_classes(buf: TextIOWrapper):

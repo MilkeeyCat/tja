@@ -1,7 +1,7 @@
 use crate::{
     Const, FunctionIdx, Global,
-    mir::{Function, Module},
-    targets::{Abi, Target, amd64::Opcode},
+    mir::{self, Function, Instruction, Module, Operand},
+    targets::{Abi, RegisterInfo, Target, amd64::Opcode},
     ty::{self, Ty, TyIdx},
 };
 use std::fmt::Write;
@@ -10,6 +10,20 @@ pub struct AsmPrinter<'a, T: Target, W: Write> {
     pub target: &'a T,
     pub ty_storage: &'a ty::Storage,
     pub buf: &'a mut W,
+}
+
+include!(concat!(env!("OUT_DIR"), "/amd64/asm_printer.rs"));
+
+macro_rules! emit_memory {
+    ($size: ident) => {
+        paste::item! {
+            fn [< emit_ $size _memory >](&mut self, module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
+                write!(self.buf, stringify!([< $size >] ptr))?;
+
+                self.emit_address(module, operands)
+            }
+        }
+    };
 }
 
 impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
@@ -34,6 +48,71 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
 
         Ok(())
     }
+
+    fn emit_operand(&mut self, _module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
+        match operands {
+            [Operand::Register(mir::Register::Physical(reg), _)] => {
+                write!(self.buf, "{}", self.target.register_info().get_name(reg))
+            }
+            [Operand::Immediate(value)] => {
+                write!(self.buf, "{value}")
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn emit_address(&mut self, module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
+        match operands {
+            [
+                base,
+                index,
+                Operand::Immediate(scale),
+                Operand::Immediate(displacement),
+            ] => {
+                match base {
+                    Operand::Register(_, _) => self.emit_operand(module, &[base.clone()])?,
+                    Operand::Global(idx) => write!(&mut self.buf, "{}", module.globals[*idx].name)?,
+                    Operand::Function(idx) => {
+                        write!(&mut self.buf, "{}", module.functions[*idx].name)?
+                    }
+                    _ => unreachable!(),
+                };
+
+                match index {
+                    Operand::Register(_, _) => {
+                        write!(&mut self.buf, "+ ")?;
+
+                        self.emit_operand(module, &[index.clone()])?;
+                    }
+                    Operand::Immediate(0) => (),
+                    _ => unreachable!(),
+                };
+
+                if *scale > 1 {
+                    write!(&mut self.buf, "* {}", *scale)?;
+                }
+
+                let displacement = *displacement as i64;
+                if displacement != 0 {
+                    if displacement > 0 {
+                        write!(&mut self.buf, "+")?;
+                    } else {
+                        write!(&mut self.buf, "-")?;
+                    }
+
+                    write!(&mut self.buf, "{}", displacement.abs())?;
+                }
+
+                write!(&mut self.buf, "]")
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    emit_memory! {byte}
+    emit_memory! {word}
+    emit_memory! {dword}
+    emit_memory! {qword}
 
     fn emit_const(&mut self, c: Const, ty: TyIdx, module: &Module) -> std::fmt::Result {
         match c {
