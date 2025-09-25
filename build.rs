@@ -2,9 +2,9 @@ use std::{io, process::Command};
 
 fn generate_target_info(target: &'static str) -> io::Result<()> {
     let mut child = Command::new("python3")
-        .env("PYTHONPATH", "tools")
+        .env("PYTHONPATH", "tools/dgen")
         .arg("-m")
-        .arg("dgen.main")
+        .arg("main")
         .arg("-t")
         .arg(target)
         .arg("-o")
