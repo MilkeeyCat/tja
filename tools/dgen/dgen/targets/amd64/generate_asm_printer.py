@@ -19,7 +19,7 @@ def generate_asm_printer(buf: TextIOWrapper):
 
             match type:
                 case TokenType.STRING:
-                    buf.write(f'write!(self.buf, "{token}");\n')
+                    buf.write(f'write!(self.buf, "{token}")?;\n')
                 case TokenType.IDENT:
                     (offset, operand) = instr.get_operand(token)
 
