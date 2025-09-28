@@ -1,6 +1,6 @@
 from io import TextIOWrapper
 
-from dgen.base.instruction import INSTRUCTIONS
+from dgen.base.instruction import TARGET_INSTRUCTIONS
 
 
 def generate_instruction_opcodes(buf: TextIOWrapper):
@@ -12,7 +12,7 @@ pub enum Opcode {
 """
     )
 
-    for instr in INSTRUCTIONS:
+    for instr in TARGET_INSTRUCTIONS:
         buf.write(f"\t{instr.name},\n")
 
     buf.write("}")

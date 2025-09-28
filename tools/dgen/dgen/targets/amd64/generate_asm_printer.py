@@ -1,6 +1,6 @@
 from io import TextIOWrapper
 
-from dgen.base.instruction import INSTRUCTIONS, TokenType, parse_asm_string
+from dgen.base.instruction import TARGET_INSTRUCTIONS, TokenType, parse_asm_string
 
 
 def generate_asm_printer(buf: TextIOWrapper):
@@ -11,7 +11,7 @@ def generate_asm_printer(buf: TextIOWrapper):
     buf.write("\t\tlet operands = instr.operands.as_raw_slice();\n\n")
     buf.write("\t\tmatch Opcode::from(instr.opcode) {\n")
 
-    for instr in INSTRUCTIONS:
+    for instr in TARGET_INSTRUCTIONS:
         buf.write(f"\t\t\tOpcode::{instr.name} => {{\n")
 
         for type, token in parse_asm_string(instr.asm):

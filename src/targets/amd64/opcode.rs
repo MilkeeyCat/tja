@@ -204,7 +204,7 @@ macro_rules! opcodes {
         #[derive(Debug)]
         #[repr(usize)]
         pub enum Opcode {
-            _Dummy = GenericOpcode::Num as usize - 1,
+            _Dummy = GenericOpcode::num() - 1,
             $(
                 $variant,
             )+
@@ -251,7 +251,7 @@ macro_rules! opcodes {
 
         impl From<mir::Opcode> for Opcode {
             fn from(value: mir::Opcode) -> Self {
-                assert!(*value >= GenericOpcode::Num as usize && *value < Self::Num as usize);
+                assert!(*value >= GenericOpcode::num() && *value < Self::Num as usize);
 
                 unsafe { std::mem::transmute::<_, Self>(value) }
             }

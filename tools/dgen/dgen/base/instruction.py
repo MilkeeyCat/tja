@@ -38,29 +38,47 @@ I64IMM = Immediate(i64)
 
 class Instruction:
     name: str
-    operands: list[tuple[str, Operand]]
-    asm: str
+    outs: list[tuple[str, Operand]]
+    ins: list[tuple[str, Operand]]
 
-    def __init__(self, name: str, operands: list[tuple[str, Operand]], asm: str):
+    def __init__(
+        self, name: str, outs: list[tuple[str, Operand]], ins: list[tuple[str, Operand]]
+    ):
         self.name = name
-        self.operands = operands
-        self.asm = asm
-
-        INSTRUCTIONS.append(self)
+        self.outs = outs
+        self.ins = ins
 
     def get_operand(self, name: str) -> tuple[int, Operand]:
         offset = 0
 
-        for op_name, operand in self.operands:
-            if name == op_name:
-                return (offset, operand)
-            else:
-                offset += operand.operands_len
+        for operands in [self.outs, self.ins]:
+            for op_name, operand in operands:
+                if name == op_name:
+                    return (offset, operand)
+                else:
+                    offset += operand.operands_len
 
         assert False
 
 
-INSTRUCTIONS: list[Instruction] = []
+class TargetInstruction(Instruction):
+    asm: str
+
+    def __init__(
+        self,
+        name: str,
+        outs: list[tuple[str, Operand]],
+        ins: list[tuple[str, Operand]],
+        asm: str,
+    ):
+        super().__init__(name, outs, ins)
+
+        self.asm = asm
+
+        TARGET_INSTRUCTIONS.append(self)
+
+
+TARGET_INSTRUCTIONS: list[TargetInstruction] = []
 
 
 class TokenType(Enum):

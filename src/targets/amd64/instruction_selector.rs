@@ -147,8 +147,6 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             _ => unreachable!(),
                         },
                         GenericOpcode::Copy => (), // skip copy instructions at this step
-
-                        GenericOpcode::Num => unreachable!(),
                     },
                     Err(_) => (),
                 }
