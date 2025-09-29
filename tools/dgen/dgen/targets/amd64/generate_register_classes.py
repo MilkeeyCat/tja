@@ -1,18 +1,18 @@
 from io import TextIOWrapper
 
 from dgen.base.instruction import REGISTER_CLASSES
+from dgen.writer import Writer
 
 
 def generate_register_classes(buf: TextIOWrapper):
-    buf.write(
-        """#[repr(usize)]
-pub enum RegisterClass {"""
-    )
+    writer = Writer(buf)
+
+    writer.writeln("#[repr(usize)]")
+    writer.writeln("pub enum RegisterClass {")
+    writer.indent()
 
     for reg_class in REGISTER_CLASSES:
-        buf.write(
-            f"""
-    {reg_class.name},"""
-        )
+        writer.writeln(f"{reg_class.name},")
 
-    buf.write("\n}")
+    writer.dedent()
+    writer.writeln("}")

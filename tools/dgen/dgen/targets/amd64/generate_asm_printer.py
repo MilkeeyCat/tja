@@ -1,38 +1,49 @@
 from io import TextIOWrapper
 
 from dgen.base.instruction import TARGET_INSTRUCTIONS, TokenType, parse_asm_string
+from dgen.writer import Writer
 
 
 def generate_asm_printer(buf: TextIOWrapper):
-    buf.write("impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {\n")
-    buf.write(
-        "\tfn emit_instr(&mut self, module: &Module, instr: &Instruction) -> std::fmt::Result {\n"
+    writer = Writer(buf)
+
+    writer.writeln("impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {")
+    writer.indent()
+    writer.writeln(
+        "fn emit_instr(&mut self, module: &Module, instr: &Instruction) -> std::fmt::Result {"
     )
-    buf.write("\t\tlet operands = instr.operands.as_raw_slice();\n\n")
-    buf.write("\t\tmatch Opcode::from(instr.opcode) {\n")
+    writer.indent()
+    writer.writeln("let operands = instr.operands.as_raw_slice();")
+    buf.write("\n")
+    writer.writeln("match Opcode::from(instr.opcode) {")
+    writer.indent()
 
     for instr in TARGET_INSTRUCTIONS:
-        buf.write(f"\t\t\tOpcode::{instr.name} => {{\n")
+        writer.writeln(f"Opcode::{instr.name} => {{")
+        writer.indent()
 
         for type, token in parse_asm_string(instr.asm):
-            buf.write("\t\t\t\t")
-
             match type:
                 case TokenType.STRING:
-                    buf.write(f'write!(self.buf, "{token}")?;\n')
+                    writer.writeln(f'write!(self.buf, "{token}")?;')
                 case TokenType.IDENT:
                     (offset, operand) = instr.get_operand(token)
 
-                    buf.write(
-                        f"self.{operand.emit_method}(module, &operands[{offset}..{offset+operand.operands_len}])?;\n"
+                    writer.writeln(
+                        f"self.{operand.emit_method}(module, &operands[{offset}..{offset+operand.operands_len}])?;"
                     )
 
-        buf.write("\t\t\t}\n")
+        writer.dedent()
+        writer.writeln("}")
 
     # TODO: remove the line below once generated Opcode enum is used
-    buf.write(f"\t\t\t_ => unreachable!(),\n")
+    writer.writeln(f"_ => unreachable!(),")
+    writer.dedent()
 
-    buf.write("\t\t}\n\n")
-    buf.write("\t\tOk(())\n")
-    buf.write("\t}\n")
-    buf.write("}\n")
+    writer.writeln("}")
+    buf.write("\n")
+    writer.writeln("Ok(())")
+    writer.dedent()
+    writer.writeln("}")
+    writer.dedent()
+    writer.writeln("}")

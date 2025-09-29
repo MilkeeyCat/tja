@@ -2,53 +2,60 @@ from io import TextIOWrapper
 
 from dgen.base.register import REGISTERS
 from dgen.base.instruction import REGISTER_CLASSES
+from dgen.writer import Writer
 
 
 def generate_register_info(buf: TextIOWrapper):
-    buf.write(
-        """impl RegisterInfo {
-    pub fn new() -> Self {
-        Self {
-            register_descs: HashMap::from([
-"""
-    )
+    writer = Writer(buf)
+
+    writer.writeln("impl RegisterInfo {")
+    writer.indent()
+    writer.writeln("pub fn new() -> Self {")
+    writer.indent()
+    writer.writeln("Self {")
+    writer.indent()
+    writer.writeln("register_descs: HashMap::from([")
+    writer.indent()
 
     for reg in REGISTERS:
         subregs = [f"Register::{reg.name.capitalize()}" for reg in reg.subregs]
 
-        buf.write(
-            f"""\t\t\t\t(
-                    Register::{reg.name.capitalize()},
-                    RegisterDesc {{
-                        name: "{reg.name}",
-                        size: {int(reg.bits /  8)},
-                        subregs: &[{', '.join(subregs)}],
-                    }},
-                ),
-"""
-        )
+        writer.writeln("(")
+        writer.indent()
+        writer.writeln(f"Register::{reg.name.capitalize()},")
+        writer.writeln("RegisterDesc {")
+        writer.indent()
+        writer.writeln(f'name: "{reg.name}",')
+        writer.writeln(f"size: {int(reg.bits /  8)},")
+        writer.writeln(f"subregs: &[{', '.join(subregs)}],")
+        writer.dedent()
+        writer.writeln("}")
+        writer.dedent()
+        writer.writeln("),")
 
-    buf.write("\t\t\t]),\n")
+    writer.dedent()
+    writer.writeln("]),")
 
-    buf.write(
-        """\t\t\tregister_classes: HashMap::from([
-"""
-    )
+    writer.writeln("register_classes: HashMap::from([")
+    writer.indent()
 
     for reg_class in REGISTER_CLASSES:
         regs = [
             f"Register::{reg.name.capitalize()}.into()" for reg in reg_class.registers
         ]
 
-        buf.write(
-            f"""\t\t\t\t(
-                    RegisterClass::{reg_class.name}.into(),
-                    vec![{', '.join(regs)}],
-                ),
-"""
-        )
+        writer.writeln("(")
+        writer.indent()
+        writer.writeln(f"RegisterClass::{reg_class.name}.into(),")
+        writer.writeln(f"vec![{', '.join(regs)}],")
+        writer.dedent()
+        writer.writeln("),")
 
-    buf.write("\t\t\t]),\n")
-    buf.write("\t\t}\n")
-    buf.write("\t}\n")
-    buf.write("}\n")
+    writer.dedent()
+    writer.writeln("]),")
+    writer.dedent()
+    writer.writeln("}")
+    writer.dedent()
+    writer.writeln("}")
+    writer.dedent()
+    writer.writeln("}")

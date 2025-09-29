@@ -1,27 +1,30 @@
 from io import TextIOWrapper
 
+from dgen.writer import Writer
+
 from .generic_instruction import GENERIC_INSTRUCTIONS
 
 
 def generate_generic_opcodes(buf: TextIOWrapper):
-    buf.write(
-        """#[derive(Debug)]
-#[repr(usize)]
-pub enum GenericOpcode {
-"""
-    )
+    writer = Writer(buf)
+
+    writer.writeln("#[derive(Debug)]")
+    writer.writeln("#[repr(usize)]")
+    writer.writeln("pub enum GenericOpcode {")
+    writer.indent()
 
     for instr in GENERIC_INSTRUCTIONS:
-        buf.write(f"\t{instr.name},\n")
+        writer.writeln(f"{instr.name},")
 
-    buf.write("}\n")
-
-    buf.write(
-        f"""
-impl GenericOpcode {{
-    pub const fn num() -> usize {{
-        {len(GENERIC_INSTRUCTIONS)}
-    }}
-}}
-"""
-    )
+    writer.dedent()
+    writer.writeln("}")
+    buf.write("\n")
+    writer.writeln("impl GenericOpcode {")
+    writer.indent()
+    writer.writeln("pub const fn num() -> usize {")
+    writer.indent()
+    writer.writeln(str(len(GENERIC_INSTRUCTIONS)))
+    writer.dedent()
+    writer.writeln("}")
+    writer.dedent()
+    writer.writeln("}")

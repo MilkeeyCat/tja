@@ -1,18 +1,20 @@
 from io import TextIOWrapper
 
 from dgen.base.instruction import TARGET_INSTRUCTIONS
+from dgen.writer import Writer
 
 
 def generate_instruction_opcodes(buf: TextIOWrapper):
-    buf.write(
-        """#[derive(Debug)]
-#[repr(usize)]
-pub enum Opcode {
-	_Dummy = GenericOpcode::Num as usize - 1,
-"""
-    )
+    writer = Writer(buf)
+
+    writer.writeln("#[derive(Debug)]")
+    writer.writeln("#[repr(usize)]")
+    writer.writeln("pub enum Opcode {")
+    writer.indent()
+    writer.writeln("_Dummy = GenericOpcode::Num as usize - 1,")
 
     for instr in TARGET_INSTRUCTIONS:
-        buf.write(f"\t{instr.name},\n")
+        writer.writeln(f"{instr.name},")
 
-    buf.write("}")
+    writer.dedent()
+    writer.writeln("}")
