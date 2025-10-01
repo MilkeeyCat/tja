@@ -1,8 +1,4 @@
-class Constraint:
-    pass
-
-
-class Type(Constraint):
+class Type:
     type_idx: int
 
     def __init__(self, type_idx: int):

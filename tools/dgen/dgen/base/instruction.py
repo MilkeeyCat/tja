@@ -1,7 +1,8 @@
 from enum import Enum
 
 from .register import Register
-from .constraints import *
+from .constraint import *
+from .type import *
 
 
 class Operand:
@@ -9,7 +10,7 @@ class Operand:
     emit_method: str = "emit_operand"
 
 
-class RegisterClass(Operand):
+class RegisterClass(Operand, Constraint):
     name: str
     registers: list[Register]
 

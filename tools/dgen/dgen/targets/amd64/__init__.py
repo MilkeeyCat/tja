@@ -4,6 +4,7 @@ from pathlib import Path
 from .registers import *
 from .register_classes import *
 from .instructions import *
+from .isel_patterns import *
 from .generate_registers import generate_registers
 from .generate_register_info import generate_register_info
 from .generate_register_classes import generate_register_classes
