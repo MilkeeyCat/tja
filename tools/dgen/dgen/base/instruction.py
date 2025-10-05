@@ -51,22 +51,11 @@ class Instruction:
         self.outs = outs
         self.ins = ins
 
-    def get_operand(self, name: str) -> tuple[int, Operand]:
-        offset = 0
-
-        for operands in [self.outs, self.ins]:
-            for op_name, operand in operands:
-                if name == op_name:
-                    return (offset, operand)
-                else:
-                    offset += operand.operands_len
-
-        assert False
-
 
 class TargetInstruction(Instruction):
     enum = "Opcode"
     asm: str
+    tied_operands: tuple[str, str] | None
 
     def __init__(
         self,
@@ -74,12 +63,37 @@ class TargetInstruction(Instruction):
         outs: list[tuple[str, Operand]],
         ins: list[tuple[str, Operand]],
         asm: str,
+        tied_operands: tuple[str, str] | None = None,
     ):
         super().__init__(name, outs, ins)
 
         self.asm = asm
 
+        if tied_operands is not None:
+            if not any([name == tied_operands[0] for (name, _) in outs]):
+                raise ValueError("first `tied_operands` element should be a def")
+            if not any([name == tied_operands[1] for (name, _) in ins]):
+                raise ValueError("second `tied_operands` element should be a use")
+
+        self.tied_operands = tied_operands
+
         TARGET_INSTRUCTIONS.append(self)
+
+    def get_operand(self, name: str) -> tuple[int, Operand]:
+        offset = 0
+
+        for operands in [self.outs, self.ins]:
+            for op_name, operand in operands:
+                if name == op_name:
+                    return (offset, operand)
+                elif (
+                    self.tied_operands is not None and self.tied_operands[1] == op_name
+                ):
+                    pass
+                else:
+                    offset += operand.operands_len
+
+        assert False
 
 
 TARGET_INSTRUCTIONS: list[TargetInstruction] = []
