@@ -2,7 +2,7 @@ from io import TextIOWrapper
 
 from dgen.writer import Writer
 
-from .generic_instruction import GENERIC_INSTRUCTIONS
+from .generic_instruction import GENERIC_INSTRUCTIONS, GenericInstruction
 
 
 def generate_generic_opcodes(buf: TextIOWrapper):
@@ -10,7 +10,7 @@ def generate_generic_opcodes(buf: TextIOWrapper):
 
     writer.writeln("#[derive(Debug)]")
     writer.writeln("#[repr(usize)]")
-    writer.writeln("pub enum GenericOpcode {")
+    writer.writeln(f"pub enum {GenericInstruction.enum} {{")
     writer.indent()
 
     for instr in GENERIC_INSTRUCTIONS:
@@ -19,7 +19,7 @@ def generate_generic_opcodes(buf: TextIOWrapper):
     writer.dedent()
     writer.writeln("}")
     buf.write("\n")
-    writer.writeln("impl GenericOpcode {")
+    writer.writeln(f"impl {GenericInstruction.enum} {{")
     writer.indent()
     writer.writeln("pub const fn num() -> usize {")
     writer.indent()

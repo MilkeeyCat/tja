@@ -2,6 +2,7 @@ from .instruction import Instruction, Operand
 
 
 class GenericInstruction(Instruction):
+    enum = "GenericOpcode"
     name: str
 
     def __init__(

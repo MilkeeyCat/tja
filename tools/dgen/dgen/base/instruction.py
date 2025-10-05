@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import ClassVar
 
 from .register import Register
 from .constraint import *
@@ -38,6 +39,7 @@ I64IMM = Immediate(i64)
 
 
 class Instruction:
+    enum: ClassVar[str]
     name: str
     outs: list[tuple[str, Operand]]
     ins: list[tuple[str, Operand]]
@@ -63,6 +65,7 @@ class Instruction:
 
 
 class TargetInstruction(Instruction):
+    enum = "Opcode"
     asm: str
 
     def __init__(
