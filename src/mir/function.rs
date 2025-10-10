@@ -174,7 +174,7 @@ impl FunctionPatch {
     pub fn apply(self, func: &mut Function) {
         let mut new_basic_blocks = self.new_basic_blocks;
 
-        new_basic_blocks.sort_by_key(|(instr_idx, _)| (*instr_idx));
+        new_basic_blocks.sort_by_key(|(instr_idx, _)| *instr_idx);
 
         for (bb_idx, bb) in new_basic_blocks.into_iter().rev() {
             for bb in &mut func.blocks[bb_idx..] {
