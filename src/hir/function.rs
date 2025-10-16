@@ -29,11 +29,9 @@ impl Function {
     }
 
     pub fn create_block(&mut self, name: Option<String>) -> BlockIdx {
-        let idx = self.blocks.len();
-        self.blocks
-            .push(BasicBlock::new(name.unwrap_or_else(|| idx.to_string())));
-
-        idx.into()
+        self.blocks.push(BasicBlock::new(
+            name.unwrap_or_else(|| self.blocks.len().to_string()),
+        ))
     }
 
     fn defs_uses(&self) -> Vec<DefUseBlock> {

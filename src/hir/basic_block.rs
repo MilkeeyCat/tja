@@ -163,10 +163,7 @@ impl<'ctx> Wrapper<'ctx> {
     }
 
     fn create_local(&mut self, ty: TyIdx) -> LocalIdx {
-        let idx = self.fn_locals.len();
-        self.fn_locals.push(ty);
-
-        idx.into()
+        self.fn_locals.push(ty)
     }
 }
 

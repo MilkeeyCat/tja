@@ -55,17 +55,11 @@ impl Storage {
     }
 
     pub fn add_ty(&mut self, ty: Ty) -> TyIdx {
-        let idx =
-            if let Some((idx, _)) = self.types.iter().enumerate().find(|&(_, pred)| pred == &ty) {
-                idx
-            } else {
-                let idx = self.types.len();
-                self.types.push(ty);
-
-                idx
-            };
-
-        idx.into()
+        if let Some((idx, _)) = self.types.iter().enumerate().find(|&(_, pred)| pred == &ty) {
+            idx.into()
+        } else {
+            self.types.push(ty)
+        }
     }
 
     pub fn get_ty(&self, idx: TyIdx) -> &Ty {

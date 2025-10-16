@@ -30,22 +30,14 @@ pub struct VregInfo {
 
 impl VregInfo {
     pub fn create_vreg(&mut self, ty: TyIdx) -> VregIdx {
-        let idx = self.vreg_info.len();
-
-        self.vreg_info.push(Vreg { ty, class: None });
-
-        idx.into()
+        self.vreg_info.push(Vreg { ty, class: None })
     }
 
     pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RegisterClass) -> VregIdx {
-        let idx = self.vreg_info.len();
-
         self.vreg_info.push(Vreg {
             ty,
             class: Some(class),
-        });
-
-        idx.into()
+        })
     }
 
     pub fn get_vreg(&self, idx: VregIdx) -> &Vreg {
@@ -69,11 +61,7 @@ pub struct FrameInfo {
 
 impl FrameInfo {
     pub fn create_stack_object(&mut self, size: usize) -> FrameIdx {
-        let idx = self.objects.len();
-
-        self.objects.push(StackObject { size: size });
-
-        idx.into()
+        self.objects.push(StackObject { size: size })
     }
 
     pub fn get_stack_object(&mut self, idx: FrameIdx) -> &StackObject {

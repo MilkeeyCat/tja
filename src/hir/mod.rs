@@ -212,10 +212,7 @@ impl Context {
     }
 
     pub fn create_module(&mut self, name: String) -> ModuleIdx {
-        let idx = self.modules.len();
-        self.modules.push(Module::new(name));
-
-        idx.into()
+        self.modules.push(Module::new(name))
     }
 
     pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<'_, &mut Module> {

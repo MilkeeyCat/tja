@@ -24,23 +24,17 @@ impl Module {
     }
 
     pub fn create_global(&mut self, name: String, ty: TyIdx, value: Option<Const>) -> GlobalIdx {
-        let idx = self.globals.len();
-        self.globals.push(Global { name, ty, value });
-
-        idx.into()
+        self.globals.push(Global { name, ty, value })
     }
 
     pub fn create_fn(&mut self, name: String, params: Vec<TyIdx>, ret_ty: TyIdx) -> FunctionIdx {
-        let idx = self.functions.len();
         self.functions.push(Function {
             name,
             ret_ty,
             params_count: params.len(),
             blocks: IndexVec::new(),
             locals: params.into_iter().collect(),
-        });
-
-        idx.into()
+        })
     }
 
     pub fn get_fn_mut(&mut self, idx: FunctionIdx) -> &mut Function {
