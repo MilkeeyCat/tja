@@ -9,16 +9,13 @@ use crate::{
     Const, GlobalIdx,
     ty::{self, TyIdx},
 };
-pub use basic_block::{BasicBlock, BlockIdx};
+pub use basic_block::{BasicBlock, BlockIdx, Builder as BasicBlockBuilder};
 pub use derive_more::From;
 pub use function::{Function, Patch};
-use index_vec::{IndexVec, define_index_type};
+use index_vec::define_index_type;
 pub use module::{Module, ModuleIdx};
 use op::{BinOp, CmpOp};
-use std::{
-    collections::HashSet,
-    ops::{Deref, DerefMut},
-};
+use std::collections::HashSet;
 
 define_index_type! {
     pub struct LocalIdx = usize;
@@ -195,51 +192,5 @@ impl Terminator {
             }) => HashSet::from([*idx]),
             Self::Br(_) => HashSet::new(),
         }
-    }
-}
-
-pub struct Context {
-    pub ty_storage: ty::Storage,
-    pub modules: IndexVec<ModuleIdx, Module>,
-}
-
-impl Context {
-    pub fn new() -> Self {
-        Self {
-            ty_storage: ty::Storage::new(),
-            modules: IndexVec::new(),
-        }
-    }
-
-    pub fn create_module(&mut self, name: String) -> ModuleIdx {
-        self.modules.push(Module::new(name))
-    }
-
-    pub fn get_module(&mut self, idx: ModuleIdx) -> Wrapper<'_, &mut Module> {
-        Wrapper {
-            ty_storage: &mut self.ty_storage,
-            inner: &mut self.modules[idx],
-        }
-    }
-}
-
-/// [`Wrapper`] struct is used to wrap [`Module`], [`Function`] to have access
-/// to [`Context::ty_storage`]
-pub struct Wrapper<'ctx, T> {
-    pub ty_storage: &'ctx mut ty::Storage,
-    pub inner: T,
-}
-
-impl<T> Deref for Wrapper<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T> DerefMut for Wrapper<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }

@@ -1,4 +1,4 @@
-use super::{Function, GlobalIdx, Wrapper};
+use super::{Function, GlobalIdx};
 use crate::{Const, FunctionIdx, Global, ty::TyIdx};
 use index_vec::IndexVec;
 use index_vec::define_index_type;
@@ -39,14 +39,5 @@ impl Module {
 
     pub fn get_fn_mut(&mut self, idx: FunctionIdx) -> &mut Function {
         &mut self.functions[idx]
-    }
-}
-
-impl Wrapper<'_, &mut Module> {
-    pub fn get_fn(&mut self, idx: FunctionIdx) -> Wrapper<'_, &mut Function> {
-        Wrapper {
-            ty_storage: self.ty_storage,
-            inner: &mut self.inner.functions[idx],
-        }
     }
 }

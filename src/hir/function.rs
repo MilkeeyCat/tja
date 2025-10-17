@@ -1,7 +1,4 @@
-use super::{
-    BasicBlock, BlockIdx, Branch, Instruction, InstructionIdx, LocalIdx, Terminator, Wrapper,
-    basic_block,
-};
+use super::{BasicBlock, BlockIdx, Branch, Instruction, InstructionIdx, LocalIdx, Terminator};
 use crate::ty::TyIdx;
 use index_vec::IndexVec;
 use std::collections::{HashMap, HashSet};
@@ -158,22 +155,8 @@ impl Function {
         edges
     }
 
-    pub fn get_block_mut(&mut self, idx: BlockIdx) -> &mut BasicBlock {
-        &mut self.blocks[idx]
-    }
-
     pub fn is_declaration(&self) -> bool {
         self.blocks.is_empty()
-    }
-}
-
-impl Wrapper<'_, &mut Function> {
-    pub fn get_block(&mut self, idx: BlockIdx) -> basic_block::Wrapper<'_> {
-        basic_block::Wrapper {
-            ty_storage: self.ty_storage,
-            fn_locals: &mut self.inner.locals,
-            block: &mut self.inner.blocks[idx],
-        }
     }
 }
 

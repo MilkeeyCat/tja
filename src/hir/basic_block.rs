@@ -29,27 +29,28 @@ impl BasicBlock {
     }
 }
 
-pub struct Wrapper<'ctx> {
-    pub ty_storage: &'ctx mut ty::Storage,
-    pub fn_locals: &'ctx mut IndexVec<LocalIdx, TyIdx>,
-    pub block: &'ctx mut BasicBlock,
+pub struct Builder<'a> {
+    pub func: &'a mut Function,
+    pub ty_storage: &'a ty::Storage,
+
+    idx: BlockIdx,
 }
 
-impl<'ctx> Wrapper<'ctx> {
-    pub fn new(ty_storage: &'ctx mut ty::Storage, func: &'ctx mut Function, idx: BlockIdx) -> Self {
+impl<'a> Builder<'a> {
+    pub fn new(func: &'a mut Function, ty_storage: &'a ty::Storage, idx: BlockIdx) -> Self {
         Self {
+            func,
             ty_storage,
-            fn_locals: &mut func.locals,
-            block: &mut func.blocks[idx],
+            idx,
         }
     }
 
     pub fn create_ret(&mut self, value: Option<Operand>) {
-        self.block.terminator = Terminator::Return(value);
+        self.get_bb_mut().terminator = Terminator::Return(value);
     }
 
     pub fn create_cond_br(&mut self, condition: Operand, iftrue: BlockIdx, iffalse: BlockIdx) {
-        self.block.terminator = Terminator::Br(Branch::Conditional {
+        self.get_bb_mut().terminator = Terminator::Br(Branch::Conditional {
             condition,
             iftrue,
             iffalse,
@@ -57,13 +58,14 @@ impl<'ctx> Wrapper<'ctx> {
     }
 
     pub fn create_br(&mut self, block_idx: BlockIdx) {
-        self.block.terminator = Terminator::Br(Branch::Unconditional { block_idx });
+        self.get_bb_mut().terminator = Terminator::Br(Branch::Unconditional { block_idx });
     }
 
     pub fn create_bin(&mut self, lhs: Operand, rhs: Operand, kind: BinOp) -> Operand {
         assert!(lhs.ty(self) == rhs.ty(self));
         let idx = self.create_local(lhs.ty(self));
-        self.block.instructions.push(Instruction::Binary {
+
+        self.get_bb_mut().instructions.push(Instruction::Binary {
             kind,
             lhs,
             rhs,
@@ -75,7 +77,8 @@ impl<'ctx> Wrapper<'ctx> {
 
     pub fn create_sext(&mut self, operand: Operand) -> Operand {
         let idx = self.create_local(operand.ty(self));
-        self.block
+
+        self.get_bb_mut()
             .instructions
             .push(Instruction::Sext { operand, out: idx });
 
@@ -84,7 +87,8 @@ impl<'ctx> Wrapper<'ctx> {
 
     pub fn create_zext(&mut self, operand: Operand) -> Operand {
         let idx = self.create_local(operand.ty(self));
-        self.block
+
+        self.get_bb_mut()
             .instructions
             .push(Instruction::Zext { operand, out: idx });
 
@@ -93,7 +97,8 @@ impl<'ctx> Wrapper<'ctx> {
 
     pub fn create_alloca(&mut self, ty: TyIdx) -> Operand {
         let idx = self.create_local(self.ty_storage.ptr_ty);
-        self.block
+
+        self.get_bb_mut()
             .instructions
             .push(Instruction::Alloca { ty, out: idx });
 
@@ -101,14 +106,15 @@ impl<'ctx> Wrapper<'ctx> {
     }
 
     pub fn create_store(&mut self, ptr: Operand, value: Operand) {
-        self.block
+        self.get_bb_mut()
             .instructions
             .push(Instruction::Store { ptr, value });
     }
 
     pub fn create_load(&mut self, ptr: Operand, ty: TyIdx) -> Operand {
         let idx = self.create_local(ty);
-        self.block
+
+        self.get_bb_mut()
             .instructions
             .push(Instruction::Load { ptr, out: idx });
 
@@ -117,12 +123,15 @@ impl<'ctx> Wrapper<'ctx> {
 
     pub fn create_gep(&mut self, ptr_ty: TyIdx, ptr: Operand, indices: Vec<Operand>) -> Operand {
         let idx = self.create_local(self.ty_storage.ptr_ty);
-        self.block.instructions.push(Instruction::GetElementPtr {
-            ptr_ty,
-            ptr,
-            indices,
-            out: idx,
-        });
+
+        self.get_bb_mut()
+            .instructions
+            .push(Instruction::GetElementPtr {
+                ptr_ty,
+                ptr,
+                indices,
+                out: idx,
+            });
 
         Operand::Local(idx)
     }
@@ -130,7 +139,8 @@ impl<'ctx> Wrapper<'ctx> {
     pub fn create_icmp(&mut self, lhs: Operand, rhs: Operand, kind: CmpOp) -> Operand {
         assert!(lhs.ty(self) == rhs.ty(self));
         let idx = self.create_local(self.ty_storage.i8_ty);
-        self.block.instructions.push(Instruction::Icmp {
+
+        self.get_bb_mut().instructions.push(Instruction::Icmp {
             kind,
             lhs,
             rhs,
@@ -143,7 +153,6 @@ impl<'ctx> Wrapper<'ctx> {
     pub fn create_call(
         &mut self,
         operand: Operand,
-        // it's not possible to get a function by `FunctionIdx` from here :(
         ret_ty: TyIdx,
         arguments: Vec<Operand>,
     ) -> Option<Operand> {
@@ -153,7 +162,7 @@ impl<'ctx> Wrapper<'ctx> {
             Some(self.create_local(ret_ty))
         };
 
-        self.block.instructions.push(Instruction::Call {
+        self.get_bb_mut().instructions.push(Instruction::Call {
             operand,
             arguments,
             out: idx,
@@ -162,13 +171,17 @@ impl<'ctx> Wrapper<'ctx> {
         idx.map(|idx| Operand::Local(idx))
     }
 
+    fn get_bb_mut(&mut self) -> &mut BasicBlock {
+        &mut self.func.blocks[self.idx]
+    }
+
     fn create_local(&mut self, ty: TyIdx) -> LocalIdx {
-        self.fn_locals.push(ty)
+        self.func.locals.push(ty)
     }
 }
 
-impl LocalStorage for Wrapper<'_> {
+impl LocalStorage for Builder<'_> {
     fn get_local_ty(&self, idx: LocalIdx) -> TyIdx {
-        self.fn_locals[idx]
+        self.func.locals[idx]
     }
 }
