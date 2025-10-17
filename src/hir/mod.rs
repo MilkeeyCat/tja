@@ -11,7 +11,7 @@ use crate::{
 };
 pub use basic_block::{BasicBlock, BlockIdx, Builder as BasicBlockBuilder};
 pub use derive_more::From;
-pub use function::{Function, Patch};
+pub use function::Function;
 use index_vec::define_index_type;
 pub use module::{Module, ModuleIdx};
 use op::{BinOp, CmpOp};

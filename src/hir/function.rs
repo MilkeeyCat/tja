@@ -1,4 +1,4 @@
-use super::{BasicBlock, BlockIdx, Branch, Instruction, InstructionIdx, LocalIdx, Terminator};
+use super::{BasicBlock, BlockIdx, Branch, LocalIdx, Terminator};
 use crate::ty::TyIdx;
 use index_vec::IndexVec;
 use std::collections::{HashMap, HashSet};
@@ -157,80 +157,5 @@ impl Function {
 
     pub fn is_declaration(&self) -> bool {
         self.blocks.is_empty()
-    }
-}
-
-pub struct Patch {
-    next_local: usize,
-    new_locals: Vec<TyIdx>,
-    new_instructions: Vec<(BlockIdx, InstructionIdx, Instruction)>,
-    term_patch_map: HashMap<BlockIdx, Terminator>,
-    instr_patch_map: HashMap<(BlockIdx, InstructionIdx), Instruction>,
-}
-
-impl Patch {
-    pub fn new(func: &Function) -> Self {
-        Self {
-            next_local: func.locals.len(),
-            new_locals: Vec::new(),
-            new_instructions: Vec::new(),
-            term_patch_map: HashMap::new(),
-            instr_patch_map: HashMap::new(),
-        }
-    }
-
-    pub fn add_local(&mut self, ty: TyIdx) -> LocalIdx {
-        let idx = self.next_local;
-        self.next_local += 1;
-        self.new_locals.push(ty);
-
-        idx.into()
-    }
-
-    pub fn add_instruction(
-        &mut self,
-        block_idx: BlockIdx,
-        instr_idx: InstructionIdx,
-        instruction: Instruction,
-    ) {
-        self.new_instructions
-            .push((block_idx, instr_idx, instruction));
-    }
-
-    pub fn patch_terminator(&mut self, block_idx: BlockIdx, terminator: Terminator) {
-        assert!(!self.term_patch_map.contains_key(&block_idx));
-        self.term_patch_map.insert(block_idx, terminator);
-    }
-
-    pub fn patch_instruction(
-        &mut self,
-        block_idx: BlockIdx,
-        instr_idx: InstructionIdx,
-        instruction: Instruction,
-    ) {
-        assert!(!self.instr_patch_map.contains_key(&(block_idx, instr_idx)));
-        self.instr_patch_map
-            .insert((block_idx, instr_idx), instruction);
-    }
-
-    pub fn apply(mut self, func: &mut Function) {
-        func.locals.extend(self.new_locals.into_iter());
-
-        for ((block_idx, instr_idx), instr) in self.instr_patch_map.into_iter() {
-            func.blocks[block_idx].instructions[instr_idx] = instr;
-        }
-
-        for (idx, term) in self.term_patch_map.into_iter() {
-            func.blocks[idx].terminator = term;
-        }
-
-        self.new_instructions
-            .sort_by_key(|(block_idx, instr_idx, _)| (*block_idx, *instr_idx));
-
-        for (block_idx, instr_idx, instruction) in self.new_instructions.into_iter().rev() {
-            func.blocks[block_idx]
-                .instructions
-                .insert(instr_idx, instruction);
-        }
     }
 }
