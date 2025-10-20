@@ -9,11 +9,7 @@ class Register:
     def __init__(self, name: str, bits: int, subregs: list[Self] | None = None):
         self.name = name
         self.bits = bits
-
-        if subregs is None:
-            self.subregs = []
-        else:
-            self.subregs = subregs
+        self.subregs = subregs or []
 
         REGISTERS.append(self)
 
