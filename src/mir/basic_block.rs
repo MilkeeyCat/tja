@@ -13,6 +13,14 @@ pub struct BasicBlock {
 }
 
 impl BasicBlock {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            instructions: IndexVec::new(),
+            successors: HashSet::new(),
+        }
+    }
+
     pub fn defs_uses(&self) -> DefsUses {
         let mut defs_uses = DefsUses::default();
 

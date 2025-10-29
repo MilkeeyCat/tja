@@ -8,7 +8,7 @@ pub mod passes;
 use crate::{FunctionIdx, Global, GlobalIdx, macros::usize_wrapper};
 pub use basic_block::{BasicBlock, BasicBlockPatch};
 use derive_more::From;
-pub use function::{FrameIdx, Function, RegisterClass, VregIdx};
+pub use function::{Cursor as FunctionCursor, FrameIdx, Function, RegisterClass, VregIdx};
 use index_vec::{IndexVec, define_index_type};
 pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
 pub use opcode::{GenericOpcode, Opcode};

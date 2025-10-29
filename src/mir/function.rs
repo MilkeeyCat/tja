@@ -2,7 +2,7 @@ use super::{Operand, Register};
 use crate::{
     dataflow::Liveness,
     macros::usize_wrapper,
-    mir::{BasicBlock, BlockIdx},
+    mir::{BasicBlock, BlockIdx, Instruction, InstructionIdx},
     ty::TyIdx,
 };
 use index_vec::{IndexVec, define_index_type, index_vec};
@@ -183,5 +183,132 @@ impl FunctionPatch {
             }
             func.blocks.insert(bb_idx, bb);
         }
+    }
+}
+
+pub struct Cursor<'a> {
+    pub func: &'a mut Function,
+
+    bb_idx: Option<BlockIdx>,
+    instr_idx: Option<InstructionIdx>,
+}
+
+impl<'a> Cursor<'a> {
+    pub fn new(func: &'a mut Function) -> Self {
+        Self {
+            func,
+            bb_idx: None,
+            instr_idx: None,
+        }
+    }
+
+    pub fn get_bb_idx(&self) -> Option<BlockIdx> {
+        self.bb_idx
+    }
+
+    pub fn get_instr_idx(&self) -> Option<InstructionIdx> {
+        self.instr_idx
+    }
+
+    pub fn set_bb_idx(&mut self, idx: Option<BlockIdx>) {
+        self.bb_idx = idx;
+    }
+
+    pub fn set_instr_idx(&mut self, idx: Option<InstructionIdx>) {
+        self.instr_idx = idx;
+    }
+
+    pub fn get_prev_bb_idx(&self) -> Option<BlockIdx> {
+        match self.bb_idx {
+            Some(idx) => (idx > BlockIdx::from(0)).then(|| idx - 1),
+            None => {
+                let len = self.func.blocks.len();
+
+                (len > 0).then(|| BlockIdx::from(len - 1))
+            }
+        }
+    }
+
+    pub fn get_prev_instr_idx(&self) -> Option<InstructionIdx> {
+        match self.instr_idx {
+            Some(idx) => (idx > InstructionIdx::from(0)).then(|| idx - 1),
+            None => {
+                let len = self.get_bb().instructions.len();
+
+                (len > 0).then(|| InstructionIdx::from(len - 1))
+            }
+        }
+    }
+
+    pub fn prev_bb_idx(&mut self) -> Option<BlockIdx> {
+        self.bb_idx = self.get_prev_bb_idx();
+
+        self.bb_idx
+    }
+
+    pub fn prev_instr_idx(&mut self) -> Option<InstructionIdx> {
+        self.instr_idx = self.get_prev_instr_idx();
+
+        self.instr_idx
+    }
+
+    pub fn get_next_bb_idx(&self) -> Option<BlockIdx> {
+        let idx = self.bb_idx.map(|idx| idx + 1).unwrap_or(0.into());
+
+        self.func.blocks.get(idx).map(|_| idx)
+    }
+
+    pub fn get_next_instr_idx(&self) -> Option<InstructionIdx> {
+        let idx = self.instr_idx.map(|idx| idx + 1).unwrap_or(0.into());
+
+        self.get_bb().instructions.get(idx).map(|_| idx)
+    }
+
+    pub fn next_bb_idx(&mut self) -> Option<BlockIdx> {
+        self.bb_idx = self.get_next_bb_idx();
+
+        self.bb_idx
+    }
+
+    pub fn next_instr_idx(&mut self) -> Option<InstructionIdx> {
+        self.instr_idx = self.get_next_instr_idx();
+
+        self.instr_idx
+    }
+
+    pub fn get_bb(&self) -> &BasicBlock {
+        &self.func.blocks[self.bb_idx.unwrap()]
+    }
+
+    pub fn get_instr(&self) -> &Instruction {
+        &self.get_bb().instructions[self.instr_idx.unwrap()]
+    }
+
+    pub fn get_bb_mut(&mut self) -> &mut BasicBlock {
+        &mut self.func.blocks[self.bb_idx.unwrap()]
+    }
+
+    pub fn get_instr_mut(&mut self) -> &mut Instruction {
+        let idx = self.instr_idx.unwrap();
+
+        &mut self.get_bb_mut().instructions[idx]
+    }
+
+    pub fn create_bb_before(&mut self, name: String) -> BlockIdx {
+        let idx = self.bb_idx.unwrap_or(0.into());
+
+        self.func.blocks.insert(idx, BasicBlock::new(name));
+        self.bb_idx = Some(idx);
+
+        idx
+    }
+
+    pub fn create_bb_after(&mut self, name: String) -> BlockIdx {
+        let idx = self.get_next_bb_idx().unwrap_or(self.func.blocks.len_idx());
+
+        self.func.blocks.insert(idx, BasicBlock::new(name));
+        self.bb_idx = Some(idx);
+
+        idx
     }
 }
