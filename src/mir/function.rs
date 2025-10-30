@@ -299,6 +299,7 @@ impl<'a> Cursor<'a> {
 
         self.func.blocks.insert(idx, BasicBlock::new(name));
         self.bb_idx = Some(idx);
+        self.instr_idx = None;
 
         idx
     }
@@ -308,6 +309,7 @@ impl<'a> Cursor<'a> {
 
         self.func.blocks.insert(idx, BasicBlock::new(name));
         self.bb_idx = Some(idx);
+        self.instr_idx = None;
 
         idx
     }
