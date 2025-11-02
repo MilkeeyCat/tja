@@ -1,4 +1,3 @@
-pub mod codegen;
 mod dataflow;
 mod datastructures;
 pub mod hir;

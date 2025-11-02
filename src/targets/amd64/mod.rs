@@ -13,11 +13,10 @@ mod register_info;
 mod sysv_calling_convention;
 
 use crate::{
-    codegen::allocator::Allocator,
     hir,
     mir::{
         self, BasicBlockPatch, FrameIdx, InstrBuilder, InstructionIdx, Operand, VregIdx,
-        passes::two_address::TwoAddressForm,
+        passes::{allocator::Allocator, two_address::TwoAddressForm},
     },
     pass::FunctionToModuleAdapter,
     targets::amd64::{

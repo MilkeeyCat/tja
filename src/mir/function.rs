@@ -1,6 +1,7 @@
 use super::{Operand, Register};
 use crate::{
     dataflow::Liveness,
+    datastructures::vecset::VecSet,
     macros::usize_wrapper,
     mir::{BasicBlock, BlockIdx, Instruction, InstructionIdx},
     ty::TyIdx,
@@ -121,16 +122,14 @@ impl Function {
         liveness
     }
 
-    pub fn registers(&self) -> Vec<Register> {
-        let mut registers = Vec::new();
+    pub fn registers(&self) -> VecSet<Register> {
+        let mut registers = VecSet::new();
 
         for bb in &self.blocks {
             for instr in &bb.instructions {
                 for operand in &instr.operands {
                     if let Operand::Register(reg, _) = operand {
-                        if !registers.contains(reg) {
-                            registers.push(reg.clone());
-                        }
+                        registers.insert(reg.clone());
                     }
                 }
             }
