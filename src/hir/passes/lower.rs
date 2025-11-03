@@ -5,45 +5,42 @@ use crate::{
         ty::{self, Ty, TyIdx},
     },
     mir::{
-        self, BlockIdx, GenericOpcode, InstrBuilder, Operand, Register, RegisterRole,
-        function::{FrameInfo, FunctionPatch, VregInfo},
+        self, BasicBlockCursor, BasicBlockCursorMut, BlockIdx, GenericOpcode, InstructionCursor,
+        InstructionCursorMut, Register, RegisterRole,
     },
     pass::{Context, Pass},
     targets::{Abi, CallingConvention, Target},
 };
 use index_vec::IndexVec;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct Lower;
 
 impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
     fn run(&self, function: &mut hir::Function, ctx: &mut Context<'a, T>) {
-        let mut lowering = FnLowering {
-            ty_storage: ctx.ty_storage,
-            hir_function: function,
-            mir_function: mir::Function {
-                name: function.name.clone(),
-                vreg_info: VregInfo::default(),
-                frame_info: FrameInfo::default(),
-                blocks: IndexVec::new(),
-            },
-            operand_to_vreg_indices: HashMap::new(),
-            ty_to_offsets: HashMap::new(),
-            abi: ctx.target.abi(),
-            current_bb_idx: None,
-            entry_bb: mir::BasicBlock {
-                name: "entry".into(),
-                instructions: IndexVec::new(),
-                successors: HashSet::from([1.into()]),
-            },
-        };
+        let mut mir_function = mir::Function::new(function.name.clone());
 
-        if lowering.hir_function.is_declaration() {
-            ctx.mir_function = Some(lowering.mir_function);
+        if function.is_declaration() {
+            ctx.mir_function = Some(mir_function);
 
             return;
         }
+
+        let entry_bb_idx = mir_function.create_block("entry".into());
+
+        mir_function.block_cursor_mut().insert_after(entry_bb_idx);
+
+        let mut lowering = FnLowering {
+            ty_storage: ctx.ty_storage,
+            hir_function: function,
+            mir_function,
+            operand_to_vreg_indices: HashMap::new(),
+            hir_to_mir_bb: HashMap::new(),
+            ty_to_offsets: HashMap::new(),
+            abi: ctx.target.abi(),
+            current_bb_idx: entry_bb_idx,
+        };
 
         let vreg_indices = (0..lowering.hir_function.params_count)
             .into_iter()
@@ -63,18 +60,26 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             tys.raw,
             ret_ty,
         );
-        lowering
-            .get_basic_block()
-            .instructions
-            .push(mir::Instruction::br(1.into()));
 
-        for (idx, bb) in function.blocks.iter().enumerate() {
-            lowering.current_bb_idx = Some(idx.into());
-            lowering.mir_function.blocks.push(mir::BasicBlock {
-                name: bb.name.clone(),
-                instructions: IndexVec::new(),
-                successors: HashSet::new(),
-            });
+        for (idx, bb) in function.blocks.iter_enumerated() {
+            let bb_idx = lowering.mir_function.create_block(bb.name.clone());
+
+            lowering.block_cursor_mut().insert_after(bb_idx);
+            lowering.hir_to_mir_bb.insert(idx, bb_idx);
+        }
+
+        let instr_idx = {
+            let bb_idx = lowering.mir_function.blocks[entry_bb_idx].next.unwrap();
+
+            lowering.mir_function.create_instr().br(bb_idx)
+        };
+
+        lowering.instr_cursor_mut().insert_after(instr_idx);
+
+        for bb in &function.blocks {
+            lowering.current_bb_idx = lowering.mir_function.blocks[lowering.current_bb_idx]
+                .next
+                .unwrap();
 
             for instr in &bb.instructions {
                 lowering.lower_instruction(instr);
@@ -83,10 +88,6 @@ impl<'a, T: Target> Pass<'a, hir::Function, T> for Lower {
             lowering.lower_terminator(&bb.terminator);
         }
 
-        let mut patch = FunctionPatch::new();
-
-        patch.add_basic_block(0.into(), lowering.entry_bb);
-        patch.apply(&mut lowering.mir_function);
         ctx.mir_function = Some(lowering.mir_function);
     }
 }
@@ -96,13 +97,41 @@ pub struct FnLowering<'a, A: Abi> {
     pub hir_function: &'a hir::Function,
     pub mir_function: mir::Function,
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
+    hir_to_mir_bb: HashMap<hir::BlockIdx, mir::BlockIdx>,
     pub ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
     pub abi: &'a A,
-    current_bb_idx: Option<BlockIdx>,
-    entry_bb: mir::BasicBlock,
+    current_bb_idx: BlockIdx,
 }
 
 impl<'a, A: Abi> FnLowering<'a, A> {
+    pub fn block_cursor(&self) -> BasicBlockCursor<'_> {
+        let mut cursor = self.mir_function.block_cursor();
+
+        cursor.set_idx(self.current_bb_idx);
+
+        cursor
+    }
+
+    pub fn block_cursor_mut(&mut self) -> BasicBlockCursorMut<'_> {
+        let mut cursor = self.mir_function.block_cursor_mut();
+
+        cursor.set_idx(self.current_bb_idx);
+
+        cursor
+    }
+
+    pub fn instr_cursor(&self) -> InstructionCursor<'_> {
+        self.mir_function
+            .instr_cursor(self.current_bb_idx)
+            .at_tail()
+    }
+
+    pub fn instr_cursor_mut(&mut self) -> InstructionCursorMut<'_> {
+        self.mir_function
+            .instr_cursor_mut(self.current_bb_idx)
+            .at_tail()
+    }
+
     pub fn get_or_create_vregs(&mut self, operand: hir::Operand) -> &[mir::VregIdx] {
         if self.operand_to_vreg_indices.contains_key(&operand) {
             return &self.operand_to_vreg_indices[&operand];
@@ -128,35 +157,32 @@ impl<'a, A: Abi> FnLowering<'a, A> {
             hir::Operand::Const(c, ty) => match c {
                 Const::Global(idx) => {
                     let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr()
+                        .global_value(Register::Virtual(vreg_idx), (*idx).into());
 
-                    self.get_basic_block()
-                        .instructions
-                        .push(mir::Instruction::global_value(
-                            Register::Virtual(vreg_idx),
-                            (*idx).into(),
-                        ));
+                    self.instr_cursor_mut().insert_after(instr_idx);
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Function(idx) => {
                     let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr()
+                        .global_value(Register::Virtual(vreg_idx), (*idx).into());
 
-                    self.get_basic_block()
-                        .instructions
-                        .push(mir::Instruction::global_value(
-                            Register::Virtual(vreg_idx),
-                            (*idx).into(),
-                        ));
+                    self.instr_cursor_mut().insert_after(instr_idx);
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Int(value) => {
                     let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr()
+                        .copy(Register::Virtual(vreg_idx), mir::Operand::Immediate(*value));
 
-                    self.get_basic_block()
-                        .instructions
-                        .push(mir::Instruction::copy(
-                            Register::Virtual(vreg_idx),
-                            mir::Operand::Immediate(*value),
-                        ));
+                    self.instr_cursor_mut().insert_after(instr_idx);
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Aggregate(consts) => {
@@ -225,12 +251,6 @@ impl<'a, A: Abi> FnLowering<'a, A> {
         }
     }
 
-    pub fn get_basic_block(&mut self) -> &mut mir::BasicBlock {
-        self.current_bb_idx
-            .map(|idx| &mut self.mir_function.blocks[idx])
-            .unwrap_or_else(|| &mut self.entry_bb)
-    }
-
     fn lower_instruction(&mut self, instruction: &hir::Instruction) {
         match instruction {
             hir::Instruction::Binary {
@@ -249,14 +269,16 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     BinOp::SDiv => GenericOpcode::SDiv,
                     BinOp::UDiv => GenericOpcode::UDiv,
                 };
+                let instr_idx = self
+                    .mir_function
+                    .create_instr()
+                    .with_opcode(opcode.into())
+                    .add_def(Register::Virtual(def))
+                    .add_use(Register::Virtual(lhs))
+                    .add_use(Register::Virtual(rhs))
+                    .idx();
 
-                self.get_basic_block().instructions.push(
-                    InstrBuilder::new(opcode.into())
-                        .add_def(Register::Virtual(def))
-                        .add_use(Register::Virtual(lhs))
-                        .add_use(Register::Virtual(rhs))
-                        .into(),
-                );
+                self.instr_cursor_mut().insert_after(instr_idx);
             }
             hir::Instruction::Alloca { ty, out } => {
                 let def = self.get_or_create_vreg(hir::Operand::Local(*out));
@@ -264,13 +286,12 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     .mir_function
                     .frame_info
                     .create_stack_object(self.abi.ty_size(self.ty_storage, *ty));
+                let instr_idx = self
+                    .mir_function
+                    .create_instr()
+                    .frame_idx(Register::Virtual(def), frame_idx);
 
-                self.get_basic_block()
-                    .instructions
-                    .push(mir::Instruction::frame_idx(
-                        Register::Virtual(def),
-                        frame_idx,
-                    ));
+                self.instr_cursor_mut().insert_after(instr_idx);
             }
             hir::Instruction::Store { ptr, value } => {
                 let base = self.get_or_create_vreg(ptr.clone());
@@ -282,12 +303,12 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                         mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
                         mir::Operand::Immediate(offset as u64),
                     );
-                    let bb = self.get_basic_block();
-
-                    bb.instructions.push(mir::Instruction::store(
+                    let instr_idx = self.mir_function.create_instr().store(
                         Register::Virtual(vreg_idx),
-                        Operand::not_def(Register::Virtual(ptr_add)),
-                    ));
+                        mir::Operand::not_def(Register::Virtual(ptr_add)),
+                    );
+
+                    self.instr_cursor_mut().insert_after(instr_idx);
                 }
             }
             hir::Instruction::Load { ptr, out } => {
@@ -300,12 +321,12 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                         mir::Operand::Register(Register::Virtual(base), RegisterRole::Use),
                         mir::Operand::Immediate(offset as u64),
                     );
-                    let bb = self.get_basic_block();
-
-                    bb.instructions.push(mir::Instruction::load(
+                    let instr_idx = self.mir_function.create_instr().load(
                         Register::Virtual(vreg_idx),
-                        Operand::not_def(Register::Virtual(ptr_add)),
-                    ));
+                        mir::Operand::not_def(Register::Virtual(ptr_add)),
+                    );
+
+                    self.instr_cursor_mut().insert_after(instr_idx);
                 }
             }
             hir::Instruction::GetElementPtr {
@@ -358,15 +379,16 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                                             .vreg_info
                                             .create_vreg(self.ty_storage.ptr_ty);
                                         let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
+                                        let instr_idx = self
+                                            .mir_function
+                                            .create_instr()
+                                            .with_opcode(GenericOpcode::Mul.into())
+                                            .add_def(Register::Virtual(def_vreg_idx))
+                                            .add_use(Register::Virtual(lhs_vreg_idx))
+                                            .add_operand(mir::Operand::Immediate(size as u64))
+                                            .idx();
 
-                                        self.get_basic_block().instructions.push(
-                                            mir::Instruction::binary(
-                                                GenericOpcode::Mul.into(),
-                                                Register::Virtual(def_vreg_idx),
-                                                Operand::not_def(Register::Virtual(lhs_vreg_idx)),
-                                                Operand::Immediate(size as u64),
-                                            ),
-                                        );
+                                        self.instr_cursor_mut().insert_after(instr_idx);
 
                                         def_vreg_idx
                                     };
@@ -399,13 +421,12 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                 }
 
                 let def_vreg_idx = self.get_or_create_vreg(hir::Operand::Local(*out));
+                let instr_idx = self.mir_function.create_instr().copy(
+                    Register::Virtual(def_vreg_idx),
+                    mir::Operand::not_def(Register::Virtual(base)),
+                );
 
-                self.get_basic_block()
-                    .instructions
-                    .push(mir::Instruction::copy(
-                        Register::Virtual(def_vreg_idx),
-                        Operand::not_def(Register::Virtual(base)),
-                    ));
+                self.instr_cursor_mut().insert_after(instr_idx);
             }
             hir::Instruction::Call {
                 operand,
@@ -455,11 +476,15 @@ impl<'a, A: Abi> FnLowering<'a, A> {
                     iffalse: _,
                 } => unimplemented!(),
                 hir::Branch::Unconditional { block_idx } => {
-                    let bb = self.get_basic_block();
+                    let bb_idx = self.hir_to_mir_bb[block_idx];
+                    let instr_idx = self.mir_function.create_instr().br(bb_idx);
 
-                    bb.successors = HashSet::from([block_idx.raw().into()]);
-                    bb.instructions
-                        .push(mir::Instruction::br(block_idx.raw().into()));
+                    self.block_cursor_mut()
+                        .current_mut()
+                        .unwrap()
+                        .successors
+                        .insert(bb_idx);
+                    self.instr_cursor_mut().insert_after(instr_idx);
                 }
             },
         }
@@ -470,14 +495,12 @@ impl<'a, A: Abi> FnLowering<'a, A> {
             .mir_function
             .vreg_info
             .create_vreg(self.ty_storage.ptr_ty);
+        let instr_idx =
+            self.mir_function
+                .create_instr()
+                .ptr_add(Register::Virtual(vreg_idx), base, offset);
 
-        self.get_basic_block()
-            .instructions
-            .push(mir::Instruction::ptr_add(
-                Register::Virtual(vreg_idx),
-                base,
-                offset,
-            ));
+        self.instr_cursor_mut().insert_after(instr_idx);
 
         vreg_idx
     }

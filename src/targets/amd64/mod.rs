@@ -15,7 +15,7 @@ mod sysv_calling_convention;
 use crate::{
     hir,
     mir::{
-        self, BasicBlockPatch, FrameIdx, InstrBuilder, InstructionIdx, Operand, VregIdx,
+        self, FrameIdx, InstructionBuilder, InstructionCursorMut, Operand, VregIdx,
         passes::{allocator::Allocator, two_address::TwoAddressForm},
     },
     pass::FunctionToModuleAdapter,
@@ -151,46 +151,48 @@ impl super::Target for Target {
 
     fn store_reg_to_stack_slot(
         &self,
-        patch: &mut BasicBlockPatch,
-        idx: InstructionIdx,
+        cursor: &mut InstructionCursorMut,
         vreg_idx: VregIdx,
         frame_idx: FrameIdx,
         size: usize,
     ) {
-        patch.add_instruction(
-            idx,
-            InstrBuilder::new(get_store_op(size).into())
-                .add_addr_mode(AddressMode {
-                    base: Base::Frame(frame_idx),
-                    index: None,
-                    scale: 1,
-                    displacement: None,
-                })
-                .add_use(mir::Register::Virtual(vreg_idx))
-                .into(),
-        );
+        let instr_idx = cursor
+            .func
+            .create_instr()
+            .with_opcode(get_store_op(size).into())
+            .add_addr_mode(AddressMode {
+                base: Base::Frame(frame_idx),
+                index: None,
+                scale: 1,
+                displacement: None,
+            })
+            .add_use(mir::Register::Virtual(vreg_idx))
+            .idx();
+
+        cursor.insert_after(instr_idx);
     }
 
     fn load_reg_from_stack_slot(
         &self,
-        patch: &mut BasicBlockPatch,
-        idx: InstructionIdx,
+        cursor: &mut InstructionCursorMut,
         vreg_idx: VregIdx,
         frame_idx: FrameIdx,
         size: usize,
     ) {
-        patch.add_instruction(
-            idx,
-            InstrBuilder::new(get_load_op(size).into())
-                .add_def(mir::Register::Virtual(vreg_idx))
-                .add_addr_mode(AddressMode {
-                    base: Base::Frame(frame_idx),
-                    index: None,
-                    scale: 1,
-                    displacement: None,
-                })
-                .into(),
-        );
+        let instr_idx = cursor
+            .func
+            .create_instr()
+            .with_opcode(get_load_op(size).into())
+            .add_def(mir::Register::Virtual(vreg_idx))
+            .add_addr_mode(AddressMode {
+                base: Base::Frame(frame_idx),
+                index: None,
+                scale: 1,
+                displacement: None,
+            })
+            .idx();
+
+        cursor.insert_after(instr_idx);
     }
 
     fn is_move_op(&self, opcode: mir::Opcode) -> bool {
@@ -201,11 +203,13 @@ impl super::Target for Target {
     }
 }
 
-impl InstrBuilder {
-    pub fn add_addr_mode(mut self, addr_mode: AddressMode) -> Self {
-        let len = self.0.operands.len();
+impl InstructionBuilder<'_> {
+    pub fn add_addr_mode(&mut self, addr_mode: AddressMode) -> &mut Self {
+        let mut operands = &mut self.func.instructions[self.state].operands;
+        let len = operands.len();
 
-        addr_mode.write(&mut self.0.operands, len.into());
+        // TODO: this shouldn't write into operands vec directly, it should call Function::add_operand
+        addr_mode.write(&mut operands, len.into());
 
         self
     }

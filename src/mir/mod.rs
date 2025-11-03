@@ -6,21 +6,22 @@ pub mod pass;
 pub mod passes;
 
 use crate::{FunctionIdx, Global, GlobalIdx, macros::usize_wrapper};
-pub use basic_block::{BasicBlock, BasicBlockPatch};
+pub use basic_block::{
+    BasicBlock, BlockIdx, Cursor as BasicBlockCursor, CursorMut as BasicBlockCursorMut,
+};
 use derive_more::From;
-pub use function::{Cursor as FunctionCursor, FrameIdx, Function, RegisterClass, VregIdx};
+pub use function::{FrameIdx, Function, RegisterClass, VregIdx};
 use index_vec::{IndexVec, define_index_type};
-pub use instruction::{Builder as InstrBuilder, Instruction, InstructionIdx};
+pub use instruction::{
+    Builder as InstrBuilder, Cursor as InstructionCursor, CursorMut as InstructionCursorMut,
+    Instruction, InstructionIdx, ManualBuilder as InstructionBuilder,
+};
 pub use opcode::{GenericOpcode, Opcode};
 
 usize_wrapper! {PhysicalRegister}
 
 define_index_type! {
     pub struct OperandIdx = usize;
-}
-
-define_index_type! {
-    pub struct BlockIdx = usize;
 }
 
 #[derive(Debug)]
@@ -30,7 +31,7 @@ pub struct Module {
     pub functions: IndexVec<FunctionIdx, Function>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum RegisterRole {
     Def,
     Use,

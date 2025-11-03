@@ -1,9 +1,6 @@
 use super::Opcode;
 use crate::{
-    mir::{
-        self, BasicBlock, BasicBlockPatch, BlockIdx, FrameIdx, Function, InstrBuilder, Instruction,
-        InstructionIdx, Operand, PhysicalRegister, function::FunctionPatch,
-    },
+    mir::{self, FrameIdx, Function, InstructionIdx, Operand, PhysicalRegister},
     pass::{Context, Pass},
     targets::{
         Abi, RegisterInfo, Target,
@@ -13,8 +10,6 @@ use crate::{
         },
     },
 };
-use index_vec::index_vec;
-use std::collections::HashSet;
 
 #[derive(Default)]
 pub struct PrologEpilogInserter;
@@ -53,69 +48,92 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
             .map(|object| object.size)
             .sum::<usize>()
             .next_multiple_of(16);
-        let mut bb = BasicBlock {
-            name: "prolog".into(),
-            instructions: index_vec![
-                InstrBuilder::new(Opcode::Push64r.into())
-                    .add_use(mir::Register::Physical(Register::Rbp.into()))
-                    .into(),
-                InstrBuilder::new(Opcode::Mov64rr.into())
-                    .add_def(mir::Register::Physical(Register::Rbp.into()))
-                    .add_use(mir::Register::Physical(Register::Rsp.into()))
-                    .into(),
-            ],
-            successors: HashSet::from([1.into()]),
-        };
+        let prolog_bb_idx = func.create_block("prolog".into());
+        let old_head_bb_idx = func.block_head.unwrap();
+
+        func.blocks[prolog_bb_idx]
+            .successors
+            .insert(old_head_bb_idx);
+        func.block_cursor_mut().insert_after(prolog_bb_idx);
+
+        {
+            let push_instr_idx = func
+                .create_instr()
+                .with_opcode(Opcode::Push64r.into())
+                .add_use(mir::Register::Physical(Register::Rbp.into()))
+                .idx();
+            let mov_instr_idx = func
+                .create_instr()
+                .with_opcode(Opcode::Mov64rr.into())
+                .add_def(mir::Register::Physical(Register::Rbp.into()))
+                .add_use(mir::Register::Physical(Register::Rsp.into()))
+                .idx();
+            let mut cursor = func.instr_cursor_mut(prolog_bb_idx);
+
+            cursor.insert_after(push_instr_idx);
+            cursor.insert_after(mov_instr_idx);
+        }
 
         if stack_frame_size > 0 {
-            bb.instructions.push(
-                InstrBuilder::new(Opcode::Sub64ri.into())
-                    .add_use(mir::Register::Physical(Register::Rsp.into()))
-                    .add_operand(Operand::Immediate(stack_frame_size as u64))
-                    .into(),
-            );
+            let instr_idx = func
+                .create_instr()
+                .with_opcode(Opcode::Sub64ri.into())
+                .add_use(mir::Register::Physical(Register::Rsp.into()))
+                .add_operand(Operand::Immediate(stack_frame_size as u64))
+                .idx();
+
+            func.instr_cursor_mut(prolog_bb_idx)
+                .at_tail()
+                .insert_after(instr_idx);
         }
 
         for (reg, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
-            bb.instructions.push(
-                InstrBuilder::new(Opcode::Mov64mr.into())
-                    .add_addr_mode(AddressMode {
-                        base: Base::Frame(*frame_idx),
-                        index: None,
-                        scale: 1,
-                        displacement: None,
-                    })
-                    .add_use(mir::Register::Physical(*reg))
-                    .into(),
-            );
+            let instr_idx = func
+                .create_instr()
+                .with_opcode(Opcode::Mov64mr.into())
+                .add_addr_mode(AddressMode {
+                    base: Base::Frame(*frame_idx),
+                    index: None,
+                    scale: 1,
+                    displacement: None,
+                })
+                .add_use(mir::Register::Physical(*reg))
+                .idx();
+
+            func.instr_cursor_mut(prolog_bb_idx)
+                .at_tail()
+                .insert_after(instr_idx);
         }
 
-        bb.instructions.push(
-            InstrBuilder::new(Opcode::Jmp.into())
-                .add_operand(BlockIdx::new(1).into())
-                .into(),
-        );
+        let instr_idx = func
+            .create_instr()
+            .with_opcode(Opcode::Jmp.into())
+            .add_operand(old_head_bb_idx.into())
+            .idx();
 
-        let mut patch = FunctionPatch::new();
+        func.instr_cursor_mut(prolog_bb_idx)
+            .at_tail()
+            .insert_after(instr_idx);
 
-        patch.add_basic_block(0.into(), bb);
-        patch.apply(func);
+        let mut bb_cursor = func.block_cursor_mut();
 
-        for bb in &mut func.blocks {
-            let terminator = bb.instructions.last().unwrap();
-
-            if terminator.opcode == Opcode::Ret.into() {
-                let mut patch = BasicBlockPatch::new();
-
-                patch.add_instruction(
-                    InstructionIdx::new(bb.instructions.len() - 1),
-                    Instruction::new(Opcode::Leave.into()),
-                );
-
-                for (reg, frame_idx) in used_callee_saved_regs.iter().zip(&regs_stack_slots) {
-                    patch.add_instruction(
-                        InstructionIdx::new(bb.instructions.len() - 1),
-                        InstrBuilder::new(Opcode::Mov64rm.into())
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            if let Some(tail) = bb_cursor.func.blocks[bb_idx].instruction_tail
+                && bb_cursor.func.instructions[tail].opcode == Opcode::Ret.into()
+            {
+                let leave_instr_idx = bb_cursor
+                    .func
+                    .create_instr()
+                    .with_opcode(Opcode::Leave.into())
+                    .idx();
+                let instr_indices: Vec<InstructionIdx> = used_callee_saved_regs
+                    .iter()
+                    .zip(&regs_stack_slots)
+                    .map(|(reg, frame_idx)| {
+                        bb_cursor
+                            .func
+                            .create_instr()
+                            .with_opcode(Opcode::Mov64rm.into())
                             .add_use(mir::Register::Physical(*reg))
                             .add_addr_mode(AddressMode {
                                 base: Base::Frame(*frame_idx),
@@ -123,11 +141,21 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
                                 scale: 1,
                                 displacement: None,
                             })
-                            .into(),
-                    );
+                            .idx()
+                    })
+                    .collect();
+                let mut cursor = bb_cursor
+                    .func
+                    .instr_cursor_mut(bb_cursor.idx().unwrap())
+                    .at_tail();
+
+                cursor.move_prev();
+
+                for instr_idx in instr_indices {
+                    cursor.insert_after(instr_idx);
                 }
 
-                patch.apply(bb);
+                cursor.insert_after(leave_instr_idx);
             }
         }
     }

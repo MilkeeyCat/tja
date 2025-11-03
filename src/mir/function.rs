@@ -1,12 +1,18 @@
+use std::collections::HashMap;
+
 use super::{Operand, Register};
 use crate::{
-    dataflow::Liveness,
+    dataflow::{DefsUses, Liveness},
     datastructures::vecset::VecSet,
     macros::usize_wrapper,
-    mir::{BasicBlock, BlockIdx, Instruction, InstructionIdx},
+    mir::{
+        BasicBlock, BasicBlockCursor, BasicBlockCursorMut, BlockIdx, Instruction,
+        InstructionCursor, InstructionCursorMut, InstructionIdx, instruction,
+    },
     ty::TyIdx,
 };
-use index_vec::{IndexVec, define_index_type, index_vec};
+use index_vec::{IndexVec, define_index_type};
+use typed_generational_arena::StandardArena;
 
 usize_wrapper! {RegisterClass}
 
@@ -79,39 +85,84 @@ pub struct Function {
     pub name: String,
     pub vreg_info: VregInfo,
     pub frame_info: FrameInfo,
-    pub blocks: IndexVec<BlockIdx, BasicBlock>,
+    pub blocks: StandardArena<BasicBlock>,
+    pub instructions: StandardArena<Instruction>,
+    pub block_head: Option<BlockIdx>,
+    pub block_tail: Option<BlockIdx>,
 }
 
 impl Function {
-    pub fn liveness(&self) -> IndexVec<BlockIdx, Liveness> {
-        let defs_uses: Vec<_> = self.blocks.iter().map(|bb| bb.defs_uses()).collect();
-        let mut liveness = index_vec![Liveness::default(); defs_uses.len()];
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            vreg_info: VregInfo::default(),
+            frame_info: FrameInfo::default(),
+            blocks: StandardArena::new(),
+            instructions: StandardArena::new(),
+            block_head: None,
+            block_tail: None,
+        }
+    }
+
+    pub fn liveness(&self) -> HashMap<BlockIdx, Liveness> {
+        let compute_defs_uses = |func: &Function, bb_idx: BlockIdx| {
+            let mut defs_uses = DefsUses::default();
+            let mut cursor = func.instr_cursor(bb_idx);
+
+            while cursor.move_next().is_some() {
+                let DefsUses { defs, uses } = cursor.current().unwrap().defs_uses();
+
+                defs_uses.defs.extend(defs);
+                defs_uses.uses.extend(uses);
+            }
+
+            defs_uses.uses = &defs_uses.uses - &defs_uses.defs;
+
+            defs_uses
+        };
+
+        let defs_uses = {
+            let mut defs_uses = HashMap::new();
+            let mut cursor = self.block_cursor();
+
+            while let Some(bb_idx) = cursor.move_next() {
+                defs_uses.insert(bb_idx, compute_defs_uses(cursor.func, bb_idx));
+            }
+
+            defs_uses
+        };
+        let mut liveness: HashMap<BlockIdx, Liveness> = defs_uses
+            .keys()
+            .map(|idx| (*idx, Liveness::default()))
+            .collect();
 
         loop {
             let mut done = true;
+            let mut cursor = self.block_cursor();
 
             // Some dude said that in reverse is better
-            for (i, (defs_uses, block)) in defs_uses.iter().zip(&self.blocks).enumerate().rev() {
+            while let Some(idx) = cursor.move_prev() {
+                let block = cursor.current().unwrap();
                 // out[v] = ∪ in[w] where w ∈ succ(v)
                 let live_out = block
                     .successors
                     .iter()
-                    .map(|id| liveness[*id].ins.clone())
+                    .map(|idx| liveness[idx].ins.clone())
                     .reduce(|acc, el| acc.union(&el).cloned().collect())
                     .unwrap_or_default();
                 // in[v] = use(v) ∪ (out[v] - def(v))
-                let live_in = defs_uses
+                let live_in = defs_uses[&idx]
                     .uses
-                    .union(&(&liveness[i].outs - &defs_uses.defs))
+                    .union(&(&liveness[&idx].outs - &defs_uses[&idx].defs))
                     .cloned()
                     .collect();
 
-                if &liveness[i].ins != &live_in || &liveness[i].outs != &live_out {
+                if &liveness[&idx].ins != &live_in || &liveness[&idx].outs != &live_out {
                     done &= false;
                 }
 
-                liveness[i].ins = live_in;
-                liveness[i].outs = live_out;
+                liveness.get_mut(&idx).unwrap().ins = live_in;
+                liveness.get_mut(&idx).unwrap().outs = live_out;
             }
 
             if done {
@@ -125,12 +176,10 @@ impl Function {
     pub fn registers(&self) -> VecSet<Register> {
         let mut registers = VecSet::new();
 
-        for bb in &self.blocks {
-            for instr in &bb.instructions {
-                for operand in &instr.operands {
-                    if let Operand::Register(reg, _) = operand {
-                        registers.insert(reg.clone());
-                    }
+        for (_, instr) in &self.instructions {
+            for operand in &instr.operands {
+                if let Operand::Register(reg, _) = operand {
+                    registers.insert(reg.clone());
                 }
             }
         }
@@ -141,175 +190,38 @@ impl Function {
     pub fn is_declaration(&self) -> bool {
         self.blocks.is_empty()
     }
-}
 
-pub struct FunctionPatch {
-    new_basic_blocks: Vec<(BlockIdx, BasicBlock)>,
-}
-
-impl FunctionPatch {
-    pub fn new() -> Self {
-        Self {
-            new_basic_blocks: Vec::new(),
-        }
+    pub fn add_operand(&mut self, instr_idx: InstructionIdx, operand: Operand) {
+        // TODO: store more info
+        self.instructions[instr_idx].operands.push(operand);
     }
 
-    pub fn add_basic_block(&mut self, bb_idx: BlockIdx, bb: BasicBlock) {
-        self.new_basic_blocks.push((bb_idx, bb));
+    pub fn add_implicit_def(&mut self, instr_idx: InstructionIdx, reg: Register) {
+        // TODO: store more info
+        self.instructions[instr_idx].implicit_defs.insert(reg);
     }
 
-    pub fn apply(self, func: &mut Function) {
-        let mut new_basic_blocks = self.new_basic_blocks;
-
-        new_basic_blocks.sort_by_key(|(instr_idx, _)| *instr_idx);
-
-        for (bb_idx, bb) in new_basic_blocks.into_iter().rev() {
-            for bb in &mut func.blocks[bb_idx..] {
-                for instr in &mut bb.instructions {
-                    for operand in &mut instr.operands {
-                        if let Operand::Block(idx) = operand {
-                            if *idx >= bb_idx {
-                                *idx = BlockIdx::new(idx.raw() + 1);
-                            }
-                        }
-                    }
-                }
-
-                bb.successors = std::mem::take(&mut bb.successors)
-                    .into_iter()
-                    .map(|idx| BlockIdx::new(idx.raw() + 1))
-                    .collect();
-            }
-            func.blocks.insert(bb_idx, bb);
-        }
-    }
-}
-
-pub struct Cursor<'a> {
-    pub func: &'a mut Function,
-
-    bb_idx: Option<BlockIdx>,
-    instr_idx: Option<InstructionIdx>,
-}
-
-impl<'a> Cursor<'a> {
-    pub fn new(func: &'a mut Function) -> Self {
-        Self {
-            func,
-            bb_idx: None,
-            instr_idx: None,
-        }
+    pub fn create_block(&mut self, name: String) -> BlockIdx {
+        self.blocks.insert(BasicBlock::new(name))
     }
 
-    pub fn get_bb_idx(&self) -> Option<BlockIdx> {
-        self.bb_idx
+    pub fn block_cursor(&self) -> BasicBlockCursor<'_> {
+        BasicBlockCursor::new(self)
     }
 
-    pub fn get_instr_idx(&self) -> Option<InstructionIdx> {
-        self.instr_idx
+    pub fn block_cursor_mut(&mut self) -> BasicBlockCursorMut<'_> {
+        BasicBlockCursorMut::new(self)
     }
 
-    pub fn set_bb_idx(&mut self, idx: Option<BlockIdx>) {
-        self.bb_idx = idx;
+    pub fn instr_cursor(&self, idx: BlockIdx) -> InstructionCursor<'_> {
+        InstructionCursor::new(self, idx)
     }
 
-    pub fn set_instr_idx(&mut self, idx: Option<InstructionIdx>) {
-        self.instr_idx = idx;
+    pub fn instr_cursor_mut(&mut self, idx: BlockIdx) -> InstructionCursorMut<'_> {
+        InstructionCursorMut::new(self, idx)
     }
 
-    pub fn get_prev_bb_idx(&self) -> Option<BlockIdx> {
-        match self.bb_idx {
-            Some(idx) => (idx > BlockIdx::from(0)).then(|| idx - 1),
-            None => {
-                let len = self.func.blocks.len();
-
-                (len > 0).then(|| BlockIdx::from(len - 1))
-            }
-        }
-    }
-
-    pub fn get_prev_instr_idx(&self) -> Option<InstructionIdx> {
-        match self.instr_idx {
-            Some(idx) => (idx > InstructionIdx::from(0)).then(|| idx - 1),
-            None => {
-                let len = self.get_bb().instructions.len();
-
-                (len > 0).then(|| InstructionIdx::from(len - 1))
-            }
-        }
-    }
-
-    pub fn prev_bb_idx(&mut self) -> Option<BlockIdx> {
-        self.bb_idx = self.get_prev_bb_idx();
-
-        self.bb_idx
-    }
-
-    pub fn prev_instr_idx(&mut self) -> Option<InstructionIdx> {
-        self.instr_idx = self.get_prev_instr_idx();
-
-        self.instr_idx
-    }
-
-    pub fn get_next_bb_idx(&self) -> Option<BlockIdx> {
-        let idx = self.bb_idx.map(|idx| idx + 1).unwrap_or(0.into());
-
-        self.func.blocks.get(idx).map(|_| idx)
-    }
-
-    pub fn get_next_instr_idx(&self) -> Option<InstructionIdx> {
-        let idx = self.instr_idx.map(|idx| idx + 1).unwrap_or(0.into());
-
-        self.get_bb().instructions.get(idx).map(|_| idx)
-    }
-
-    pub fn next_bb_idx(&mut self) -> Option<BlockIdx> {
-        self.bb_idx = self.get_next_bb_idx();
-
-        self.bb_idx
-    }
-
-    pub fn next_instr_idx(&mut self) -> Option<InstructionIdx> {
-        self.instr_idx = self.get_next_instr_idx();
-
-        self.instr_idx
-    }
-
-    pub fn get_bb(&self) -> &BasicBlock {
-        &self.func.blocks[self.bb_idx.unwrap()]
-    }
-
-    pub fn get_instr(&self) -> &Instruction {
-        &self.get_bb().instructions[self.instr_idx.unwrap()]
-    }
-
-    pub fn get_bb_mut(&mut self) -> &mut BasicBlock {
-        &mut self.func.blocks[self.bb_idx.unwrap()]
-    }
-
-    pub fn get_instr_mut(&mut self) -> &mut Instruction {
-        let idx = self.instr_idx.unwrap();
-
-        &mut self.get_bb_mut().instructions[idx]
-    }
-
-    pub fn create_bb_before(&mut self, name: String) -> BlockIdx {
-        let idx = self.bb_idx.unwrap_or(0.into());
-
-        self.func.blocks.insert(idx, BasicBlock::new(name));
-        self.bb_idx = Some(idx);
-        self.instr_idx = None;
-
-        idx
-    }
-
-    pub fn create_bb_after(&mut self, name: String) -> BlockIdx {
-        let idx = self.get_next_bb_idx().unwrap_or(self.func.blocks.len_idx());
-
-        self.func.blocks.insert(idx, BasicBlock::new(name));
-        self.bb_idx = Some(idx);
-        self.instr_idx = None;
-
-        idx
+    pub fn create_instr(&mut self) -> instruction::GenericBuilder<'_> {
+        instruction::GenericBuilder::new(self)
     }
 }

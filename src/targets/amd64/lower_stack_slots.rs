@@ -17,10 +17,14 @@ impl<'a, T: Target> Pass<'a, Function, T> for StackSlotsLowerer {
 
         let mut locations = HashMap::new();
         let mut stack_offset: isize = 0;
+        let mut bb_cursor = func.block_cursor_mut();
 
-        for bb in &mut func.blocks {
-            for instr in &mut bb.instructions {
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
+
+            while let Some(instr_idx) = instr_cursor.move_next() {
                 loop {
+                    let instr = instr_cursor.func.instructions.get_mut(instr_idx).unwrap();
                     let mut address_mode = None;
 
                     for (i, operand) in instr.operands.iter_mut().enumerate() {
@@ -29,8 +33,12 @@ impl<'a, T: Target> Pass<'a, Function, T> for StackSlotsLowerer {
                                 locations
                                     .entry(*idx)
                                     .or_insert_with(|| {
-                                        stack_offset +=
-                                            func.frame_info.get_stack_object(*idx).size as isize;
+                                        stack_offset += instr_cursor
+                                            .func
+                                            .frame_info
+                                            .get_stack_object(*idx)
+                                            .size
+                                            as isize;
 
                                         AddressMode {
                                             base: Base::Register(Register::Physical(
