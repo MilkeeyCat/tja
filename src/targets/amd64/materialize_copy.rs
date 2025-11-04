@@ -14,13 +14,19 @@ impl<'a, T: Target> Pass<'a, Function, T> for MaterializeCopy {
             return;
         }
 
-        for bb in &mut func.blocks {
-            for instr in &mut bb.instructions {
+        let mut bb_cursor = func.block_cursor_mut();
+
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
+
+            while let Some(instr_idx) = instr_cursor.move_next() {
+                let instr = instr_cursor.func.instructions.get_mut(instr_idx).unwrap();
+
                 if instr.is_copy() {
                     let size = match &instr.operands[0] {
                         Operand::Register(reg, _) => match reg {
                             Register::Virtual(idx) => {
-                                let ty = func.vreg_info.get_vreg(*idx).ty;
+                                let ty = instr_cursor.func.vreg_info.get_vreg(*idx).ty;
 
                                 ctx.target.abi().ty_size(ctx.ty_storage, ty)
                             }

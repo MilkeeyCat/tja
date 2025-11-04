@@ -15,11 +15,20 @@ impl<'a, T: Target> Pass<'a, Function, T> for SelectRegisterClass {
             return;
         }
 
-        for block in &func.blocks {
-            for instr in &block.instructions {
+        let mut bb_cursor = func.block_cursor_mut();
+
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
+
+            while let Some(instr_idx) = instr_cursor.move_next() {
+                let instr = instr_cursor.func.instructions.get_mut(instr_idx).unwrap();
+
                 for operand in &instr.operands {
                     if let Operand::Register(Register::Virtual(idx), RegisterRole::Def) = operand {
-                        let class = match ctx.ty_storage.get_ty(func.vreg_info.get_vreg(*idx).ty) {
+                        let class = match ctx
+                            .ty_storage
+                            .get_ty(instr_cursor.func.vreg_info.get_vreg(*idx).ty)
+                        {
                             Ty::Void => unreachable!(),
                             Ty::I8 => RegisterClass::Gpr8,
                             Ty::I16 => RegisterClass::Gpr16,
@@ -31,7 +40,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for SelectRegisterClass {
                             }
                         };
 
-                        func.vreg_info.set_class(*idx, class.into());
+                        instr_cursor.func.vreg_info.set_class(*idx, class.into());
                     }
                 }
             }

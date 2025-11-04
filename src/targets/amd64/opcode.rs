@@ -188,12 +188,16 @@ impl label {
 
     fn from_operands<T: Target, W: Write>(
         _printer: &AsmPrinter<T, W>,
-        _module: &Module,
+        module: &Module,
         fn_idx: FunctionIdx,
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
-            [Operand::Block(idx)] => Ok(format!(".L{}_{}", fn_idx.raw(), idx.raw())),
+            [Operand::Block(idx)] => Ok(format!(
+                ".L{}_{}",
+                fn_idx.raw(),
+                module.functions[fn_idx].blocks[*idx].name
+            )),
             _ => unreachable!(),
         }
     }

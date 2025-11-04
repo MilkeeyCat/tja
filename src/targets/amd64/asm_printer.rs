@@ -198,10 +198,20 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         write!(self.buf, ".global {}\n", func.name)?;
         write!(self.buf, "{}:\n", func.name)?;
 
-        for (bb_idx, bb) in func.blocks.iter().enumerate() {
-            write!(self.buf, ".L{}_{bb_idx}:\n", fn_idx.raw())?;
+        let mut bb_cursor = func.block_cursor();
 
-            for instr in &bb.instructions {
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            write!(
+                self.buf,
+                ".L{}_{}:\n",
+                fn_idx.raw(),
+                func.blocks[bb_cursor.idx().unwrap()].name
+            )?;
+
+            let mut instr_cursor = bb_cursor.func.instr_cursor(bb_idx);
+
+            while instr_cursor.move_next().is_some() {
+                let instr = instr_cursor.current().unwrap();
                 write!(self.buf, "\t")?;
 
                 Opcode::from(instr.opcode).write_instruction(

@@ -1,8 +1,8 @@
 use crate::{
     datastructures::vecset::VecSet,
     mir::{
-        BasicBlockPatch, BlockIdx, FrameIdx, Function, InstructionIdx, Operand, PhysicalRegister,
-        Register, RegisterRole, VregIdx,
+        BlockIdx, FrameIdx, Function, InstructionIdx, Operand, PhysicalRegister, Register,
+        RegisterRole, VregIdx,
     },
     pass::{Context, Pass},
     targets::{Abi, RegisterInfo, Target},
@@ -55,29 +55,32 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                     })
                     .collect();
 
-                for bb in &mut func.blocks {
-                    let mut patch = BasicBlockPatch::new();
+                let mut bb_cursor = func.block_cursor_mut();
 
-                    for (instr_idx, instr) in bb.instructions.iter_mut().enumerate() {
-                        for operand in &mut instr.operands {
-                            if let Operand::Register(Register::Virtual(idx), role) = operand
-                                && spills.contains_key(idx)
+                while let Some(bb_idx) = bb_cursor.move_next() {
+                    let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
+
+                    while instr_cursor.move_next().is_some() {
+                        for op_idx in 0..instr_cursor.current().unwrap().operands.len() {
+                            if let Operand::Register(Register::Virtual(idx), role) =
+                                instr_cursor.current().unwrap().operands[op_idx]
+                                && spills.contains_key(&idx)
                             {
-                                let frame_idx = spills[idx];
-                                let ty = func.vreg_info.get_vreg(*idx).ty;
+                                let frame_idx = spills[&idx];
+                                let ty = instr_cursor.func.vreg_info.get_vreg(idx).ty;
                                 let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
-                                let vreg_idx = func.vreg_info.create_vreg_with_class(
+                                let vreg_idx = instr_cursor.func.vreg_info.create_vreg_with_class(
                                     ty,
-                                    func.vreg_info.get_vreg(*idx).class.unwrap(),
+                                    instr_cursor.func.vreg_info.get_vreg(idx).class.unwrap(),
                                 );
 
-                                *idx = vreg_idx;
+                                instr_cursor.current_mut().unwrap().operands[op_idx] =
+                                    Operand::Register(Register::Virtual(vreg_idx), role);
 
                                 match role {
                                     RegisterRole::Def => {
                                         ctx.target.store_reg_to_stack_slot(
-                                            &mut patch,
-                                            InstructionIdx::new(instr_idx + 1),
+                                            &mut instr_cursor,
                                             vreg_idx,
                                             frame_idx,
                                             size,
@@ -85,8 +88,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                                     }
                                     RegisterRole::Use => {
                                         ctx.target.load_reg_from_stack_slot(
-                                            &mut patch,
-                                            instr_idx.into(),
+                                            &mut instr_cursor,
                                             vreg_idx,
                                             frame_idx,
                                             size,
@@ -96,29 +98,26 @@ impl<'a, T: Target> Pass<'a, Function, T> for Allocator {
                             }
                         }
                     }
-
-                    patch.apply(bb);
                 }
 
                 allocator = AllocatorImpl::new(func, ctx, spilled_nodes.into_iter().collect());
             } else {
                 let colors = std::mem::take(&mut allocator.color);
-                let mut patches = HashMap::new();
 
-                for (bb_idx, instr_idx) in &allocator.coalesced_moves {
-                    patches
-                        .entry(*bb_idx)
-                        .or_insert_with(|| BasicBlockPatch::new())
-                        .delete_instruction(*instr_idx)
+                for &(bb_idx, instr_idx) in &allocator.coalesced_moves {
+                    let mut cursor = func.instr_cursor_mut(bb_idx);
+
+                    cursor.set_idx(instr_idx);
+                    cursor.remove_current();
                 }
 
-                for (idx, patch) in patches {
-                    patch.apply(&mut func.blocks[idx]);
-                }
+                let mut bb_cursor = func.block_cursor_mut();
 
-                for bb in &mut func.blocks {
-                    for instr in bb.instructions.iter_mut() {
-                        for operand in &mut instr.operands {
+                while let Some(bb_idx) = bb_cursor.move_next() {
+                    let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
+
+                    while instr_cursor.move_next().is_some() {
+                        for operand in &mut instr_cursor.current_mut().unwrap().operands {
                             if let Operand::Register(Register::Virtual(idx), role) = operand {
                                 *operand = Operand::Register(
                                     Register::Physical(colors[idx]),
@@ -249,16 +248,15 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
     }
 
     fn build(&mut self) {
-        for ((bb_idx, bb), liveness) in self
-            .function
-            .blocks
-            .iter()
-            .enumerate()
-            .zip(self.function.liveness())
-        {
-            let mut live = liveness.outs;
+        let mut liveness = self.function.liveness();
+        let mut bb_cursor = self.function.block_cursor();
 
-            for (instr_idx, instr) in bb.instructions.iter().enumerate().rev() {
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            let mut live = std::mem::take(liveness.get_mut(&bb_idx).unwrap()).outs;
+            let mut instr_cursor = bb_cursor.func.instr_cursor(bb_idx);
+
+            while let Some(instr_idx) = instr_cursor.move_prev() {
+                let instr = instr_cursor.current().unwrap();
                 let defs_uses = instr.defs_uses();
 
                 if self.ctx.target.is_move_op(instr.opcode) {
@@ -521,7 +519,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
     fn coalesce(&mut self) {
         let (bb_idx, instr_idx) = self.worklist_moves.pop().unwrap();
 
-        let mv = &self.function.blocks[bb_idx].instructions[instr_idx];
+        let mv = &self.function.instructions[instr_idx];
         let (x, y) = {
             let defs_uses = mv.defs_uses();
 
@@ -598,7 +596,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
 
             self.frozen_moves.insert(mv);
 
-            let defs_uses = self.function.blocks[mv.0].instructions[mv.1].defs_uses();
+            let defs_uses = self.function.instructions[mv.1].defs_uses();
             let reg = if defs_uses.defs.iter().next().unwrap() == &Register::Virtual(*vreg_idx) {
                 defs_uses.uses.iter().next().unwrap()
             } else {
@@ -617,7 +615,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         )
                         .len()
             {
-                self.freeze_worklist.remove(&idx);
+                self.freeze_worklist.remove(idx);
                 self.simplify_worklist.push(*idx);
             }
         }

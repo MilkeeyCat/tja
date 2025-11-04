@@ -2,7 +2,7 @@ pub mod amd64;
 
 use crate::hir::passes::lower::FnLowering;
 use crate::mir::{
-    BasicBlockPatch, FrameIdx, InstructionIdx, Opcode, PhysicalRegister, RegisterClass, VregIdx,
+    FrameIdx, InstructionCursorMut, Opcode, PhysicalRegister, RegisterClass, VregIdx,
 };
 use crate::ty::{Storage, TyIdx};
 
@@ -22,16 +22,14 @@ pub trait Target {
 
     fn store_reg_to_stack_slot(
         &self,
-        patch: &mut BasicBlockPatch,
-        idx: InstructionIdx,
+        cursor: &mut InstructionCursorMut,
         vreg_idx: VregIdx,
         frame_idx: FrameIdx,
         size: usize,
     );
     fn load_reg_from_stack_slot(
         &self,
-        patch: &mut BasicBlockPatch,
-        idx: InstructionIdx,
+        cursor: &mut InstructionCursorMut,
         vreg_idx: VregIdx,
         frame_idx: FrameIdx,
         size: usize,

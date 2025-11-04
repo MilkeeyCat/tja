@@ -1,5 +1,5 @@
 use crate::{
-    mir::{BasicBlockPatch, Function, Instruction, Operand, RegisterRole},
+    mir::{Function, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -13,29 +13,30 @@ impl<'a, T: Target> Pass<'a, Function, T> for TwoAddressForm {
             return;
         }
 
-        for bb in &mut func.blocks {
-            let mut patch = BasicBlockPatch::new();
+        let mut bb_cursor = func.block_cursor_mut();
 
-            for (idx, instr) in &mut bb.instructions.iter_mut().enumerate() {
+        while let Some(bb_idx) = bb_cursor.move_next() {
+            let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx).at_head();
+
+            while instr_cursor.move_next().is_some() {
+                let instr = instr_cursor.current_mut().unwrap();
+
                 if let Some((lhs, rhs)) = std::mem::take(&mut instr.tied_operands) {
-                    patch.add_instruction(
-                        idx.into(),
-                        Instruction::copy(
-                            instr.operands[lhs].clone().try_into().unwrap(),
-                            instr.operands[rhs].clone(),
-                        ),
-                    );
-                    instr.operands.remove(rhs);
-
+                    let instr = instr_cursor.current_mut().unwrap();
+                    let rhs = instr.operands.remove(rhs);
                     let reg = match instr.operands[lhs].clone() {
-                        Operand::Register(r, RegisterRole::Def) => r,
+                        Operand::Register(reg, RegisterRole::Def) => reg,
                         _ => unreachable!(),
                     };
+
                     instr.implicit_uses.insert(reg);
+
+                    let lhs = instr.operands[lhs].clone().try_into().unwrap();
+                    let instr_idx = instr_cursor.func.create_instr().copy(lhs, rhs);
+
+                    instr_cursor.insert_before(instr_idx);
                 }
             }
-
-            patch.apply(bb);
         }
     }
 }
