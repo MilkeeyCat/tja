@@ -4,6 +4,7 @@ mod instruction;
 mod opcode;
 pub mod pass;
 pub mod passes;
+pub mod pattern_match;
 
 use crate::{FunctionIdx, Global, GlobalIdx, macros::usize_wrapper};
 pub use basic_block::{
@@ -31,7 +32,7 @@ pub struct Module {
     pub functions: IndexVec<FunctionIdx, Function>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RegisterRole {
     Def,
     Use,
@@ -83,4 +84,12 @@ impl Operand {
             None
         }
     }
+}
+
+pub trait OperandInfo {
+    /// Number of [Operand]s the operand consists of.
+    ///
+    /// Targets can define custom operands like and address operand for example,
+    /// which can take multiple mir operands in [Instruction::operands].
+    const LEN: usize;
 }
