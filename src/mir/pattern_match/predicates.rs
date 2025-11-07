@@ -1,8 +1,11 @@
 use super::operands::{Immediate, Register};
-use crate::mir::{self, PhysicalRegister, RegisterRole};
+use crate::{
+    mir::{self, PhysicalRegister, RegisterRole, pattern_match::PatternCtx},
+    targets::Target,
+};
 
-pub trait Predicate<O> {
-    fn matches(&self, operand: &O) -> bool;
+pub trait Predicate<T: Target, O> {
+    fn matches(&self, ctx: &PatternCtx<'_, '_, T>, operand: &O) -> bool;
 }
 
 pub struct Eq<T>(T);
@@ -13,14 +16,14 @@ impl<T> Eq<T> {
     }
 }
 
-impl Predicate<Immediate> for Eq<u64> {
-    fn matches(&self, value: &Immediate) -> bool {
+impl<T: Target> Predicate<T, Immediate> for Eq<u64> {
+    fn matches(&self, _ctx: &PatternCtx<'_, '_, T>, value: &Immediate) -> bool {
         value.0 == self.0
     }
 }
 
-impl Predicate<Register> for Eq<PhysicalRegister> {
-    fn matches(&self, value: &Register) -> bool {
+impl<T: Target> Predicate<T, Register> for Eq<PhysicalRegister> {
+    fn matches(&self, _ctx: &PatternCtx<'_, '_, T>, value: &Register) -> bool {
         value.0 == mir::Register::Physical(self.0)
     }
 }
@@ -33,8 +36,8 @@ impl Def {
     }
 }
 
-impl Predicate<Register> for Def {
-    fn matches(&self, value: &Register) -> bool {
+impl<T: Target> Predicate<T, Register> for Def {
+    fn matches(&self, _ctx: &PatternCtx<'_, '_, T>, value: &Register) -> bool {
         value.1 == RegisterRole::Def
     }
 }
@@ -47,8 +50,8 @@ impl Use {
     }
 }
 
-impl Predicate<Register> for Use {
-    fn matches(&self, value: &Register) -> bool {
+impl<T: Target> Predicate<T, Register> for Use {
+    fn matches(&self, _ctx: &PatternCtx<'_, '_, T>, value: &Register) -> bool {
         value.1 == RegisterRole::Use
     }
 }

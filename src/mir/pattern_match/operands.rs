@@ -9,11 +9,11 @@ use crate::{
 #[derive(Debug)]
 pub struct Immediate(pub u64);
 
-impl<'pred, T: Target, P> Pattern<'_, '_, '_, T, &[Operand]> for Value<'_, Immediate, P>
+impl<'pred, T: Target, P> Pattern<'_, '_, '_, T, &[Operand]> for Value<'_, T, Immediate, P>
 where
-    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<Immediate>>>,
+    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<T, Immediate>>>,
 {
-    fn matches(&mut self, _ctx: &PatternCtx<'_, '_, T>, operands: &[Operand]) -> bool {
+    fn matches(&mut self, ctx: &PatternCtx<'_, '_, T>, operands: &[Operand]) -> bool {
         // TODO: It should also check if the operand is vreg and go to the
         // instruction which defines the vreg and check if it's COPY with
         // Operand::Immediate. If so, set the value directly.
@@ -21,7 +21,7 @@ where
             Operand::Immediate(value) => {
                 let value = Immediate(*value);
 
-                if self.check_predicates(&value) {
+                if self.check_predicates(ctx, &value) {
                     if let Some(dest) = &mut self.value {
                         dest.write(value);
                     }

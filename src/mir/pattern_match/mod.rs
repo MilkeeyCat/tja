@@ -65,38 +65,38 @@ impl<'a, 'b, 'ctx, 'ops, T: Target> Pattern<'a, 'b, 'ctx, T, InstructionIdx>
     }
 }
 
-pub struct Value<'val, O: OperandInfo, P>
+pub struct Value<'val, T: Target, O: OperandInfo, P>
 where
-    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<O>>>,
+    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<T, O>>>,
 {
     value: Option<&'val mut Uninitialized<O>>,
     predicates: P,
 }
 
-impl<'val, O: OperandInfo, P> Value<'val, O, P>
+impl<'val, T: Target, O: OperandInfo, P> Value<'val, T, O, P>
 where
-    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<O>>>,
+    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<T, O>>>,
 {
     pub fn new(value: Option<&'val mut Uninitialized<O>>, predicates: P) -> Self {
         Self { value, predicates }
     }
 
-    fn check_predicates(&self, operand: &O) -> bool {
+    fn check_predicates(&self, ctx: &PatternCtx<T>, operand: &O) -> bool {
         (&self.predicates)
             .into_iter()
-            .all(|pred| pred.matches(operand))
+            .all(|pred| pred.matches(ctx, operand))
     }
 }
 
 impl<'ops, T: Target, O: OperandInfo + TryFrom<&'ops [Operand]>, P>
-    Pattern<'_, '_, '_, T, &'ops [Operand]> for Value<'_, O, P>
+    Pattern<'_, '_, '_, T, &'ops [Operand]> for Value<'_, T, O, P>
 where
-    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<O>>>,
+    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<T, O>>>,
 {
-    fn matches(&mut self, _ctx: &PatternCtx<'_, '_, T>, operands: &'ops [Operand]) -> bool {
+    fn matches(&mut self, ctx: &PatternCtx<'_, '_, T>, operands: &'ops [Operand]) -> bool {
         match O::try_from(operands) {
             Ok(value) => {
-                if self.check_predicates(&value) {
+                if self.check_predicates(ctx, &value) {
                     if let Some(dest) = &mut self.value {
                         dest.write(value);
                     }
@@ -112,10 +112,10 @@ where
 }
 
 impl<'a, 'b: 'ops, 'ctx, 'ops, 'val, T: Target, O: OperandInfo, P>
-    OperandPattern<'a, 'b, 'ctx, 'ops, T> for Value<'val, O, P>
+    OperandPattern<'a, 'b, 'ctx, 'ops, T> for Value<'val, T, O, P>
 where
-    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<O>>>,
-    Value<'val, O, P>: Pattern<'a, 'b, 'ctx, T, &'ops [Operand]>,
+    for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<T, O>>>,
+    Value<'val, T, O, P>: Pattern<'a, 'b, 'ctx, T, &'ops [Operand]>,
 {
     fn num(&self) -> usize {
         O::LEN
