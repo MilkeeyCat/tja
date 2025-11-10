@@ -8,9 +8,9 @@ from .instructions import *
 IselPat(
     MatchInstr(
         G_ADD,
-        Named("dst", Constrained(GPR32)),
-        Named("src1", Constrained(GPR32)),
-        Named("src2", Constrained(GPR32)),
+        Named("dst", GPR32),
+        Named("src1", GPR32),
+        Named("src2", GPR32),
     ),
     [ReplacementInstr(Add32rr, Use("dst"), Use("src1"), Use("src2"))],
 )

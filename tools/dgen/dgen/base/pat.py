@@ -1,6 +1,5 @@
 from .instruction import Instruction
-from .constraint import Constraint
-from .type import Type
+from .operands import Nameble
 
 
 class Pat:
@@ -13,9 +12,9 @@ class Match(Pat):
 
 class Named(Match):
     name: str
-    pat: Match
+    pat: Nameble
 
-    def __init__(self, name: str, pat: Match):
+    def __init__(self, name: str, pat: Nameble):
         self.name = name
         self.pat = pat
 
@@ -29,22 +28,6 @@ class Use(Replacement):
 
     def __init__(self, name: str):
         self.name = name
-
-
-class Constrained(Match, Replacement):
-    constraint: Constraint
-
-    def __init__(self, constraint: Constraint):
-        self.constraint = constraint
-
-
-class Const(Match, Replacement):
-    value: int | float
-    type: Type
-
-    def __init__(self, value: int | float, type: Type):
-        self.value = value
-        self.type = type
 
 
 class MatchInstr(Match):
@@ -67,12 +50,12 @@ class ReplacementInstr(Replacement):
 
 class IselPat:
     match: MatchInstr
-    replacement: list[ReplacementInstr]
+    replacement: ReplacementInstr
 
     def __init__(
         self,
         match: MatchInstr,
-        replacement: list[ReplacementInstr],
+        replacement: ReplacementInstr,
     ):
         self.match = match
         self.replacement = replacement

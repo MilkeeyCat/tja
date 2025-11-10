@@ -1,4 +1,5 @@
 from dgen.base.instruction import *
+from dgen.base.operands import *
 
 from .register_classes import *
 from .operands import *

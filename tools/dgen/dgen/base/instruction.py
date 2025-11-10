@@ -1,41 +1,8 @@
 from enum import Enum
 from typing import ClassVar
 
-from .register import Register
-from .constraint import *
+from .operands import Operand
 from .type import *
-
-
-class Operand:
-    operands_len: int = 1
-    emit_method: str = "emit_operand"
-
-
-class RegisterClass(Operand, Constraint):
-    name: str
-    registers: list[Register]
-
-    def __init__(self, name: str, type: Type, registers: list[Register]):
-        self.name = name
-        self.registers = registers
-
-        REGISTER_CLASSES.append(self)
-
-
-REGISTER_CLASSES: list[RegisterClass] = []
-
-
-class Immediate(Operand):
-    type: Type
-
-    def __init__(self, type: Type):
-        self.type = type
-
-
-I8IMM = Immediate(i8)
-I16IMM = Immediate(i16)
-I32IMM = Immediate(i32)
-I64IMM = Immediate(i64)
 
 
 class Instruction:
@@ -79,19 +46,11 @@ class TargetInstruction(Instruction):
 
         TARGET_INSTRUCTIONS.append(self)
 
-    def get_operand(self, name: str) -> tuple[int, Operand]:
-        offset = 0
-
+    def get_operand(self, name: str) -> Operand:
         for operands in [self.outs, self.ins]:
             for op_name, operand in operands:
                 if name == op_name:
-                    return (offset, operand)
-                elif (
-                    self.tied_operands is not None and self.tied_operands[1] == op_name
-                ):
-                    pass
-                else:
-                    offset += operand.operands_len
+                    return operand
 
         assert False
 

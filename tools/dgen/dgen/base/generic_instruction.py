@@ -1,4 +1,6 @@
-from .instruction import Instruction, Operand
+from dgen.base.operands import Operand, Register, Any
+
+from .instruction import Instruction
 
 
 class GenericInstruction(Instruction):
@@ -21,20 +23,14 @@ GENERIC_INSTRUCTIONS: list[GenericInstruction] = []
 #
 # In an instruction definition such as `G_ADD R0, R0`, both operands are of the
 # same type.
-class GenericRegister(Operand):
-    emit_method: str = ""
-
-
-class Unknown(Operand):
-    emit_method: str = ""
-
+class GenericRegister(Register):
     pass
 
 
-R0 = GenericRegister()
-R1 = GenericRegister()
+R0 = GenericRegister([])
+R1 = GenericRegister([])
 
-UNKNOWN = Unknown()
+UNKNOWN = Any([])
 
 G_ADD = GenericInstruction("Add", [("dst", R0)], [("src1", R0), ("src2", R0)])
 

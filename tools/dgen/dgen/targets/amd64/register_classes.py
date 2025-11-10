@@ -1,5 +1,4 @@
-from dgen.base.instruction import RegisterClass
-from dgen.base.constraint import *
+from dgen.base.register_class import RegisterClass
 from dgen.base.type import *
 
 from .registers import *

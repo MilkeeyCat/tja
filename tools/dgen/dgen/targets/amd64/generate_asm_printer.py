@@ -21,17 +21,21 @@ def generate_asm_printer(buf: TextIOWrapper):
     for instr in TARGET_INSTRUCTIONS:
         writer.writeln(f"Opcode::{instr.name} => {{")
         writer.indent()
+        writer.writeln("let mut i = 0;")
 
         for type, token in parse_asm_string(instr.asm):
             match type:
                 case TokenType.STRING:
                     writer.writeln(f'write!(self.buf, "{token}")?;')
                 case TokenType.IDENT:
-                    (offset, operand) = instr.get_operand(token)
+                    operand = instr.get_operand(token)
 
                     writer.writeln(
-                        f"self.{operand.emit_method}(module, &operands[{offset}..{offset+operand.operands_len}])?;"
+                        f"self.{operand.emit_method}(module, &operands[i..{operand.struct}::LEN])?;"
                     )
+                    # TODO: generate better code instead of suppressing the warning
+                    writer.writeln("#[allow(unused_assignments)]")
+                    writer.writeln(f"{{ i += {operand.struct}::LEN; }}")
 
         writer.dedent()
         writer.writeln("}")

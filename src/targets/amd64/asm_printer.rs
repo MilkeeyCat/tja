@@ -1,6 +1,6 @@
 use crate::{
     Const, FunctionIdx, Global,
-    mir::{self, Function, Instruction, Module, Operand},
+    mir::{self, Function, Module, Operand},
     targets::{Abi, RegisterInfo, Target, amd64::Opcode},
     ty::{self, Ty, TyIdx},
 };
@@ -12,7 +12,20 @@ pub struct AsmPrinter<'a, T: Target, W: Write> {
     pub buf: &'a mut W,
 }
 
-include!(concat!(env!("OUT_DIR"), "/amd64/asm_printer.rs"));
+mod generated {
+    use super::AsmPrinter;
+    use crate::targets::amd64::AddressMode;
+    use crate::{
+        mir::{
+            Instruction, Module, OperandInfo,
+            pattern_match::operands::{Immediate, Register},
+        },
+        targets::{Target, amd64::Opcode},
+    };
+    use std::fmt::Write;
+
+    include!(concat!(env!("OUT_DIR"), "/amd64/asm_printer.rs"));
+}
 
 macro_rules! emit_memory {
     ($size: ident) => {

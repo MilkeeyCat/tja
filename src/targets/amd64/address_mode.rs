@@ -1,6 +1,6 @@
 use crate::{
     FunctionIdx, GlobalIdx,
-    mir::{FrameIdx, Operand, OperandIdx, Register, RegisterRole},
+    mir::{FrameIdx, Operand, OperandIdx, OperandInfo, Register, RegisterRole},
 };
 use index_vec::IndexVec;
 
@@ -43,4 +43,8 @@ impl AddressMode {
             Operand::Immediate(self.displacement.unwrap_or(0) as u64),
         );
     }
+}
+
+impl OperandInfo for AddressMode {
+    const LEN: usize = 4;
 }

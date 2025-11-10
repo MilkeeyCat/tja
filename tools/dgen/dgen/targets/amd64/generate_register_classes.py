@@ -1,6 +1,6 @@
 from io import TextIOWrapper
 
-from dgen.base.instruction import REGISTER_CLASSES
+from dgen.base.register_class import REGISTER_CLASSES
 from dgen.writer import Writer
 
 
