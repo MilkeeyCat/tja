@@ -73,7 +73,7 @@ class HasRegisterClass(Predicate[Register]):
         assert False, "unimplemented"
 
 
-I8IMM = Immediate([HasType(i8)])
-I16IMM = Immediate([HasType(i16)])
-I32IMM = Immediate([HasType(i32)])
-I64IMM = Immediate([HasType(i64)])
+I8IMM = Immediate([HasType(I8)])
+I16IMM = Immediate([HasType(I16)])
+I32IMM = Immediate([HasType(I32)])
+I64IMM = Immediate([HasType(I64)])

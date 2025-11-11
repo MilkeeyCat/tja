@@ -5,7 +5,7 @@ from .registers import *
 
 GPR8 = RegisterClass(
     "Gpr8",
-    i8,
+    I8,
     [
         R15B,
         R14B,
@@ -28,7 +28,7 @@ GPR8 = RegisterClass(
 
 GPR16 = RegisterClass(
     "Gpr16",
-    i16,
+    I16,
     [
         R15W,
         R14W,
@@ -48,7 +48,7 @@ GPR16 = RegisterClass(
 )
 GPR32 = RegisterClass(
     "Gpr32",
-    i32,
+    I32,
     [
         R15D,
         R14D,
@@ -69,7 +69,7 @@ GPR32 = RegisterClass(
 
 GPR64 = RegisterClass(
     "Gpr64",
-    i64,
+    I64,
     [
         R15,
         R14,
