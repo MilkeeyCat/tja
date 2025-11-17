@@ -8,6 +8,7 @@ def generate_register_classes(buf: TextIOWrapper):
     writer = Writer(buf)
 
     writer.writeln("#[repr(usize)]")
+    writer.writeln("#[derive(Clone, Copy)]")
     writer.writeln("pub enum RegisterClass {")
     writer.indent()
 

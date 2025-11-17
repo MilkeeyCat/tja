@@ -54,7 +54,7 @@ impl<'a, 'b, 'ctx, 'ops, T: Target> Pattern<'a, 'b, 'ctx, T, InstructionIdx>
         let mut idx: OperandIdx = 0.into();
 
         for pat in &mut self.patterns {
-            if !pat.matches(ctx, instr.operands[idx..pat.num().into()].as_raw_slice()) {
+            if !pat.matches(ctx, instr.operands[idx..(idx + pat.num())].as_raw_slice()) {
                 return false;
             }
 
