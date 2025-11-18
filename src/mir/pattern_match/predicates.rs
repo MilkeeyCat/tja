@@ -2,7 +2,7 @@ use super::operands::{Immediate, Register};
 use crate::{
     mir::{self, PhysicalRegister, RegisterRole, pattern_match::PatternCtx},
     targets::{Abi, RegisterInfo, Target, amd64::RegisterClass},
-    ty::TyIdx,
+    ty::{Ty, TyIdx},
 };
 
 pub trait Predicate<T: Target, O> {
@@ -19,7 +19,7 @@ impl<T> Eq<T> {
 
 impl<T: Target> Predicate<T, Immediate> for Eq<u64> {
     fn matches(&self, _ctx: &PatternCtx<'_, '_, T>, value: &Immediate) -> bool {
-        value.0 == self.0
+        value.value == self.0
     }
 }
 
@@ -45,6 +45,21 @@ impl<T: Target> Predicate<T, Register> for HasType {
                 ctx.ctx.target.abi().ty_size(ctx.ctx.ty_storage, self.0)
                     == ctx.ctx.target.register_info().get_register_size(reg)
             }
+        }
+    }
+}
+
+impl<T: Target> Predicate<T, Immediate> for HasType {
+    fn matches(&self, ctx: &PatternCtx<'_, '_, T>, value: &Immediate) -> bool {
+        match value.ty {
+            Some(ty) => self.0 == ty,
+            None => match ctx.ctx.ty_storage.get_ty(self.0) {
+                Ty::I8 => value.value <= u8::MAX as u64,
+                Ty::I16 => value.value <= u16::MAX as u64,
+                Ty::I32 => value.value <= u32::MAX as u64,
+                Ty::I64 => value.value <= u64::MAX,
+                _ => false,
+            },
         }
     }
 }

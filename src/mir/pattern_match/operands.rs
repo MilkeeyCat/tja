@@ -4,10 +4,14 @@ use crate::{
         pattern_match::{Pattern, PatternCtx, Value, predicates::Predicate},
     },
     targets::Target,
+    ty::TyIdx,
 };
 
 #[derive(Debug)]
-pub struct Immediate(pub u64);
+pub struct Immediate {
+    pub value: u64,
+    pub ty: Option<TyIdx>,
+}
 
 impl<'pred, T: Target, P> Pattern<'_, '_, '_, T, &[Operand]> for Value<'_, T, Immediate, P>
 where
@@ -19,7 +23,10 @@ where
         // Operand::Immediate. If so, set the value directly.
         match &operands[0] {
             Operand::Immediate(value) => {
-                let value = Immediate(*value);
+                let value = Immediate {
+                    value: *value,
+                    ty: None,
+                };
 
                 if self.check_predicates(ctx, &value) {
                     if let Some(dest) = &mut self.value {
