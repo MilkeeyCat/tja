@@ -43,6 +43,15 @@ where
     }
 }
 
+impl IntoIterator for Immediate {
+    type Item = Operand;
+    type IntoIter = <[Self::Item; 1] as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [Operand::Immediate(self.value)].into_iter()
+    }
+}
+
 impl OperandInfo for Immediate {
     const LEN: usize = 1;
 }
@@ -58,6 +67,15 @@ impl TryFrom<&[Operand]> for Register {
             Operand::Register(reg, role) => Ok(Self(reg.clone(), *role)),
             _ => Err(()),
         }
+    }
+}
+
+impl IntoIterator for Register {
+    type Item = Operand;
+    type IntoIter = <[Self::Item; 1] as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [Operand::Register(self.0, self.1)].into_iter()
     }
 }
 

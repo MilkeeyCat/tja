@@ -47,7 +47,9 @@ impl<'a, 'b, 'ctx, 'ops, T: Target> Pattern<'a, 'b, 'ctx, T, InstructionIdx>
     fn matches(&mut self, ctx: &'a PatternCtx<'b, 'ctx, T>, instr_idx: InstructionIdx) -> bool {
         let instr = &ctx.func.instructions[instr_idx];
 
-        if self.opcode != instr.opcode {
+        if self.opcode != instr.opcode
+            || self.patterns.iter().map(|pat| pat.num()).sum::<usize>() > instr.operands.len()
+        {
             return false;
         }
 

@@ -13,6 +13,23 @@ use crate::{
 #[derive(Default)]
 pub struct InstructionSelection;
 
+mod generated {
+    use super::InstructionSelection;
+    use crate::{
+        mir::{
+            GenericOpcode, InstructionBuilder, InstructionCursorMut,
+            pattern_match::{operands::*, predicates::*, *},
+        },
+        pass::Context,
+        targets::{
+            Target,
+            amd64::{Opcode, RegisterClass},
+        },
+    };
+
+    include!(concat!(env!("OUT_DIR"), "/amd64/instruction_selector.rs"));
+}
+
 impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
     fn run(&self, func: &mut Function, ctx: &mut Context<'a, T>) {
         if func.is_declaration() {
@@ -25,6 +42,10 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
             let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
 
             while let Some(instr_idx) = instr_cursor.move_next() {
+                if self.select_instr(ctx, &mut instr_cursor) {
+                    continue;
+                }
+
                 let instr = instr_cursor.func.instructions.get_mut(instr_idx).unwrap();
 
                 match GenericOpcode::try_from(instr.opcode) {

@@ -368,7 +368,31 @@ impl<'a> GenericBuilder<'a> {
     }
 }
 
-impl ManualBuilder<'_> {
+impl<'a> ManualBuilder<'a> {
+    pub fn new(func: &'a mut Function, idx: InstructionIdx) -> Self {
+        Self { func, state: idx }
+    }
+
+    pub fn set_opcode(&mut self, opcode: Opcode) -> &mut Self {
+        self.func.instructions[self.state].opcode = opcode;
+
+        self
+    }
+
+    pub fn set_tied_operands(&mut self, lhs: OperandIdx, rhs: OperandIdx) -> &mut Self {
+        self.func.instructions[self.state].tied_operands = Some((lhs, rhs));
+
+        self
+    }
+
+    pub fn clear_inputs(&mut self) -> &mut Self {
+        self.func.instructions[self.state]
+            .operands
+            .retain(|op| matches!(op, Operand::Register(_, RegisterRole::Def)));
+
+        self
+    }
+
     pub fn add_operand(&mut self, operand: Operand) -> &mut Self {
         self.func.add_operand(self.state, operand);
 
@@ -395,5 +419,13 @@ impl ManualBuilder<'_> {
 
     pub fn idx(&self) -> InstructionIdx {
         self.state
+    }
+}
+
+impl<'a> Extend<Operand> for ManualBuilder<'a> {
+    fn extend<T: IntoIterator<Item = Operand>>(&mut self, iter: T) {
+        for operand in iter {
+            self.add_operand(operand);
+        }
     }
 }

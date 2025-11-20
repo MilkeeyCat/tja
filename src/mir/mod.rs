@@ -86,7 +86,7 @@ impl Operand {
     }
 }
 
-pub trait OperandInfo {
+pub trait OperandInfo: IntoIterator<Item = Operand> {
     /// Number of [Operand]s the operand consists of.
     ///
     /// Targets can define custom operands like and address operand for example,

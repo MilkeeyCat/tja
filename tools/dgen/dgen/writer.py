@@ -15,5 +15,8 @@ class Writer:
     def dedent(self):
         self.level -= 1
 
+    def write(self, s: str):
+        self.buf.write(" " * self.level * 4 + s)
+
     def writeln(self, s: str):
-        self.buf.write(" " * self.level * 4 + s + "\n")
+        self.write(s + "\n")

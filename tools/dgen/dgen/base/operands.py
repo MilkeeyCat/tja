@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, Self, TypeVar
 
+from .isel_generator_ctx import IselGeneratorCtx
 from .register_class import RegisterClass
 from .type import *
 
@@ -9,7 +10,11 @@ from .type import *
 # here for now
 class Nameble(ABC):
     @abstractmethod
-    def generate(self):
+    def define(self, name: str, ctx: IselGeneratorCtx):
+        pass
+
+    @abstractmethod
+    def generate_predicates(self, ctx: IselGeneratorCtx):
         pass
 
 
@@ -25,8 +30,12 @@ class Operand(Nameble):
         self.predicates = predicates
         self.emit_method = emit_method
 
-    def generate(self):
-        assert False, "unimplemented"
+    def define(self, name: str, ctx: IselGeneratorCtx):
+        ctx.writer.writeln(f"let mut {name} = Uninitialized::<{self.struct}>::new();")
+
+    def generate_predicates(self, ctx: IselGeneratorCtx):
+        for pred in self.predicates:
+            pred.generate(ctx)
 
 
 class Immediate(Operand):
@@ -49,7 +58,7 @@ T = TypeVar("T", bound=Operand)
 
 class Predicate(ABC, Generic[T]):
     @abstractmethod
-    def generate(self):
+    def generate(self, ctx: IselGeneratorCtx):
         pass
 
 
@@ -59,8 +68,8 @@ class HasType(Predicate[Immediate]):
     def __init__(self, type: Type):
         self.type = type
 
-    def generate(self):
-        assert False, "unimplemented"
+    def generate(self, ctx: IselGeneratorCtx):
+        ctx.writer.writeln(f"HasType::new({self.type.type_idx}.into()),")
 
 
 class HasRegisterClass(Predicate[Register]):
@@ -69,8 +78,20 @@ class HasRegisterClass(Predicate[Register]):
     def __init__(self, register_class: RegisterClass):
         self.register_class = register_class
 
-    def generate(self):
-        assert False, "unimplemented"
+    def generate(self, ctx: IselGeneratorCtx):
+        ctx.writer.writeln(
+            f"HasRegisterClass::new(RegisterClass::{self.register_class.name}.into()),"
+        )
+
+
+class Def(Predicate[Register]):
+    def generate(self, ctx: IselGeneratorCtx):
+        ctx.writer.writeln("Def::new(),")
+
+
+class Use(Predicate[Register]):
+    def generate(self, ctx: IselGeneratorCtx):
+        ctx.writer.writeln("Use::new(),")
 
 
 I8IMM = Immediate([HasType(I8)])

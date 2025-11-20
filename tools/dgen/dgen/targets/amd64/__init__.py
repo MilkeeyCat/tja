@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from dgen.base.generate_instruction_selector import generate_instruction_selector
 
 from .registers import *
 from .register_classes import *
@@ -23,3 +24,4 @@ def generate(out: str):
     generate_register_info(open(root / "register_info.rs", "w"))
     generate_asm_printer(open(root / "asm_printer.rs", "w"))
     generate_instruction_opcodes(open(root / "opcode.rs", "w"))
+    generate_instruction_selector(open(root / "instruction_selector.rs", "w"))
