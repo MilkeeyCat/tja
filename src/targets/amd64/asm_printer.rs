@@ -1,7 +1,7 @@
 use crate::{
     Const, FunctionIdx, Global,
     mir::{self, Function, Module, Operand},
-    targets::{Abi, RegisterInfo, Target, amd64::Opcode},
+    targets::{Abi, RegisterInfo, Target, amd64::ConditionCode},
     ty::{self, Ty, TyIdx},
 };
 use std::fmt::Write;
@@ -14,11 +14,11 @@ pub struct AsmPrinter<'a, T: Target, W: Write> {
 
 mod generated {
     use super::AsmPrinter;
-    use crate::targets::amd64::AddressMode;
+    use crate::targets::amd64::{AddressMode, ConditionCode};
     use crate::{
         mir::{
             Instruction, Module, OperandInfo,
-            pattern_match::operands::{Immediate, Register},
+            pattern_match::operands::{Block, Immediate, Register},
         },
         targets::{Target, amd64::Opcode},
     };
@@ -31,7 +31,7 @@ macro_rules! emit_memory {
     ($size: ident) => {
         paste::item! {
             fn [< emit_ $size _memory >](&mut self, module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
-                write!(self.buf, stringify!([< $size >] ptr))?;
+                write!(self.buf, "{} ", stringify!([< $size >] ptr))?;
 
                 self.emit_address(module, operands)
             }
@@ -70,6 +70,11 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
             [Operand::Immediate(value)] => {
                 write!(self.buf, "{value}")
             }
+            [Operand::Block(idx)] => write!(
+                self.buf,
+                ".L{}_{}",
+                0, _module.functions[0].blocks[*idx].name
+            ),
             _ => unreachable!(),
         }
     }
@@ -82,6 +87,8 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                 Operand::Immediate(scale),
                 Operand::Immediate(displacement),
             ] => {
+                write!(&mut self.buf, "[")?;
+
                 match base {
                     Operand::Register(_, _) => self.emit_operand(module, &[base.clone()])?,
                     Operand::Global(idx) => write!(&mut self.buf, "{}", module.globals[*idx].name)?,
@@ -126,6 +133,19 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
     emit_memory! {word}
     emit_memory! {dword}
     emit_memory! {qword}
+
+    fn emit_condition_code(
+        &mut self,
+        _module: &Module,
+        operands: &[mir::Operand],
+    ) -> std::fmt::Result {
+        match operands {
+            [Operand::Immediate(value)] => {
+                write!(self.buf, "{}", ConditionCode::from(*value).to_string())
+            }
+            _ => unreachable!(),
+        }
+    }
 
     fn emit_const(&mut self, c: Const, ty: TyIdx, module: &Module) -> std::fmt::Result {
         match c {
@@ -227,12 +247,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                 let instr = instr_cursor.current().unwrap();
                 write!(self.buf, "\t")?;
 
-                Opcode::from(instr.opcode).write_instruction(
-                    self,
-                    module,
-                    fn_idx,
-                    instr.operands.as_raw_slice(),
-                )?;
+                self.emit_instr(module, instr)?;
 
                 write!(self.buf, "\n")?;
             }

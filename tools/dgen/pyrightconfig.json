@@ -1,3 +1,4 @@
 {
-    "reportUnusedCallResult": false
+    "reportUnusedCallResult": false,
+    "reportInconsistentOverload": false
 }

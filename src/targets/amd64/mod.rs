@@ -15,7 +15,7 @@ mod sysv_calling_convention;
 use crate::{
     hir,
     mir::{
-        self, FrameIdx, InstructionBuilder, InstructionCursorMut, Operand, VregIdx,
+        self, FrameIdx, InstructionBuilder, InstructionCursorMut, Operand, OperandInfo, VregIdx,
         passes::{allocator::Allocator, two_address::TwoAddressForm},
     },
     pass::FunctionToModuleAdapter,
@@ -53,46 +53,6 @@ impl From<&Operand> for OperandKind {
             Operand::Immediate(_) => Self::Immediate,
             Operand::Global(_) | Operand::Function(_) | Operand::Block(_) => unimplemented!(),
         }
-    }
-}
-
-// The terms "above" and "below" are associated with the CF flag and refer to
-// the relationship between two unsigned integer values. The terms "greater" and
-// "less" are associated with the SF and OF flags and refer to the relationship
-// between two signed integer values.
-
-#[derive(Debug, Display, Eq, PartialEq)]
-#[repr(usize)]
-pub enum Condition {
-    #[display("a")]
-    Above,
-    #[display("ae")]
-    AboveEqual,
-    #[display("b")]
-    Below,
-    #[display("be")]
-    BelowEqual,
-    #[display("e")]
-    Equal,
-    #[display("ne")]
-    NotEqual,
-    #[display("g")]
-    Greater,
-    #[display("ge")]
-    GreaterEqual,
-    #[display("l")]
-    Less,
-    #[display("le")]
-    LessEqual,
-
-    Num,
-}
-
-impl From<usize> for Condition {
-    fn from(value: usize) -> Self {
-        assert!(value < Self::Num as usize);
-
-        unsafe { std::mem::transmute::<_, Self>(value) }
     }
 }
 
@@ -213,4 +173,69 @@ impl InstructionBuilder<'_> {
 
         self
     }
+}
+
+/// The terms "above" and "below" are associated with the CF flag and refer to
+/// the relationship between two unsigned integer values. The terms "greater" and
+/// "less" are associated with the SF and OF flags and refer to the relationship
+/// between two signed integer values.
+#[derive(Debug, Display, Eq, PartialEq)]
+#[repr(usize)]
+pub enum ConditionCode {
+    #[display("a")]
+    Above,
+    #[display("ae")]
+    AboveEqual,
+    #[display("b")]
+    Below,
+    #[display("be")]
+    BelowEqual,
+    #[display("e")]
+    Equal,
+    #[display("ne")]
+    NotEqual,
+    #[display("g")]
+    Greater,
+    #[display("ge")]
+    GreaterEqual,
+    #[display("l")]
+    Less,
+    #[display("le")]
+    LessEqual,
+
+    Num,
+}
+
+impl TryFrom<&[Operand]> for ConditionCode {
+    type Error = ();
+
+    fn try_from(value: &[Operand]) -> Result<Self, Self::Error> {
+        match &value[0] {
+            Operand::Immediate(value) if *value < Self::Num as u64 => unsafe {
+                Ok(std::mem::transmute::<_, Self>(value))
+            },
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<u64> for ConditionCode {
+    fn from(value: u64) -> Self {
+        assert!(value < Self::Num as u64);
+
+        unsafe { std::mem::transmute::<_, Self>(value) }
+    }
+}
+
+impl IntoIterator for ConditionCode {
+    type Item = Operand;
+    type IntoIter = <[Self::Item; 1] as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [Operand::Immediate(self as u64)].into_iter()
+    }
+}
+
+impl OperandInfo for ConditionCode {
+    const LEN: usize = 1;
 }
