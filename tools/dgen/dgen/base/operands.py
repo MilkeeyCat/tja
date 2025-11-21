@@ -48,6 +48,11 @@ class Register(Operand):
         super().__init__("Register", predicates, "emit_operand")
 
 
+class Block(Operand):
+    def __init__(self):
+        super().__init__("Block", [], "emit_operand")
+
+
 class Any(Operand):
     def __init__(self, predicates: list["Predicate[Self]"]):
         super().__init__("Operand", predicates, "emit_operand")
@@ -98,3 +103,5 @@ I8IMM = Immediate([HasType(I8)])
 I16IMM = Immediate([HasType(I16)])
 I32IMM = Immediate([HasType(I32)])
 I64IMM = Immediate([HasType(I64)])
+
+BLOCK = Block()
