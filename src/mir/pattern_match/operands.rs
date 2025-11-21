@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        self, Operand, OperandInfo, RegisterRole,
+        self, BlockIdx, Operand, OperandInfo, RegisterRole,
         pattern_match::{Pattern, PatternCtx, Value, predicates::Predicate},
     },
     targets::Target,
@@ -80,5 +80,32 @@ impl IntoIterator for Register {
 }
 
 impl OperandInfo for Register {
+    const LEN: usize = 1;
+}
+
+#[derive(Debug)]
+pub struct Block(BlockIdx);
+
+impl TryFrom<&[Operand]> for Block {
+    type Error = ();
+
+    fn try_from(value: &[Operand]) -> Result<Self, Self::Error> {
+        match &value[0] {
+            Operand::Block(idx) => Ok(Self(*idx)),
+            _ => Err(()),
+        }
+    }
+}
+
+impl IntoIterator for Block {
+    type Item = Operand;
+    type IntoIter = <[Self::Item; 1] as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [Operand::Block(self.0)].into_iter()
+    }
+}
+
+impl OperandInfo for Block {
     const LEN: usize = 1;
 }

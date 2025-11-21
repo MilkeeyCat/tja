@@ -10,7 +10,7 @@ def generate_asm_printer(buf: TextIOWrapper):
     writer.writeln("impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {")
     writer.indent()
     writer.writeln(
-        "fn emit_instr(&mut self, module: &Module, instr: &Instruction) -> std::fmt::Result {"
+        "fn emit_instr(&mut self, module: &Module, fn_idx: FunctionIdx, instr: &Instruction) -> std::fmt::Result {"
     )
     writer.indent()
     writer.writeln("let operands = instr.operands.as_raw_slice();")
@@ -40,7 +40,7 @@ def generate_asm_printer(buf: TextIOWrapper):
 
                     writer.writeln(f"let offset = {offset};")
                     writer.writeln(
-                        f"self.{operand.emit_method}(module, &operands[offset..offset + {operand.struct}::LEN])?;"
+                        f"self.{operand.emit_method}(module, fn_idx, &operands[offset..offset + {operand.struct}::LEN])?;"
                     )
 
         writer.dedent()

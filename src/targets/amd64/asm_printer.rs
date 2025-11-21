@@ -14,13 +14,16 @@ pub struct AsmPrinter<'a, T: Target, W: Write> {
 
 mod generated {
     use super::AsmPrinter;
-    use crate::targets::amd64::AddressMode;
     use crate::{
+        FunctionIdx,
         mir::{
             Instruction, Module, OperandInfo,
             pattern_match::operands::{Immediate, Register},
         },
-        targets::{Target, amd64::Opcode},
+        targets::{
+            Target,
+            amd64::{AddressMode, Opcode},
+        },
     };
     use std::fmt::Write;
 
@@ -30,10 +33,10 @@ mod generated {
 macro_rules! emit_memory {
     ($size: ident) => {
         paste::item! {
-            fn [< emit_ $size _memory >](&mut self, module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
+            fn [< emit_ $size _memory >](&mut self, module: &Module, fn_idx: FunctionIdx, operands: &[mir::Operand]) -> std::fmt::Result {
                 write!(self.buf, stringify!([< $size >] ptr))?;
 
-                self.emit_address(module, operands)
+                self.emit_address(module, fn_idx, operands)
             }
         }
     };
@@ -62,7 +65,12 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
         Ok(())
     }
 
-    fn emit_operand(&mut self, _module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
+    fn emit_operand(
+        &mut self,
+        module: &Module,
+        fn_idx: FunctionIdx,
+        operands: &[mir::Operand],
+    ) -> std::fmt::Result {
         match operands {
             [Operand::Register(mir::Register::Physical(reg), _)] => {
                 write!(self.buf, "{}", self.target.register_info().get_name(reg))
@@ -70,11 +78,22 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
             [Operand::Immediate(value)] => {
                 write!(self.buf, "{value}")
             }
+            [Operand::Block(idx)] => write!(
+                self.buf,
+                ".L{}_{}",
+                fn_idx.raw(),
+                module.functions[fn_idx].blocks[*idx].name
+            ),
             _ => unreachable!(),
         }
     }
 
-    fn emit_address(&mut self, module: &Module, operands: &[mir::Operand]) -> std::fmt::Result {
+    fn emit_address(
+        &mut self,
+        module: &Module,
+        fn_idx: FunctionIdx,
+        operands: &[mir::Operand],
+    ) -> std::fmt::Result {
         match operands {
             [
                 base,
@@ -83,7 +102,9 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                 Operand::Immediate(displacement),
             ] => {
                 match base {
-                    Operand::Register(_, _) => self.emit_operand(module, &[base.clone()])?,
+                    Operand::Register(_, _) => {
+                        self.emit_operand(module, fn_idx, &[base.clone()])?
+                    }
                     Operand::Global(idx) => write!(&mut self.buf, "{}", module.globals[*idx].name)?,
                     Operand::Function(idx) => {
                         write!(&mut self.buf, "{}", module.functions[*idx].name)?
@@ -95,7 +116,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                     Operand::Register(_, _) => {
                         write!(&mut self.buf, "+ ")?;
 
-                        self.emit_operand(module, &[index.clone()])?;
+                        self.emit_operand(module, fn_idx, &[index.clone()])?;
                     }
                     Operand::Immediate(0) => (),
                     _ => unreachable!(),
