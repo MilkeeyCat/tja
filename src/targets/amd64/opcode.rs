@@ -1,4 +1,4 @@
-use super::{AsmPrinter, Condition};
+use super::{AsmPrinter, ConditionCode};
 use crate::{
     FunctionIdx,
     mir::{self, GenericOpcode, Module, Operand, Register},
@@ -142,7 +142,7 @@ impl ccode {
         operands: &[Operand],
     ) -> Result<String, std::fmt::Error> {
         match operands {
-            [Operand::Immediate(value)] => Ok(Condition::from(*value as usize).to_string()),
+            [Operand::Immediate(value)] => Ok(ConditionCode::from(*value).to_string()),
             _ => unreachable!(),
         }
     }

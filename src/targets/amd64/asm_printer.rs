@@ -1,7 +1,10 @@
 use crate::{
     Const, FunctionIdx, Global,
     mir::{self, Function, Module, Operand},
-    targets::{Abi, RegisterInfo, Target, amd64::Opcode},
+    targets::{
+        Abi, RegisterInfo, Target,
+        amd64::{ConditionCode, Opcode},
+    },
     ty::{self, Ty, TyIdx},
 };
 use std::fmt::Write;
@@ -149,6 +152,20 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
     emit_memory! {word}
     emit_memory! {dword}
     emit_memory! {qword}
+
+    fn emit_condition_code(
+        &mut self,
+        _module: &Module,
+        _fn_idx: FunctionIdx,
+        operands: &[mir::Operand],
+    ) -> std::fmt::Result {
+        match operands {
+            [Operand::Immediate(value)] => {
+                write!(self.buf, "{}", ConditionCode::from(*value).to_string())
+            }
+            _ => unreachable!(),
+        }
+    }
 
     fn emit_const(&mut self, c: Const, ty: TyIdx, module: &Module) -> std::fmt::Result {
         match c {
