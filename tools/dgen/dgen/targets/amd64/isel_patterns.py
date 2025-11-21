@@ -9,5 +9,5 @@ from dgen.base.pat import Use
 
 IselPat(
     MatchInstr(G_ADD, Named("src1", GPR32), Named("src2", GPR32)),
-    ReplacementInstr(Add32rr, Use("src1"), Use("src2")),
+    ReplacementInstr(ADD32RR, Use("src1"), Use("src2")),
 )

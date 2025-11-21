@@ -21,11 +21,11 @@ mod generated {
         FunctionIdx,
         mir::{
             Instruction, Module, OperandInfo,
-            pattern_match::operands::{Immediate, Register},
+            pattern_match::operands::{Block, Immediate, Register},
         },
         targets::{
             Target,
-            amd64::{AddressMode, Opcode},
+            amd64::{AddressMode, ConditionCode, Opcode},
         },
     };
     use std::fmt::Write;
