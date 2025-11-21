@@ -34,7 +34,7 @@ macro_rules! emit_memory {
     ($size: ident) => {
         paste::item! {
             fn [< emit_ $size _memory >](&mut self, module: &Module, fn_idx: FunctionIdx, operands: &[mir::Operand]) -> std::fmt::Result {
-                write!(self.buf, stringify!([< $size >] ptr))?;
+                write!(self.buf, "{} ", stringify!([< $size >] ptr))?;
 
                 self.emit_address(module, fn_idx, operands)
             }
@@ -101,6 +101,8 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                 Operand::Immediate(scale),
                 Operand::Immediate(displacement),
             ] => {
+                write!(&mut self.buf, "[")?;
+
                 match base {
                     Operand::Register(_, _) => {
                         self.emit_operand(module, fn_idx, &[base.clone()])?
