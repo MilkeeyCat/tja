@@ -10,7 +10,7 @@ def generate_asm_printer(buf: TextIOWrapper):
     writer.writeln("impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {")
     writer.indent()
     writer.writeln(
-        "fn emit_instr(&mut self, module: &Module, fn_idx: FunctionIdx, instr: &Instruction) -> std::fmt::Result {"
+        "pub(super) fn emit_instr(&mut self, module: &Module, fn_idx: FunctionIdx, instr: &Instruction) -> std::fmt::Result {"
     )
     writer.indent()
     writer.writeln("let operands = instr.operands.as_raw_slice();")
@@ -46,8 +46,6 @@ def generate_asm_printer(buf: TextIOWrapper):
         writer.dedent()
         writer.writeln("}")
 
-    # TODO: remove the line below once generated Opcode enum is used
-    writer.writeln(f"_ => unreachable!(),")
     writer.dedent()
 
     writer.writeln("}")

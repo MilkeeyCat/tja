@@ -21,3 +21,15 @@ def generate_instruction_opcodes(buf: TextIOWrapper):
 
     writer.dedent()
     writer.writeln("}")
+
+    writer.writeln("")
+
+    writer.writeln(f"impl {TargetInstruction.enum} {{")
+    writer.indent()
+    writer.writeln("pub const fn num() -> usize {")
+    writer.indent()
+    writer.writeln(str(len(TARGET_INSTRUCTIONS)))
+    writer.dedent()
+    writer.writeln("}")
+    writer.dedent()
+    writer.writeln("}")

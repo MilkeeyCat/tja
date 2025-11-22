@@ -1,10 +1,7 @@
 use crate::{
     Const, FunctionIdx, Global,
     mir::{self, Function, Module, Operand},
-    targets::{
-        Abi, RegisterInfo, Target,
-        amd64::{ConditionCode, Opcode},
-    },
+    targets::{Abi, RegisterInfo, Target, amd64::ConditionCode},
     ty::{self, Ty, TyIdx},
 };
 use std::fmt::Write;
@@ -267,12 +264,7 @@ impl<'a, T: Target, W: Write> AsmPrinter<'a, T, W> {
                 let instr = instr_cursor.current().unwrap();
                 write!(self.buf, "\t")?;
 
-                Opcode::from(instr.opcode).write_instruction(
-                    self,
-                    module,
-                    fn_idx,
-                    instr.operands.as_raw_slice(),
-                )?;
+                self.emit_instr(module, fn_idx, instr)?;
 
                 write!(self.buf, "\n")?;
             }
