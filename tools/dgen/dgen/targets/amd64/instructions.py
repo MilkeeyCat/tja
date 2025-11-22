@@ -181,9 +181,8 @@ def test() -> list[list[TargetInstruction]]:
 LEA64 = TargetInstruction(
     "Lea64",
     [("dst", GPR64)],
-    [("src1", GPR64), ("src2", ADDR)],
-    "lea {dst}, {src2}",
-    ("dst", "src1"),
+    [("src", ADDR)],
+    "lea {dst}, {src}",
 )
 
 SHL64R8I = TargetInstruction(
