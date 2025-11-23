@@ -5,7 +5,7 @@ use crate::{
         Abi, Target,
         amd64::{
             address_mode::{AddressMode, Base},
-            opcode::{get_add_op, get_load_op, get_store_op},
+            opcode::{get_load_op, get_store_op},
         },
     },
 };
@@ -42,26 +42,10 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
             let mut instr_cursor = bb_cursor.func.instr_cursor_mut(bb_idx);
 
             while let Some(instr_idx) = instr_cursor.move_next() {
-                if self.select_instr(ctx, &mut instr_cursor) {
-                    continue;
-                }
-
                 let instr = instr_cursor.func.instructions.get_mut(instr_idx).unwrap();
 
                 match GenericOpcode::try_from(instr.opcode) {
                     Ok(opcode) => match opcode {
-                        GenericOpcode::Add => {
-                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = instr_cursor.func.vreg_info.get_vreg(**vreg_idx).ty;
-                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
-
-                            instr.opcode = get_add_op(
-                                (&instr.operands[0]).into(),
-                                (&instr.operands[1]).into(),
-                                size,
-                            );
-                            instr.tied_operands = Some((0.into(), 1.into()));
-                        }
                         GenericOpcode::Sub => unimplemented!(),
                         GenericOpcode::Mul => unimplemented!(),
                         GenericOpcode::SDiv => unimplemented!(),
@@ -174,6 +158,13 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             _ => unreachable!(),
                         },
                         GenericOpcode::Copy => (), // skip copy instructions at this step
+                        _ => {
+                            assert!(
+                                self.select_instr(ctx, &mut instr_cursor),
+                                "failed to select instruction for opcode {:?}",
+                                instr_cursor.current().unwrap().opcode
+                            );
+                        }
                     },
                     Err(_) => (),
                 }

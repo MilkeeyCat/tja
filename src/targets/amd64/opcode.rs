@@ -1,7 +1,4 @@
-use crate::{
-    mir::{self, GenericOpcode},
-    targets::amd64::OperandKind,
-};
+use crate::mir::{self, GenericOpcode};
 
 include!(concat!(env!("OUT_DIR"), "/amd64/opcode.rs"));
 
@@ -37,35 +34,4 @@ pub fn get_store_op(size: usize) -> Opcode {
         8 => Opcode::Mov64mr,
         _ => unreachable!(),
     }
-}
-
-pub fn get_add_op(dest: OperandKind, src: OperandKind, size: usize) -> mir::Opcode {
-    (match (dest, src, size) {
-        (OperandKind::Register, OperandKind::Register, 1) => Opcode::Add8rr,
-        (OperandKind::Register, OperandKind::Memory, 1) => Opcode::Add8rm,
-        (OperandKind::Memory, OperandKind::Register, 1) => Opcode::Add8mr,
-        (OperandKind::Memory, OperandKind::Immediate, 1) => Opcode::Add8mi,
-        (OperandKind::Register, OperandKind::Immediate, 1) => Opcode::Add8ri,
-
-        (OperandKind::Register, OperandKind::Register, 2) => Opcode::Add16rr,
-        (OperandKind::Register, OperandKind::Memory, 2) => Opcode::Add16rm,
-        (OperandKind::Memory, OperandKind::Register, 2) => Opcode::Add16mr,
-        (OperandKind::Memory, OperandKind::Immediate, 2) => Opcode::Add16mi,
-        (OperandKind::Register, OperandKind::Immediate, 2) => Opcode::Add16ri,
-
-        (OperandKind::Register, OperandKind::Register, 4) => Opcode::Add32rr,
-        (OperandKind::Register, OperandKind::Memory, 4) => Opcode::Add32rm,
-        (OperandKind::Memory, OperandKind::Register, 4) => Opcode::Add32mr,
-        (OperandKind::Memory, OperandKind::Immediate, 4) => Opcode::Add32mi,
-        (OperandKind::Register, OperandKind::Immediate, 4) => Opcode::Add32ri,
-
-        (OperandKind::Register, OperandKind::Register, 8) => Opcode::Add64rr,
-        (OperandKind::Register, OperandKind::Memory, 8) => Opcode::Add64rm,
-        (OperandKind::Memory, OperandKind::Register, 8) => Opcode::Add64mr,
-        (OperandKind::Memory, OperandKind::Immediate, 8) => Opcode::Add64mi,
-        (OperandKind::Register, OperandKind::Immediate, 8) => Opcode::Add64ri,
-
-        _ => unreachable!(),
-    })
-    .into()
 }
