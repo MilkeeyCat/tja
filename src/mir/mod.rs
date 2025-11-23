@@ -44,6 +44,15 @@ pub enum Register {
     Physical(PhysicalRegister),
 }
 
+impl Register {
+    pub fn expect_virtual(&self) -> &VregIdx {
+        match self {
+            Self::Virtual(idx) => idx,
+            _ => unreachable!("expected virtual register"),
+        }
+    }
+}
+
 impl TryFrom<Operand> for Register {
     type Error = ();
 
@@ -77,11 +86,17 @@ impl Operand {
         Self::Register(r, RegisterRole::Use)
     }
 
-    pub fn get_vreg_idx(&self) -> Option<&VregIdx> {
-        if let Self::Register(Register::Virtual(idx), _) = self {
-            Some(idx)
-        } else {
-            None
+    pub fn expect_register(&self) -> (&Register, &RegisterRole) {
+        match self {
+            Self::Register(reg, role) => (reg, role),
+            _ => unreachable!("expected register"),
+        }
+    }
+
+    pub fn expect_frame_idx(&self) -> &FrameIdx {
+        match self {
+            Self::Frame(idx) => idx,
+            _ => unreachable!("expected frame index"),
         }
     }
 }

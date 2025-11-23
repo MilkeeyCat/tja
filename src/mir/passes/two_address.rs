@@ -1,5 +1,5 @@
 use crate::{
-    mir::{Function, Operand, RegisterRole},
+    mir::{Function, RegisterRole},
     pass::{Context, Pass},
     targets::Target,
 };
@@ -24,12 +24,11 @@ impl<'a, T: Target> Pass<'a, Function, T> for TwoAddressForm {
                 if let Some((lhs, rhs)) = std::mem::take(&mut instr.tied_operands) {
                     let instr = instr_cursor.current_mut().unwrap();
                     let rhs = instr.operands.remove(rhs);
-                    let reg = match instr.operands[lhs].clone() {
-                        Operand::Register(reg, RegisterRole::Def) => reg,
-                        _ => unreachable!(),
+                    let (reg, RegisterRole::Def) = instr.operands[lhs].expect_register() else {
+                        unreachable!()
                     };
 
-                    instr.implicit_uses.insert(reg);
+                    instr.implicit_uses.insert(reg.clone());
 
                     let lhs = instr.operands[lhs].clone().try_into().unwrap();
                     let instr_idx = instr_cursor.func.create_instr().copy(lhs, rhs);

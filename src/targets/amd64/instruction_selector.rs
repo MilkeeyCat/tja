@@ -52,10 +52,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                         GenericOpcode::UDiv => unimplemented!(),
                         GenericOpcode::FrameIndex => {
                             let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Frame(idx) => Base::Frame(*idx),
-                                    _ => unreachable!(),
-                                },
+                                base: Base::Frame(*instr.operands[1].expect_frame_idx()),
                                 index: None,
                                 scale: 1,
                                 displacement: None,
@@ -66,10 +63,8 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             address_mode.write(&mut instr.operands, 1.into());
                         }
                         GenericOpcode::PtrAdd => {
-                            let base = match &instr.operands[1] {
-                                Operand::Register(r, _) => Base::Register(r.clone()),
-                                _ => unreachable!(),
-                            };
+                            let base =
+                                Base::Register(instr.operands[1].expect_register().0.clone());
                             let address_mode = match &instr.operands[2] {
                                 Operand::Immediate(offset) => AddressMode {
                                     base: base,
@@ -92,14 +87,11 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             address_mode.write(&mut instr.operands, 1.into());
                         }
                         GenericOpcode::Load => {
-                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = instr_cursor.func.vreg_info.get_vreg(**vreg_idx).ty;
+                            let vreg_idx = instr.operands[0].expect_register().0.expect_virtual();
+                            let ty = instr_cursor.func.vreg_info.get_vreg(*vreg_idx).ty;
                             let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
                             let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Register(r, _) => Base::Register(r.clone()),
-                                    _ => unreachable!(),
-                                },
+                                base: Base::Register(instr.operands[1].expect_register().0.clone()),
                                 index: None,
                                 scale: 1,
                                 displacement: None,
@@ -110,14 +102,11 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             address_mode.write(&mut instr.operands, 1.into());
                         }
                         GenericOpcode::Store => {
-                            let vreg_idx = &instr.operands[0].get_vreg_idx().unwrap();
-                            let ty = instr_cursor.func.vreg_info.get_vreg(**vreg_idx).ty;
+                            let vreg_idx = instr.operands[0].expect_register().0.expect_virtual();
+                            let ty = instr_cursor.func.vreg_info.get_vreg(*vreg_idx).ty;
                             let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
                             let address_mode = AddressMode {
-                                base: match &instr.operands[1] {
-                                    Operand::Register(r, _) => Base::Register(r.clone()),
-                                    _ => unreachable!(),
-                                },
+                                base: Base::Register(instr.operands[1].expect_register().0.clone()),
                                 index: None,
                                 scale: 1,
                                 displacement: None,

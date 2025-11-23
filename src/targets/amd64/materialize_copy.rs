@@ -1,6 +1,6 @@
 use super::OperandKind;
 use crate::{
-    mir::{Function, Operand, Register},
+    mir::{Function, Register},
     pass::{Context, Pass},
     targets::{Abi, RegisterInfo, Target},
 };
@@ -23,18 +23,15 @@ impl<'a, T: Target> Pass<'a, Function, T> for MaterializeCopy {
                 let instr = instr_cursor.func.instructions.get_mut(instr_idx).unwrap();
 
                 if instr.is_copy() {
-                    let size = match &instr.operands[0] {
-                        Operand::Register(reg, _) => match reg {
-                            Register::Virtual(idx) => {
-                                let ty = instr_cursor.func.vreg_info.get_vreg(*idx).ty;
+                    let size = match &instr.operands[0].expect_register().0 {
+                        Register::Virtual(idx) => {
+                            let ty = instr_cursor.func.vreg_info.get_vreg(*idx).ty;
 
-                                ctx.target.abi().ty_size(ctx.ty_storage, ty)
-                            }
-                            Register::Physical(reg) => {
-                                ctx.target.register_info().get_register_size(reg)
-                            }
-                        },
-                        _ => unreachable!(),
+                            ctx.target.abi().ty_size(ctx.ty_storage, ty)
+                        }
+                        Register::Physical(reg) => {
+                            ctx.target.register_info().get_register_size(reg)
+                        }
                     };
                     let opcode = match (
                         (&instr.operands[0]).into(),

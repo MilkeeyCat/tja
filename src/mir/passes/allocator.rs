@@ -549,37 +549,18 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             self.add_work_list(&u);
             self.add_work_list(&v);
         } else if matches!(u, Register::Physical(_))
-            && self.george_strat(
-                self.adjacent(match &v {
-                    Register::Virtual(idx) => idx,
-                    _ => unreachable!(),
-                }),
-                u.clone(),
-            )
+            && self.george_strat(self.adjacent(v.expect_virtual()), u.clone())
             || !matches!(u, Register::Physical(_))
                 && self.briggs_strat(
-                    self.adjacent(match &u {
-                        Register::Virtual(idx) => idx,
-                        _ => unreachable!(),
-                    })
-                    .union(&self.adjacent(match &v {
-                        Register::Virtual(idx) => idx,
-                        _ => unreachable!(),
-                    }))
-                    .cloned()
-                    .collect(),
-                    match &u {
-                        Register::Virtual(idx) => *idx,
-                        _ => unreachable!(),
-                    },
+                    self.adjacent(u.expect_virtual())
+                        .union(&self.adjacent(v.expect_virtual()))
+                        .cloned()
+                        .collect(),
+                    *u.expect_virtual(),
                 )
         {
-            let v = match &v {
-                Register::Virtual(idx) => idx,
-                Register::Physical(_) => unreachable!(),
-            };
             self.coalesced_moves.insert((bb_idx, instr_idx));
-            self.combine(&u, v);
+            self.combine(&u, v.expect_virtual());
             self.add_work_list(&u);
         } else {
             self.active_moves.insert((bb_idx, instr_idx));
