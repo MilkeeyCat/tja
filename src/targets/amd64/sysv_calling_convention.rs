@@ -583,7 +583,7 @@ impl CallingConvention for SysVAmd64 {
             let instr_idx = lowering
                 .mir_function
                 .create_instr()
-                .with_opcode(Opcode::Sub64ri.into())
+                .with_opcode(Opcode::Sub64ri32.into())
                 .add_use(mir::Register::Physical(Register::Rsp.into()))
                 .add_operand(Operand::Immediate(stack_offset as u64))
                 .idx();
@@ -612,7 +612,7 @@ impl CallingConvention for SysVAmd64 {
             let instr_idx = lowering
                 .mir_function
                 .create_instr()
-                .with_opcode(Opcode::Add64ri.into())
+                .with_opcode(Opcode::Add64ri32.into())
                 .add_use(mir::Register::Physical(Register::Rsp.into()))
                 .add_operand(Operand::Immediate(stack_offset as u64))
                 .idx();

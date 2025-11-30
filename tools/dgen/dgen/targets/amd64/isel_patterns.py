@@ -26,10 +26,13 @@ def add_pats():
         r = get_operand("r", size)
         i = get_operand("i", size)
 
-        IselPat(
-            MatchInstr(G_ADD, Named("src1", r), Named("src2", i)),
-            ReplacementInstr(get_instruction(f"ADD{size}RI"), Use("src1"), Use("src2")),
-        )
+        if size != 64:
+            IselPat(
+                MatchInstr(G_ADD, Named("src1", r), Named("src2", i)),
+                ReplacementInstr(
+                    get_instruction(f"ADD{size}RI"), Use("src1"), Use("src2")
+                ),
+            )
 
         IselPat(
             MatchInstr(G_ADD, Named("src1", r), Named("src2", r)),

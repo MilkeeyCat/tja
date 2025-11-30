@@ -77,7 +77,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for PrologEpilogInserter {
         if stack_frame_size > 0 {
             let instr_idx = func
                 .create_instr()
-                .with_opcode(Opcode::Sub64ri.into())
+                .with_opcode(Opcode::Sub64ri32.into())
                 .add_use(mir::Register::Physical(Register::Rsp.into()))
                 .add_operand(Operand::Immediate(stack_frame_size as u64))
                 .idx();
