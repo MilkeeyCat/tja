@@ -99,6 +99,13 @@ impl Operand {
             _ => unreachable!("expected frame index"),
         }
     }
+
+    pub fn expect_immediate(&self) -> &u64 {
+        match self {
+            Self::Immediate(value) => value,
+            _ => unreachable!("expected immediate"),
+        }
+    }
 }
 
 pub trait OperandInfo: IntoIterator<Item = Operand> {

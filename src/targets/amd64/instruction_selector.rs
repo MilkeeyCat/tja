@@ -4,6 +4,7 @@ use crate::{
     targets::{
         Abi, Target,
         amd64::{
+            ConditionCode,
             address_mode::{AddressMode, Base},
             opcode::{get_load_op, get_store_op},
         },
@@ -146,6 +147,42 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             }
                             _ => unreachable!(),
                         },
+                        GenericOpcode::ICmp => {
+                            let ty = instr_cursor
+                                .func
+                                .vreg_info
+                                .get_vreg(*instr.operands[2].expect_register().0.expect_virtual())
+                                .ty;
+                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
+                            let cond_code = crate::ConditionCode::from(
+                                *instr.operands.remove(1.into()).expect_immediate(),
+                            );
+                            let result =
+                                instr.operands.remove(0.into()).expect_register().0.clone();
+
+                            instr.opcode = match size {
+                                1 => super::Opcode::Cmp8rr,
+                                2 => super::Opcode::Cmp16rr,
+                                4 => super::Opcode::Cmp32rr,
+                                8 => super::Opcode::Cmp64rr,
+
+                                _ => unreachable!(),
+                            }
+                            .into();
+
+                            let idx = instr_cursor
+                                .func
+                                .create_instr()
+                                .with_opcode(super::Opcode::Setccr.into())
+                                .add_def(result)
+                                .add_operand(Operand::Immediate(
+                                    ConditionCode::from(cond_code) as u64
+                                ))
+                                .idx();
+
+                            instr_cursor.insert_after(idx);
+                            instr_cursor.move_prev();
+                        }
                         GenericOpcode::Copy => (), // skip copy instructions at this step
                         _ => {
                             assert!(

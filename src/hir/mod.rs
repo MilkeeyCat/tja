@@ -6,7 +6,7 @@ pub mod pass;
 pub mod passes;
 
 use crate::{
-    Const, GlobalIdx,
+    ConditionCode, Const, GlobalIdx,
     ty::{self, TyIdx},
 };
 pub use basic_block::{BasicBlock, BlockIdx, Builder as BasicBlockBuilder};
@@ -14,7 +14,7 @@ pub use derive_more::From;
 pub use function::Function;
 use index_vec::define_index_type;
 pub use module::{Module, ModuleIdx};
-use op::{BinOp, CmpOp};
+use op::BinOp;
 use std::collections::HashSet;
 
 define_index_type! {
@@ -121,7 +121,7 @@ pub enum Instruction {
         out: LocalIdx,
     },
     Icmp {
-        kind: CmpOp,
+        cond_code: ConditionCode,
         lhs: Operand,
         rhs: Operand,
         out: LocalIdx,

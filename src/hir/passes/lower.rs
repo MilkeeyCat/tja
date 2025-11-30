@@ -428,6 +428,24 @@ impl<'a, A: Abi> FnLowering<'a, A> {
 
                 self.instr_cursor_mut().insert_after(instr_idx);
             }
+            hir::Instruction::Icmp {
+                cond_code,
+                lhs,
+                rhs,
+                out,
+            } => {
+                let out = self.get_or_create_vreg(hir::Operand::Local(*out));
+                let lhs = self.get_or_create_vreg(lhs.clone());
+                let rhs = self.get_or_create_vreg(rhs.clone());
+                let instr_idx = self.mir_function.create_instr().icmp(
+                    Register::Virtual(out),
+                    *cond_code,
+                    Register::Virtual(lhs),
+                    Register::Virtual(rhs),
+                );
+
+                self.instr_cursor_mut().insert_after(instr_idx);
+            }
             hir::Instruction::Call {
                 operand,
                 arguments,

@@ -1,4 +1,4 @@
-from dgen.base.operands import Operand, Register, Any
+from dgen.base.operands import Operand, Register, Any, CCODE
 
 from .instruction import Instruction
 
@@ -55,5 +55,9 @@ G_STORE = GenericInstruction("Store", [], [("src1", R0), ("src2", UNKNOWN)])
 G_BR = GenericInstruction("Br", [], [("src", UNKNOWN)])
 
 G_GLOBAL_VALUE = GenericInstruction("GlobalValue", [("dst", R0)], [("src", UNKNOWN)])
+
+G_ICMP = GenericInstruction(
+    "ICmp", [("dst", R0)], [("cc", CCODE), ("src1", R1), ("src2", R1)]
+)
 
 G_COPY = GenericInstruction("Copy", [("dst", R0)], [("src", UNKNOWN)])

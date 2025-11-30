@@ -1,9 +1,9 @@
-use super::{
-    Branch, Function, Instruction, LocalIdx, LocalStorage, Operand, Terminator,
-    op::{BinOp, CmpOp},
-};
 use crate::{
-    hir::InstructionIdx,
+    ConditionCode,
+    hir::{
+        Branch, Function, Instruction, InstructionIdx, LocalIdx, LocalStorage, Operand, Terminator,
+        op::BinOp,
+    },
     ty::{self, Ty, TyIdx},
 };
 use index_vec::{IndexVec, define_index_type};
@@ -136,12 +136,12 @@ impl<'a> Builder<'a> {
         Operand::Local(idx)
     }
 
-    pub fn create_icmp(&mut self, lhs: Operand, rhs: Operand, kind: CmpOp) -> Operand {
+    pub fn create_icmp(&mut self, lhs: Operand, rhs: Operand, cond_code: ConditionCode) -> Operand {
         assert!(lhs.ty(self) == rhs.ty(self));
         let idx = self.create_local(self.ty_storage.i8_ty);
 
         self.get_bb_mut().instructions.push(Instruction::Icmp {
-            kind,
+            cond_code,
             lhs,
             rhs,
             out: idx,

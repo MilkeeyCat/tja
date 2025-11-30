@@ -198,6 +198,37 @@ SUB64RI32 = TargetInstruction(
 
 
 # ==============================================================================
+# CMP
+# ==============================================================================
+
+
+def cmp_rm_r(size: int):
+    instructions: list[TargetInstruction] = []
+
+    for variant in ["r", "m"]:
+        operand = get_operand(variant, size)
+
+        instructions.append(
+            TargetInstruction(
+                f"Cmp{size}{variant}r",
+                [],
+                [("src1", operand), ("src2", get_operand("r", size))],
+                "cmp {src1}, {src2}",
+            )
+        )
+
+    return instructions
+
+
+[
+    [CMP8RR, CMP8MR],
+    [CMP16RR, CMP16MR],
+    [CMP32RR, CMP32MR],
+    [CMP64RR, CMP64MR],
+] = [cmp_rm_r(size) for size in [8, 16, 32, 64]]
+
+
+# ==============================================================================
 # LEA
 # ==============================================================================
 
@@ -276,6 +307,16 @@ JMP = TargetInstruction("Jmp", [], [("dst", BLOCK)], "jmp {dst}")
 
 
 JCC = TargetInstruction("Jcc", [], [("dst", BLOCK), ("cc", CCODE)], "j{cc} {dst}")
+
+
+# ==============================================================================
+# SETCC
+# ==============================================================================
+
+
+SETCCR = TargetInstruction(
+    "Setccr", [], [("dst", GPR8), ("cc", CCODE)], "set{cc} {dst}"
+)
 
 
 # ==============================================================================

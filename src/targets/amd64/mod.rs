@@ -206,6 +206,27 @@ pub enum ConditionCode {
     Num,
 }
 
+impl From<crate::ConditionCode> for ConditionCode {
+    fn from(value: crate::ConditionCode) -> Self {
+        use crate::ConditionCode;
+
+        match value {
+            ConditionCode::Equal => Self::Equal,
+            ConditionCode::NotEqual => Self::NotEqual,
+
+            ConditionCode::UnsignedLessEqual => Self::BelowEqual,
+            ConditionCode::UnsignedLessThan => Self::Below,
+            ConditionCode::UnsignedGreaterEqual => Self::AboveEqual,
+            ConditionCode::UnsignedGreaterThan => Self::Above,
+
+            ConditionCode::SignedLessEqual => Self::LessEqual,
+            ConditionCode::SignedLessThan => Self::Less,
+            ConditionCode::SignedGreaterEqual => Self::GreaterEqual,
+            ConditionCode::SignedGreaterThan => Self::Greater,
+        }
+    }
+}
+
 impl TryFrom<&[Operand]> for ConditionCode {
     type Error = ();
 

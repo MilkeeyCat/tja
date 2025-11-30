@@ -6,19 +6,3 @@ pub enum BinOp {
     SDiv,
     UDiv,
 }
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum CmpOp {
-    Equal,
-    NotEqual,
-
-    UnsignedLessEqual,
-    UnsignedLessThan,
-    UnsignedGreaterEqual,
-    UnsignedGreaterThan,
-
-    SignedLessEqual,
-    SignedLessThan,
-    SignedGreaterEqual,
-    SignedGreaterThan,
-}

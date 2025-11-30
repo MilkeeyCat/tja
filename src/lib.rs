@@ -33,3 +33,34 @@ pub struct Global {
     pub ty: TyIdx,
     pub value: Option<Const>,
 }
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u64)]
+pub enum ConditionCode {
+    Equal,
+    NotEqual,
+
+    UnsignedLessEqual,
+    UnsignedLessThan,
+    UnsignedGreaterEqual,
+    UnsignedGreaterThan,
+
+    SignedLessEqual,
+    SignedLessThan,
+    SignedGreaterEqual,
+    SignedGreaterThan,
+}
+
+impl ConditionCode {
+    pub const fn num() -> usize {
+        10
+    }
+}
+
+impl From<u64> for ConditionCode {
+    fn from(value: u64) -> Self {
+        assert!(value < Self::num() as u64);
+
+        unsafe { std::mem::transmute::<_, Self>(value) }
+    }
+}

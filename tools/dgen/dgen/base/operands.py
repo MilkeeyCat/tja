@@ -53,6 +53,14 @@ class Block(Operand):
         super().__init__("Block", [], "emit_operand")
 
 
+class ConditionCode(Operand):
+    def __init__(self):
+        super().__init__("ConditionCode", [], "")
+
+
+CCODE = ConditionCode()
+
+
 class Any(Operand):
     def __init__(self, predicates: list["Predicate[Self]"]):
         super().__init__("Operand", predicates, "emit_operand")

@@ -1,4 +1,5 @@
 use crate::{
+    ConditionCode,
     dataflow::DefsUses,
     mir::{
         BlockIdx, FrameIdx, Function, GenericOpcode, Opcode, Operand, OperandIdx, Register,
@@ -364,6 +365,21 @@ impl<'a> GenericBuilder<'a> {
         self.with_opcode(GenericOpcode::Copy.into())
             .add_def(lhs)
             .add_operand(rhs)
+            .idx()
+    }
+
+    pub fn icmp(
+        self,
+        out: Register,
+        cond_code: ConditionCode,
+        lhs: Register,
+        rhs: Register,
+    ) -> InstructionIdx {
+        self.with_opcode(GenericOpcode::ICmp.into())
+            .add_def(out)
+            .add_operand(Operand::Immediate(cond_code as u64))
+            .add_use(lhs)
+            .add_use(rhs)
             .idx()
     }
 }
