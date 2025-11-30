@@ -120,6 +120,23 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                         GenericOpcode::Br => {
                             instr.opcode = super::Opcode::Jmp.into();
                         }
+                        GenericOpcode::BrCond => {
+                            instr.opcode = super::Opcode::Jcc.into();
+                            instr
+                                .operands
+                                .push(Operand::Immediate(ConditionCode::Equal as u64));
+
+                            let cond = instr.operands.remove(0.into()).expect_register().0.clone();
+                            let idx = instr_cursor
+                                .func
+                                .create_instr()
+                                .with_opcode(super::Opcode::Cmp8ri.into())
+                                .add_use(cond)
+                                .add_operand(Operand::Immediate(0))
+                                .idx();
+
+                            instr_cursor.insert_before(idx);
+                        }
                         GenericOpcode::GlobalValue => match instr.operands[1] {
                             Operand::Function(idx) => {
                                 let address_mode = AddressMode {

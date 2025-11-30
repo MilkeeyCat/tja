@@ -227,6 +227,13 @@ def cmp_rm_r(size: int):
     [CMP64RR, CMP64MR],
 ] = [cmp_rm_r(size) for size in [8, 16, 32, 64]]
 
+CMP8RI = TargetInstruction(
+    f"Cmp8ri",
+    [],
+    [("src1", GPR8), ("src2", I8IMM)],
+    "cmp {src1}, {src2}",
+)
+
 
 # ==============================================================================
 # LEA

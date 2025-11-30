@@ -489,10 +489,30 @@ impl<'a, A: Abi> FnLowering<'a, A> {
             }
             hir::Terminator::Br(branch) => match branch {
                 hir::Branch::Conditional {
-                    condition: _,
-                    iftrue: _,
-                    iffalse: _,
-                } => unimplemented!(),
+                    condition,
+                    iftrue,
+                    iffalse,
+                } => {
+                    let condition = self.get_or_create_vreg(condition.clone());
+                    let iftrue = self.hir_to_mir_bb[iftrue];
+                    let iffalse = self.hir_to_mir_bb[iffalse];
+
+                    self.block_cursor_mut()
+                        .current_mut()
+                        .unwrap()
+                        .successors
+                        .extend([iftrue, iffalse]);
+
+                    let br_cond_idx = self.mir_function.create_instr().br_cond(
+                        mir::Operand::Register(Register::Virtual(condition), RegisterRole::Use),
+                        iftrue,
+                    );
+                    let br_idx = self.mir_function.create_instr().br(iffalse);
+                    let mut cursor = self.instr_cursor_mut();
+
+                    cursor.insert_after(br_cond_idx);
+                    cursor.insert_after(br_idx);
+                }
                 hir::Branch::Unconditional { block_idx } => {
                     let bb_idx = self.hir_to_mir_bb[block_idx];
                     let instr_idx = self.mir_function.create_instr().br(bb_idx);

@@ -54,6 +54,8 @@ G_STORE = GenericInstruction("Store", [], [("src1", R0), ("src2", UNKNOWN)])
 
 G_BR = GenericInstruction("Br", [], [("src", UNKNOWN)])
 
+G_BR_COND = GenericInstruction("BrCond", [], [("src1", R0), ("src2", UNKNOWN)])
+
 G_GLOBAL_VALUE = GenericInstruction("GlobalValue", [("dst", R0)], [("src", UNKNOWN)])
 
 G_ICMP = GenericInstruction(

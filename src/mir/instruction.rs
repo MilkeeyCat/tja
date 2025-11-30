@@ -352,6 +352,13 @@ impl<'a> GenericBuilder<'a> {
             .idx()
     }
 
+    pub fn br_cond(self, cond: Operand, idx: BlockIdx) -> InstructionIdx {
+        self.with_opcode(GenericOpcode::BrCond.into())
+            .add_operand(cond)
+            .add_operand(Operand::Block(idx))
+            .idx()
+    }
+
     pub fn global_value(self, lhs: Register, rhs: Operand) -> InstructionIdx {
         assert!(matches!(rhs, Operand::Global(..) | Operand::Function(..)));
 
