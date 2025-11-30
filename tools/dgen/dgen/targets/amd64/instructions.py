@@ -188,6 +188,57 @@ ADD64RI32 = TargetInstruction(
 # ==============================================================================
 
 
+def sub_rm_i(size: int) -> list[TargetInstruction]:
+    instructions: list[TargetInstruction] = []
+
+    for variant in ["r", "m"]:
+        operand = get_operand(variant, size)
+
+        instructions.append(
+            TargetInstruction(
+                f"Sub{size}{variant}i",
+                [("dst", operand)],
+                [("src1", operand), ("src2", get_operand("i", size))],
+                "sub {dst}, {src2}",
+                ("dst", "src1"),
+            )
+        )
+
+    return instructions
+
+
+[
+    [SUB8RI, SUB8MI],
+    [SUB16RI, SUB16MI],
+    [SUB32RI, SUB32MI],
+] = [sub_rm_i(size) for size in [8, 16, 32]]
+
+
+def sub_rm_r(size: int) -> list[TargetInstruction]:
+    instructions: list[TargetInstruction] = []
+
+    for variant in ["r", "m"]:
+        operand = get_operand(variant, size)
+
+        instructions.append(
+            TargetInstruction(
+                f"Sub{size}{variant}r",
+                [("dst", operand)],
+                [("src1", operand), ("src2", get_operand("r", size))],
+                "sub {dst}, {src2}",
+                ("dst", "src1"),
+            )
+        )
+
+    return instructions
+
+
+[
+    [SUB8RR, SUB8MR],
+    [SUB16RR, SUB16MR],
+    [SUB32RR, SUB32MR],
+    [SUB64RR, SUB64MR],
+] = [sub_rm_r(size) for size in [8, 16, 32, 64]]
 SUB64RI32 = TargetInstruction(
     f"Sub64ri32",
     [("dst", GPR64)],

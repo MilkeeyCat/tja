@@ -17,9 +17,7 @@ def get_instruction(name: str) -> Instruction:
     return instruction
 
 
-# NOTE: can't reuse `add` name because instructions module already declares
-# `add` function. Think about better naming?
-def add_pats():
+def add():
     sizes = [8, 16, 32, 64]
 
     for size in sizes:
@@ -40,4 +38,28 @@ def add_pats():
         )
 
 
-add_pats()
+add()
+
+
+def sub():
+    sizes = [8, 16, 32, 64]
+
+    for size in sizes:
+        r = get_operand("r", size)
+        i = get_operand("i", size)
+
+        if size != 64:
+            IselPat(
+                MatchInstr(G_SUB, Named("src1", r), Named("src2", i)),
+                ReplacementInstr(
+                    get_instruction(f"SUB{size}RI"), Use("src1"), Use("src2")
+                ),
+            )
+
+        IselPat(
+            MatchInstr(G_SUB, Named("src1", r), Named("src2", r)),
+            ReplacementInstr(get_instruction(f"SUB{size}RR"), Use("src1"), Use("src2")),
+        )
+
+
+sub()

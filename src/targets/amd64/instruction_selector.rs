@@ -47,7 +47,6 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
 
                 match GenericOpcode::try_from(instr.opcode) {
                     Ok(opcode) => match opcode {
-                        GenericOpcode::Sub => unimplemented!(),
                         GenericOpcode::Mul => unimplemented!(),
                         GenericOpcode::SDiv => unimplemented!(),
                         GenericOpcode::UDiv => unimplemented!(),
