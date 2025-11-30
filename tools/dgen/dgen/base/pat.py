@@ -127,15 +127,6 @@ class ReplacementInstr(Replacement):
     def replace(self, ctx: IselGeneratorCtx):
         writer = ctx.writer
 
-        writer.writeln(
-            "let mut builder = InstructionBuilder::new(instr_cursor.func, idx);"
-        )
-        writer.writeln("")
-        writer.writeln(
-            f"builder.set_opcode({self.instr.__class__.enum}::{self.instr.name}.into());"
-        )
-        writer.writeln("builder.clear_inputs();")
-
         for pat in self.patterns:
             pat.replace(ctx)
 
@@ -153,19 +144,84 @@ class ReplacementInstr(Replacement):
 
 class IselPat:
     match: MatchInstr
-    replacement: ReplacementInstr
+    replacement: list[ReplacementInstr]
 
     def __init__(
         self,
         match: MatchInstr,
-        replacement: ReplacementInstr,
+        replacement: ReplacementInstr | list[ReplacementInstr],
     ):
         match.insert_defs_and_preds()
 
         self.match = match
-        self.replacement = replacement
+
+        if isinstance(replacement, ReplacementInstr):
+            self.replacement = [replacement]
+        else:
+            self.replacement = replacement
+
+        # TODO: asserts about replacement instructions:
+        # - if match has an explicit out, one of replacements must have one too
+        # - at most 1 instruction can have > 0 explicit outs
 
         ISEL_PATTERNS.append(self)
+
+    def generate_replacement(self, ctx: IselGeneratorCtx):
+        writer = ctx.writer
+        edit_instr_idx = next(
+            idx
+            for (idx, replacement) in enumerate(reversed(self.replacement))
+            if len(replacement.instr.outs) == len(self.match.instr.outs)
+        )
+        before = list(range(0, edit_instr_idx))
+        after = list(range(edit_instr_idx + 1, len(self.replacement)))
+
+        for idx, instr in enumerate(self.replacement):
+            if idx == edit_instr_idx:
+                continue
+
+            is_mut = len(instr.patterns) > 0
+
+            writer.writeln(
+                f"let{' mut ' if is_mut else ' '}builder = instr_cursor.func.create_instr()"
+            )
+            writer.indent()
+            writer.writeln(
+                f".with_opcode({instr.instr.__class__.enum}::{instr.instr.name}.into());"
+            )
+            writer.dedent()
+            writer.writeln("")
+
+            instr.replace(ctx)
+
+            writer.writeln(f"let instr_idx_{idx} = builder.idx();")
+            writer.writeln("")
+
+        writer.writeln(
+            "let mut builder = InstructionBuilder::new(instr_cursor.func, idx);"
+        )
+        writer.writeln("")
+        writer.writeln(
+            f"builder.set_opcode({self.replacement[edit_instr_idx].instr.__class__.enum}::{self.replacement[edit_instr_idx].instr.name}.into());"
+        )
+        writer.writeln("builder.clear_inputs();")
+
+        self.replacement[edit_instr_idx].replace(ctx)
+
+        if after:
+            writer.writeln("")
+            writer.writeln("instr_cursor.move_next();")
+
+            for idx in after:
+                writer.writeln(f"instr_cursor.insert_before(instr_idx_{idx});")
+
+            writer.writeln("instr_cursor.move_prev();")
+
+        if before:
+            writer.writeln("")
+
+            for idx in before:
+                writer.writeln(f"instr_cursor.insert_before(instr_idx_{idx});")
 
 
 ISEL_PATTERNS: list[IselPat] = []

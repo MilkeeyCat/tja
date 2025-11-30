@@ -62,7 +62,7 @@ def generate_instruction_selector(buf: TextIOWrapper):
             writer.writeln("{")
             writer.indent()
 
-            pat.replacement.replace(ctx)
+            pat.generate_replacement(ctx)
 
             writer.writeln("")
             writer.writeln("return true;")
