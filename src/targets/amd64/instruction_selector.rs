@@ -1,10 +1,10 @@
 use crate::{
-    mir::{Function, GenericOpcode, Operand, RegisterRole},
+    mir::{self, Function, GenericOpcode, Operand, RegisterRole},
     pass::{Context, Pass},
     targets::{
         Abi, Target,
         amd64::{
-            ConditionCode,
+            ConditionCode, Register,
             address_mode::{AddressMode, Base},
             opcode::{get_load_op, get_store_op},
         },
@@ -48,8 +48,124 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                 match GenericOpcode::try_from(instr.opcode) {
                     Ok(opcode) => match opcode {
                         GenericOpcode::Mul => unimplemented!(),
-                        GenericOpcode::SDiv => unimplemented!(),
-                        GenericOpcode::UDiv => unimplemented!(),
+                        GenericOpcode::SDiv | GenericOpcode::UDiv => {
+                            let ty = instr_cursor
+                                .func
+                                .vreg_info
+                                .get_vreg(*instr.operands[0].expect_register().0.expect_virtual())
+                                .ty;
+                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
+                            let lhs = instr.operands.remove(1.into()).expect_register().0.clone();
+                            let rhs = instr.operands.remove(1.into()).expect_register().0.clone();
+
+                            struct OperandsInfo {
+                                low_reg: Register,
+                                high_reg: Register,
+                                sign_extend_op: Option<super::Opcode>,
+                                zero_extend_op: super::Opcode,
+                                div_op: super::Opcode,
+                            }
+
+                            const TABLE: [OperandsInfo; 4] = [
+                                OperandsInfo {
+                                    low_reg: Register::Al,
+                                    high_reg: Register::Ah,
+                                    sign_extend_op: None,
+                                    zero_extend_op: super::Opcode::Xor8rr,
+                                    div_op: super::Opcode::IDiv8rr,
+                                },
+                                OperandsInfo {
+                                    low_reg: Register::Ax,
+                                    high_reg: Register::Dx,
+                                    sign_extend_op: Some(super::Opcode::Cwd),
+                                    zero_extend_op: super::Opcode::Xor16rr,
+                                    div_op: super::Opcode::IDiv16rr,
+                                },
+                                OperandsInfo {
+                                    low_reg: Register::Eax,
+                                    high_reg: Register::Edx,
+                                    sign_extend_op: Some(super::Opcode::Cdq),
+                                    zero_extend_op: super::Opcode::Xor32rr,
+                                    div_op: super::Opcode::IDiv32rr,
+                                },
+                                OperandsInfo {
+                                    low_reg: Register::Rax,
+                                    high_reg: Register::Rdx,
+                                    sign_extend_op: Some(super::Opcode::Cqo),
+                                    zero_extend_op: super::Opcode::Xor64rr,
+                                    div_op: super::Opcode::IDiv64rr,
+                                },
+                            ];
+
+                            let entry_idx = match size {
+                                1 => 0,
+                                2 => 1,
+                                4 => 2,
+                                8 => 3,
+                                _ => unreachable!(),
+                            };
+                            let entry = &TABLE[entry_idx];
+
+                            instr.opcode = GenericOpcode::Copy.into();
+                            instr.operands.push(Operand::Register(
+                                mir::Register::Physical(entry.low_reg.into_physical_reg()),
+                                RegisterRole::Use,
+                            ));
+
+                            let copy_lhs_instr_idx = instr_cursor.func.create_instr().copy(
+                                mir::Register::Physical(entry.low_reg.into_physical_reg()),
+                                Operand::Register(lhs.clone(), RegisterRole::Use),
+                            );
+                            let extend_instr_idx = match opcode {
+                                GenericOpcode::SDiv => match entry.sign_extend_op {
+                                    Some(opcode) => instr_cursor
+                                        .func
+                                        .create_instr()
+                                        .with_opcode(opcode.into())
+                                        .idx(),
+                                    None => {
+                                        // this will only be reached for IDiv8rr
+                                        instr_cursor
+                                            .func
+                                            .create_instr()
+                                            .with_opcode(super::Opcode::Movsx16rr8.into())
+                                            .add_def(mir::Register::Physical(
+                                                Register::Ax.into_physical_reg(),
+                                            ))
+                                            .add_use(mir::Register::Physical(
+                                                Register::Al.into_physical_reg(),
+                                            ))
+                                            .idx()
+                                    }
+                                },
+                                GenericOpcode::UDiv => instr_cursor
+                                    .func
+                                    .create_instr()
+                                    .with_opcode(entry.zero_extend_op.into())
+                                    .add_def(mir::Register::Physical(
+                                        entry.high_reg.into_physical_reg(),
+                                    ))
+                                    .add_use(mir::Register::Physical(
+                                        entry.high_reg.into_physical_reg(),
+                                    ))
+                                    .add_use(mir::Register::Physical(
+                                        entry.high_reg.into_physical_reg(),
+                                    ))
+                                    .set_tied_operands(0.into(), 1.into())
+                                    .idx(),
+                                _ => unreachable!(),
+                            };
+                            let div_instr_idx = instr_cursor
+                                .func
+                                .create_instr()
+                                .with_opcode(entry.div_op.into())
+                                .add_use(rhs)
+                                .idx();
+
+                            instr_cursor.insert_before(div_instr_idx);
+                            instr_cursor.insert_before(extend_instr_idx);
+                            instr_cursor.insert_before(copy_lhs_instr_idx);
+                        }
                         GenericOpcode::FrameIndex => {
                             let address_mode = AddressMode {
                                 base: Base::Frame(*instr.operands[1].expect_frame_idx()),

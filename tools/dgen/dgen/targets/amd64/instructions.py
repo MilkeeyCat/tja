@@ -119,6 +119,34 @@ MOV64RI = TargetInstruction(
 
 
 # ==============================================================================
+# MOVSX
+# ==============================================================================
+
+
+def movsx_r_rm(size1: int, size2: int) -> list[TargetInstruction]:
+    instructions: list[TargetInstruction] = []
+
+    for variant in ["r", "m"]:
+        instructions.append(
+            TargetInstruction(
+                f"Movsx{size1}r{variant}{size2}",
+                [("dst", get_operand("r", size2))],
+                [("src", get_operand(variant, size1))],
+                "movsx {dst}, {src}",
+            )
+        )
+
+    return instructions
+
+
+[MOVSX16RR8, MOVSX16RM8] = movsx_r_rm(16, 8)
+[MOVSX32RR8, MOVSX32RM8] = movsx_r_rm(32, 8)
+[MOVSX64RR8, MOVSX64RM8] = movsx_r_rm(64, 8)
+[MOVSX32RR16, MOVSX32RM16] = movsx_r_rm(32, 16)
+[MOVSX64RR16, MOVSX64RM16] = movsx_r_rm(64, 16)
+
+
+# ==============================================================================
 # ADD
 # ==============================================================================
 
@@ -249,6 +277,28 @@ SUB64RI32 = TargetInstruction(
 
 
 # ==============================================================================
+# IDIV
+# ==============================================================================
+
+
+def idiv_r_r(size: int):
+    return TargetInstruction(
+        f"IDiv{size}rr",
+        [],
+        [("src", get_operand("r", size))],
+        "idiv {src}",
+    )
+
+
+[
+    IDIV8RR,
+    IDIV16RR,
+    IDIV32RR,
+    IDIV64RR,
+] = [idiv_r_r(size) for size in [8, 16, 32, 64]]
+
+
+# ==============================================================================
 # CMP
 # ==============================================================================
 
@@ -284,6 +334,31 @@ CMP8RI = TargetInstruction(
     [("src1", GPR8), ("src2", I8IMM)],
     "cmp {src1}, {src2}",
 )
+
+
+# ==============================================================================
+# XOR
+# ==============================================================================
+
+
+def xor_r_r(size: int) -> TargetInstruction:
+    operand = get_operand("r", size)
+
+    return TargetInstruction(
+        f"Xor{size}rr",
+        [("dst", operand)],
+        [("src1", operand), ("src2", operand)],
+        "xor {dst}, {src2}",
+        ("dst", "src1"),
+    )
+
+
+[
+    XOR8RR,
+    XOR16RR,
+    XOR32RR,
+    XOR64RR,
+] = [xor_r_r(size) for size in [8, 16, 32, 64]]
 
 
 # ==============================================================================
@@ -391,3 +466,12 @@ LEAVE = TargetInstruction("Leave", [], [], "leave")
 
 
 RET = TargetInstruction("Ret", [], [], "ret")
+
+
+# ==============================================================================
+# CWD/CDQ/CQO
+# ==============================================================================
+
+CWD = TargetInstruction("Cwd", [], [], "cwd")
+CDQ = TargetInstruction("Cdq", [], [], "cdq")
+CQO = TargetInstruction("Cqo", [], [], "cqo")

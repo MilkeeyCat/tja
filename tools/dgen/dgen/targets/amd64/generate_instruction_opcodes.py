@@ -8,7 +8,7 @@ from dgen.writer import Writer
 def generate_instruction_opcodes(buf: TextIOWrapper):
     writer = Writer(buf)
 
-    writer.writeln("#[derive(Debug)]")
+    writer.writeln("#[derive(Debug, Clone, Copy)]")
     writer.writeln("#[repr(usize)]")
     writer.writeln(f"pub enum {TargetInstruction.enum} {{")
     writer.indent()
