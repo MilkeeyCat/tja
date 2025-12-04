@@ -47,7 +47,70 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
 
                 match GenericOpcode::try_from(instr.opcode) {
                     Ok(opcode) => match opcode {
-                        GenericOpcode::Mul => unimplemented!(),
+                        GenericOpcode::Mul => {
+                            let ty = instr_cursor
+                                .func
+                                .vreg_info
+                                .get_vreg(*instr.operands[0].expect_register().0.expect_virtual())
+                                .ty;
+                            let size = ctx.target.abi().ty_size(ctx.ty_storage, ty);
+                            let lhs = instr.operands.remove(1.into()).expect_register().0.clone();
+                            let rhs = instr.operands.remove(1.into()).expect_register().0.clone();
+                            let idx = match size {
+                                1 => 0,
+                                2 => 1,
+                                4 => 2,
+                                8 => 3,
+                                _ => unreachable!(),
+                            };
+
+                            struct InstructionInfo {
+                                /// Multiplicand and result register
+                                reg: Register,
+                                mul_op: super::Opcode,
+                            }
+
+                            const TABLE: [InstructionInfo; 4] = [
+                                InstructionInfo {
+                                    reg: Register::Al,
+                                    mul_op: super::Opcode::IMul8rr,
+                                },
+                                InstructionInfo {
+                                    reg: Register::Ax,
+                                    mul_op: super::Opcode::IMul16rr,
+                                },
+                                InstructionInfo {
+                                    reg: Register::Eax,
+                                    mul_op: super::Opcode::IMul32rr,
+                                },
+                                InstructionInfo {
+                                    reg: Register::Rax,
+                                    mul_op: super::Opcode::IMul64rr,
+                                },
+                            ];
+
+                            let entry = &TABLE[idx];
+
+                            instr.opcode = GenericOpcode::Copy.into();
+                            instr.operands.push(Operand::Register(
+                                mir::Register::Physical(entry.reg.into_physical_reg()),
+                                RegisterRole::Use,
+                            ));
+
+                            let copy_lhs_instr_idx = instr_cursor.func.create_instr().copy(
+                                mir::Register::Physical(entry.reg.into_physical_reg()),
+                                Operand::Register(lhs.clone(), RegisterRole::Use),
+                            );
+                            let mul_instr_idx = instr_cursor
+                                .func
+                                .create_instr()
+                                .with_opcode(entry.mul_op.into())
+                                .add_use(rhs)
+                                .idx();
+
+                            instr_cursor.insert_before(mul_instr_idx);
+                            instr_cursor.insert_before(copy_lhs_instr_idx);
+                        }
                         GenericOpcode::SDiv | GenericOpcode::UDiv => {
                             let ty = instr_cursor
                                 .func
