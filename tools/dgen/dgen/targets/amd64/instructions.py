@@ -71,7 +71,7 @@ def mov_r_m(size: int) -> TargetInstruction:
     return TargetInstruction(
         f"Mov{size}rm",
         [("dst", operand)],
-        [("src1", operand), ("src2", get_operand("r", size))],
+        [("src1", operand), ("src2", get_operand("m", size))],
         "mov {dst}, {src2}",
         ("dst", "src1"),
     )
