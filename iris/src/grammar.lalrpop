@@ -1,0 +1,58 @@
+use super::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern};
+
+grammar;
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+
+            v
+        }
+    }
+};
+
+pub Definitions: Vec<Definition> = {
+    Definition => vec![<>],
+    <mut defs:Definitions> <def:Definition> => {
+        defs.push(def);
+
+        defs
+    }
+};
+
+Definition: Definition = {
+    "decl" <name: Ident> "(" <arg_tys: Comma<Ident>> ")" "->" <ret_ty: Ident> ";" => Definition::Declaration(Declaration {<>}),
+    "type" <name:Ident> "=" <external_name:Ident> ";" => Definition::Type(Type {<>}),
+    "rule" <pat:Pattern> "{" <expr:Expr> "}" => Definition::Rule(Rule{<>}),
+    "extern" "constructor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
+    "extern" "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
+    "extern" "const" <name:Const> ":" <ty:Ident> ";" => Definition::Extern(Extern::Const {<>}),
+}
+
+Expr: Expr = {
+    <name:Ident> "(" <args:Comma<Expr>> ")" => Expr::Call {<>},
+    Literal => Expr::Literal(<>),
+    Ident => Expr::Ident(<>),
+}
+
+Pattern: Pattern = {
+    "(" <name:Ident> <args:Pattern*> ")" => Pattern::Application {<>},
+    Literal => Pattern::Literal(<>),
+    Ident => Pattern::Ident(<>),
+}
+
+Literal: Literal = {
+    "-" <Integer> => Literal::Int(-<>),
+    Integer => Literal::Int(<>),
+    "true" => Literal::Bool(true),
+    "false" => Literal::Bool(false),
+    Const => Literal::Const(<>),
+}
+
+Const = "$" <Ident>;
+
+Ident: String = r"[\p{XID_Start}_]\p{XID_Continue}*" => String::from(<>);
+
+Integer: i64 = r"\d+" => <>.parse().unwrap();
