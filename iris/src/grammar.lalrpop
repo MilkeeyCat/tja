@@ -1,4 +1,4 @@
-use super::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern};
+use crate::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern};
 
 grammar;
 
