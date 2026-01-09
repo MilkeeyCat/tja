@@ -20,11 +20,21 @@ pub enum Extern {
     Const { name: String, ty: String },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Pattern {
     Application { name: String, args: Vec<Pattern> },
     Literal(Literal),
     Ident(String),
+    Wildcard,
+}
+
+impl Pattern {
+    pub fn is_wildcard(&self) -> bool {
+        match self {
+            Self::Ident(_) | Self::Wildcard => true,
+            Self::Application { .. } | Self::Literal(_) => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -46,7 +56,7 @@ pub enum Expr {
     Ident(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),
     Bool(bool),

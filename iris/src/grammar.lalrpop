@@ -39,6 +39,7 @@ Expr: Expr = {
 
 Pattern: Pattern = {
     "(" <name:Ident> <args:Pattern*> ")" => Pattern::Application {<>},
+    "_" => Pattern::Wildcard,
     Literal => Pattern::Literal(<>),
     Ident => Pattern::Ident(<>),
 }

@@ -170,7 +170,7 @@ impl Visitor for CheckPattern<'_> {
                     "undefined const '{name}'"
                 );
             }
-            Pattern::Literal(_) | Pattern::Ident(_) => (),
+            Pattern::Literal(_) | Pattern::Ident(_) | Pattern::Wildcard => (),
         }
 
         walk_pat(self, pat);
@@ -187,7 +187,7 @@ impl CheckPattern<'_> {
                 Literal::Bool(_) => Some(Type::Builtin(BuiltinTy::Bool)),
                 Literal::Const(name) => Some(self.module.consts[name].clone()),
             },
-            Pattern::Ident(_) => None,
+            Pattern::Ident(_) | Pattern::Wildcard => None,
         }
     }
 }

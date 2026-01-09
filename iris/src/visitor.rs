@@ -17,7 +17,7 @@ pub fn walk_pat<T: Visitor>(visitor: &T, pat: &Pattern) {
                 visitor.visit_pat(pat);
             }
         }
-        Pattern::Literal(_) | Pattern::Ident(_) => (),
+        Pattern::Literal(_) | Pattern::Ident(_) | Pattern::Wildcard => (),
     }
 }
 

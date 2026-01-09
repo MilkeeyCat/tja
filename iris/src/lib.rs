@@ -1,4 +1,5 @@
 mod ast;
+mod decision;
 mod lower;
 mod visitor;
 
@@ -13,4 +14,10 @@ pub fn compile(input: &Path) {
         .parse(&input)
         .expect("failed to parse input");
     let module = lower::run(definitions);
+
+    for (name, rule) in &module.rules {
+        let _match = decision::compile(&module, rule, &module.decls[name].arg_tys);
+
+        dbg!(_match);
+    }
 }
