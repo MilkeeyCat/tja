@@ -2,7 +2,7 @@ use crate::{
     ast::{self, Definition, Expr, Literal, Pattern},
     visitor::{Visitor, walk_pat},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 #[derive(Debug, Default)]
 pub struct Module {
@@ -207,8 +207,35 @@ pub enum BuiltinTy {
     Isize,
 }
 
+impl std::fmt::Display for BuiltinTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool => write!(f, "bool"),
+            Self::U8 => write!(f, "u8"),
+            Self::U16 => write!(f, "u16"),
+            Self::U32 => write!(f, "u32"),
+            Self::U64 => write!(f, "u64"),
+            Self::Usize => write!(f, "usize"),
+            Self::I8 => write!(f, "i8"),
+            Self::I16 => write!(f, "i16"),
+            Self::I32 => write!(f, "i32"),
+            Self::I64 => write!(f, "i64"),
+            Self::Isize => write!(f, "isize"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Builtin(BuiltinTy),
     External(String),
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Builtin(ty) => std::fmt::Display::fmt(ty, f),
+            Self::External(name) => write!(f, "{name}"),
+        }
+    }
 }

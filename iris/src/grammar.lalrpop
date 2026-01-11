@@ -27,7 +27,7 @@ Definition: Definition = {
     "type" <name:Ident> "=" <external_name:Ident> ";" => Definition::Type(Type {<>}),
     "rule" <pat:Pattern> "{" <expr:Expr> "}" => Definition::Rule(Rule{<>}),
     "extern" "constructor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
-    "extern" "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
+    "extern" "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Extractor {<>}),
     "extern" "const" <name:Const> ":" <ty:Ident> ";" => Definition::Extern(Extern::Const {<>}),
 }
 
