@@ -193,7 +193,19 @@ impl<'a> Matrix<'a> {
                     }
                 }
 
-                if !is_sig_complete(stack[0].0, &ctors) {
+                let has_infallible_ctor = ctors.iter().any(|ctor| {
+                    if let Constructor::External(name) = ctor {
+                        self.module.decls[name]
+                            .extractor
+                            .as_ref()
+                            .unwrap()
+                            .infallible
+                    } else {
+                        false
+                    }
+                });
+
+                if !is_sig_complete(stack[0].0, &ctors) && !has_infallible_ctor {
                     let element = stack.remove(0);
 
                     default = Some(Box::new(self.default().compile(

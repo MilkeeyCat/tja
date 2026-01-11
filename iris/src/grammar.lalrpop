@@ -23,11 +23,12 @@ pub Definitions: Vec<Definition> = {
 };
 
 Definition: Definition = {
-    "decl" <name: Ident> "(" <arg_tys: Comma<Ident>> ")" "->" <ret_ty: Ident> ";" => Definition::Declaration(Declaration {<>}),
+    // I don't like partial being on decl but I don't know a better place for it
+    "decl" <partial:"partial"?> <name: Ident> "(" <arg_tys: Comma<Ident>> ")" "->" <ret_ty: Ident> ";" => Definition::Declaration(Declaration {name, arg_tys, ret_ty, partial: partial.is_some()}),
     "type" <name:Ident> "=" <external_name:Ident> ";" => Definition::Type(Type {<>}),
     "rule" <pat:Pattern> "{" <expr:Expr> "}" => Definition::Rule(Rule{<>}),
     "extern" "constructor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
-    "extern" "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Extractor {<>}),
+    "extern" <infallible:"infallible"?> "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Extractor {name, external_name, infallible: infallible.is_some()}),
     "extern" "const" <name:Const> ":" <ty:Ident> ";" => Definition::Extern(Extern::Const {<>}),
 }
 

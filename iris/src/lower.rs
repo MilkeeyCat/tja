@@ -29,7 +29,7 @@ impl Module {
         );
     }
 
-    fn add_decl(&mut self, name: String, arg_tys: Vec<Type>, ret_ty: Type) {
+    fn add_decl(&mut self, name: String, arg_tys: Vec<Type>, ret_ty: Type, partial: bool) {
         assert!(
             self.decls
                 .insert(
@@ -38,7 +38,8 @@ impl Module {
                         arg_tys,
                         ret_ty,
                         constructor: None,
-                        extractor: None
+                        extractor: None,
+                        partial
                     }
                 )
                 .is_none(),
@@ -51,8 +52,20 @@ impl Module {
 pub struct Declaration {
     pub arg_tys: Vec<Type>,
     pub ret_ty: Type,
-    pub constructor: Option<String>,
-    pub extractor: Option<String>,
+    pub partial: bool,
+    pub constructor: Option<Constructor>,
+    pub extractor: Option<Extractor>,
+}
+
+#[derive(Debug)]
+pub struct Constructor {
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub struct Extractor {
+    pub name: String,
+    pub infallible: bool,
 }
 
 #[derive(Debug)]
@@ -91,11 +104,12 @@ pub fn run(definitions: Vec<Definition>) -> Module {
                 name,
                 arg_tys,
                 ret_ty,
+                partial,
             }) => {
                 let arg_tys = arg_tys.iter().map(|name| get_ty(&module, name)).collect();
                 let ret_ty = get_ty(&module, &ret_ty);
 
-                module.add_decl(name, arg_tys, ret_ty);
+                module.add_decl(name.clone(), arg_tys, ret_ty, partial);
             }
             Definition::Extern(_extern) => match _extern {
                 ast::Extern::Constructor {
@@ -104,15 +118,21 @@ pub fn run(definitions: Vec<Definition>) -> Module {
                 } => {
                     let decl = module.decls.get_mut(&name).unwrap();
 
-                    decl.constructor = Some(external_name);
+                    decl.constructor = Some(Constructor {
+                        name: external_name,
+                    });
                 }
                 ast::Extern::Extractor {
                     name,
                     external_name,
+                    infallible,
                 } => {
                     let decl = module.decls.get_mut(&name).unwrap();
 
-                    decl.extractor = Some(external_name);
+                    decl.extractor = Some(Extractor {
+                        name: external_name,
+                        infallible,
+                    });
                 }
                 ast::Extern::Const { name, ty } => {
                     module.add_const(name, get_ty(&module, &ty));

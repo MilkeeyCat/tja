@@ -66,7 +66,7 @@ impl<'a, W: Write> Generator<'a, W> {
 
         self.indended(|generator| {
             for (_, decl) in &self.module.decls {
-                if let Some(name) = &decl.constructor {
+                if let Some(ctor) = &decl.constructor {
                     let params = decl
                         .arg_tys
                         .iter()
@@ -74,26 +74,37 @@ impl<'a, W: Write> Generator<'a, W> {
                         .map(|(idx, ty)| format!("arg{idx}: {ty}"))
                         .collect::<Vec<_>>()
                         .join(", ");
+                    let ret_ty = if decl.partial {
+                        format!("Option<{}>", decl.ret_ty)
+                    } else {
+                        decl.ret_ty.to_string()
+                    };
 
                     writeln_indended!(
                         generator,
-                        "fn {name}(&mut self, {}) -> {};",
+                        "fn {}(&mut self, {}) -> {};",
+                        ctor.name,
                         params,
-                        decl.ret_ty,
+                        ret_ty,
                     );
                 }
 
-                if let Some(name) = &decl.extractor {
+                if let Some(etor) = &decl.extractor {
                     let ret_tys: Vec<_> = decl.arg_tys.iter().map(|ty| ty.to_string()).collect();
-                    let ret_tys = if ret_tys.len() > 1 {
+                    let mut ret_tys = if ret_tys.len() > 1 {
                         format!("({})", ret_tys.join(", "))
                     } else {
                         ret_tys.join(", ")
                     };
 
+                    if !etor.infallible {
+                        ret_tys = format!("Option<{}>", ret_tys);
+                    }
+
                     writeln_indended!(
                         generator,
-                        "fn {name}(&mut self, arg0: {}) -> Option<{}>;",
+                        "fn {}(&mut self, arg0: {}) -> {};",
+                        etor.name,
                         decl.ret_ty,
                         ret_tys,
                     );
@@ -111,72 +122,142 @@ impl<'a, W: Write> Generator<'a, W> {
         &mut self,
         decision: Decision,
         actions: &IndexVec<ActionIdx, Action>,
+        ctor_name: &str,
     ) -> std::fmt::Result {
         match decision {
             Decision::Leaf(action_idx) => {
                 let Action { env, expr } = &actions[action_idx];
+                let wrap_in_some = !matches!(
+                    expr,
+                    Expr::Call { name, .. } if !self.module.decls[name].partial
+                ) && self.module.decls[ctor_name].partial;
 
-                write_indended!(self, "");
+                write_indended!(self, "return ");
+
+                if wrap_in_some {
+                    write!(self.buf, "Some(")?;
+                }
+
                 self.generate_expr(env, expr)?;
-                writeln!(self.buf, "")
+
+                if wrap_in_some {
+                    write!(self.buf, ")")?;
+                }
+
+                writeln!(self.buf, ";")
             }
             Decision::Fail => {
-                writeln_indended!(self, "panic!(\"no rule matched\");");
+                if self.module.decls[ctor_name].partial {
+                    writeln_indended!(self, "return None;");
+                } else {
+                    writeln_indended!(self, "panic!(\"no rule matched\");");
+                }
 
                 Ok(())
             }
             Decision::Switch(cases, default) => {
-                for (ctor, decision) in cases {
-                    write_indended!(self, "if ");
+                let mut if_expr = false;
+                let mut iter = cases.into_iter().enumerate();
+
+                while let Some((idx, (ctor, decision))) = iter.next() {
+                    if_expr = !matches!(
+                        &ctor,
+                        Constructor::External(name)
+                            if self.module.decls[name]
+                                .extractor
+                                .as_ref()
+                                .unwrap().
+                                infallible
+                    );
+
+                    if if_expr {
+                        if idx > 0 {
+                            write!(self.buf, " else if ")?;
+                        } else {
+                            write_indended!(self, "if ");
+                        }
+                    }
 
                     match ctor {
                         Constructor::Int(value) => {
-                            write!(self.buf, "{} == {value}", self.variables[self.stack[0]])?
+                            writeln!(self.buf, "{} == {value} {{", self.variables[self.stack[0]])?
                         }
-                        Constructor::True => write!(self.buf, "{}", self.variables[self.stack[0]])?,
+                        Constructor::True => {
+                            writeln!(self.buf, "{} {{", self.variables[self.stack[0]])?
+                        }
                         Constructor::False => {
-                            write!(self.buf, "!{}", self.variables[self.stack[0]])?
+                            writeln!(self.buf, "!{} {{", self.variables[self.stack[0]])?
                         }
                         Constructor::External(name) => {
-                            let arity = self.module.decls[&name].arg_tys.len();
+                            let decl = &self.module.decls[&name];
+                            let arity = decl.arg_tys.len();
                             let occurrence_idx = self.stack.remove(0);
 
                             self.create_vars(arity);
 
-                            let vars = self
+                            let vars: Vec<_> = self
                                 .stack
                                 .iter()
                                 .take(arity)
                                 .map(|&idx| self.variables[idx].as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ");
+                                .collect();
+                            let mut vars = if vars.len() > 1 {
+                                format!("({})", vars.join(", "))
+                            } else {
+                                vars.join(", ")
+                            };
+                            let is_infallible = decl.extractor.as_ref().unwrap().infallible;
+
+                            if !is_infallible {
+                                vars = format!("Some({})", vars);
+                            } else {
+                                write_indended!(self, "");
+                            }
+
                             let etor_expr = match &self.module.decls[&name].extractor {
-                                Some(name) => format!("C::{name}"),
+                                Some(etor) => format!("C::{}", etor.name),
                                 None => format!("{name}_etor"),
                             };
 
                             self.stack.insert(0, occurrence_idx);
                             write!(
                                 self.buf,
-                                "let Some({}) = {}(ctx, {})",
+                                "let {} = {}(ctx, {})",
                                 vars, etor_expr, self.variables[self.stack[0]]
                             )?;
+
+                            if is_infallible {
+                                writeln!(self.buf, ";")?;
+                                writeln_indended!(self, "{{");
+                            } else {
+                                writeln!(self.buf, " {{")?;
+                            }
                         }
                         Constructor::Pinned(name) => {
-                            write!(self.buf, "{} == {name}", self.variables[self.stack[0]])?;
+                            writeln!(self.buf, "{} == {name} {{", self.variables[self.stack[0]])?
                         }
                     }
 
-                    self.stack.remove(0);
+                    let occurrence_idx = self.stack.remove(0);
 
-                    writeln!(self.buf, " {{")?;
-                    self.indended(|generator| generator.generate_decision(decision, actions))?;
+                    self.indended(|generator| {
+                        generator.generate_decision(decision, actions, ctor_name)
+                    })?;
+                    self.stack.insert(0, occurrence_idx);
                     write_indended!(self, "}}");
                 }
 
                 if let Some(default) = default {
-                    writeln!(self.buf, " else {{")?;
-                    self.indended(|generator| generator.generate_decision(*default, actions))?;
+                    if if_expr {
+                        writeln!(self.buf, " else {{")?;
+                    } else {
+                        writeln!(self.buf, "")?;
+                        writeln_indended!(self, "{{");
+                    }
+
+                    self.indended(|generator| {
+                        generator.generate_decision(*default, actions, ctor_name)
+                    })?;
                     write_indended!(self, "}}");
                 }
 
@@ -185,7 +266,7 @@ impl<'a, W: Write> Generator<'a, W> {
             Decision::Swap(occurrence_idx, decision) => {
                 self.stack.swap(0, occurrence_idx.raw());
 
-                self.generate_decision(*decision, actions)
+                self.generate_decision(*decision, actions, ctor_name)
             }
         }
     }
@@ -210,14 +291,33 @@ impl<'a, W: Write> Generator<'a, W> {
             })
             .collect::<Vec<_>>()
             .join(", ");
+        let ret_ty = if decl.partial {
+            format!("Option<{}>", decl.ret_ty)
+        } else {
+            decl.ret_ty.to_string()
+        };
 
         writeln!(
             self.buf,
             "fn {name}_ctor<C: Context>(ctx: &mut C, {params}) -> {} {{",
-            decl.ret_ty,
+            ret_ty
         )?;
 
-        self.indended(|generator| generator.generate_decision(_match.tree, &_match.actions))?;
+        self.indended(|generator| {
+            let generate_unreachable = has_switch_without_default_case(&_match.tree);
+
+            generator.generate_decision(_match.tree, &_match.actions, name)?;
+
+            // if a switch is exhaustive over the constructors, there will be no
+            // `else` clause generated and rust will cry about not all paths
+            // returning a value
+            if generate_unreachable {
+                writeln!(generator.buf, "")?;
+                writeln_indended!(generator, "unreachable!();");
+            }
+
+            Ok(())
+        })?;
 
         writeln!(self.buf, "}}")
     }
@@ -229,8 +329,9 @@ impl<'a, W: Write> Generator<'a, W> {
     ) -> std::fmt::Result {
         match expr {
             Expr::Call { name, args } => {
-                let ctor_expr = match &self.module.decls[name].constructor {
-                    Some(name) => format!("C::{name}"),
+                let ctor = &self.module.decls[name].constructor;
+                let ctor_expr = match ctor {
+                    Some(ctor) => format!("C::{}", ctor.name),
                     None => format!("{name}_ctor"),
                 };
                 write!(self.buf, "{ctor_expr}(ctx, ")?;
@@ -240,12 +341,19 @@ impl<'a, W: Write> Generator<'a, W> {
                 while let Some(expr) = iter.next() {
                     self.generate_expr(env, expr)?;
 
+                    if let Expr::Call { name, .. } = expr
+                        && self.module.decls[name].partial
+                    {
+                        write!(self.buf, "?")?;
+                    }
                     if iter.peek().is_some() {
                         write!(self.buf, ", ")?;
                     }
                 }
 
-                write!(self.buf, ")")
+                write!(self.buf, ")")?;
+
+                Ok(())
             }
             Expr::Literal(literal) => match literal {
                 Literal::Int(value) => write!(self.buf, "{value}"),
@@ -254,6 +362,19 @@ impl<'a, W: Write> Generator<'a, W> {
             },
             Expr::Ident(name) => write!(self.buf, "{}", self.variables[env[name]]),
         }
+    }
+}
+
+fn has_switch_without_default_case(decision: &Decision) -> bool {
+    match decision {
+        Decision::Leaf(_) | Decision::Fail => false,
+        Decision::Switch(cases, default) => {
+            default.is_none()
+                || cases
+                    .iter()
+                    .any(|(_, decision)| has_switch_without_default_case(decision))
+        }
+        Decision::Swap(_, decision) => has_switch_without_default_case(decision),
     }
 }
 

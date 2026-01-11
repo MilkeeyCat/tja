@@ -11,13 +11,24 @@ pub struct Declaration {
     pub name: String,
     pub arg_tys: Vec<String>,
     pub ret_ty: String,
+    pub partial: bool,
 }
 
 #[derive(Debug)]
 pub enum Extern {
-    Constructor { name: String, external_name: String },
-    Extractor { name: String, external_name: String },
-    Const { name: String, ty: String },
+    Constructor {
+        name: String,
+        external_name: String,
+    },
+    Extractor {
+        name: String,
+        external_name: String,
+        infallible: bool,
+    },
+    Const {
+        name: String,
+        ty: String,
+    },
 }
 
 #[derive(Debug, Clone)]
