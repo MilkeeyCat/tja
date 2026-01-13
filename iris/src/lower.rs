@@ -72,6 +72,7 @@ pub struct Extractor {
 pub struct Rule {
     pub args: Vec<Pattern>,
     pub expr: Expr,
+    pub priority: i64,
 }
 
 fn get_ty(module: &Module, name: &str) -> Type {
@@ -150,6 +151,7 @@ pub fn run(definitions: Vec<Definition>) -> Module {
                     module.rules.entry(name).or_default().push(Rule {
                         args,
                         expr: rule.expr,
+                        priority: rule.priority.unwrap_or(0),
                     });
                 } else {
                     panic!("lhs root pattern must be application");

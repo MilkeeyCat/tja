@@ -58,6 +58,7 @@ pub struct Type {
 pub struct Rule {
     pub pat: Pattern,
     pub expr: Expr,
+    pub priority: Option<i64>,
 }
 
 #[derive(Debug)]
