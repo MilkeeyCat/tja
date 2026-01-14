@@ -6,7 +6,7 @@ use crate::{
     lower::{BuiltinTy, Module, Rule, Type},
 };
 use index_vec::{IndexVec, define_index_type};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 define_index_type! {
     pub struct ActionIdx = usize;
@@ -22,7 +22,7 @@ define_index_type! {
     pub struct OccurrenceIdx = usize;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Constructor {
     Int(i64),
     True,
@@ -176,7 +176,7 @@ impl<'a> Matrix<'a> {
 
             if idx == 0 {
                 let mut default = None;
-                let ctors: HashSet<_> = self
+                let ctors: BTreeSet<_> = self
                     .rows
                     .iter()
                     .map(|row| row.pats[0].head_ctor())
@@ -270,7 +270,7 @@ impl<'a> Matrix<'a> {
     }
 }
 
-fn is_sig_complete(ty: &Type, ctors: &HashSet<Constructor>) -> bool {
+fn is_sig_complete(ty: &Type, ctors: &BTreeSet<Constructor>) -> bool {
     match ty {
         Type::Builtin(BuiltinTy::Bool) => ctors.is_superset(
             &[Constructor::False, Constructor::True]

@@ -2,14 +2,17 @@ use crate::{
     ast::{self, Definition, Expr, Literal, Pattern},
     visitor::{Visitor, walk_pat},
 };
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+};
 
 #[derive(Debug, Default)]
 pub struct Module {
-    pub rules: HashMap<String, Vec<Rule>>,
+    pub rules: BTreeMap<String, Vec<Rule>>,
     pub consts: HashMap<String, Type>,
     pub types: HashMap<String, Type>,
-    pub decls: HashMap<String, Declaration>,
+    pub decls: BTreeMap<String, Declaration>,
 }
 
 impl Module {
