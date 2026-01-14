@@ -277,7 +277,6 @@ impl<'a, W: Write> Generator<'a, W> {
 
         let decl = &self.module.decls[name];
         let arity = decl.arg_tys.len();
-        let _match = decision::compile(&self.module, &self.module.rules[name], &decl.arg_tys);
 
         self.create_vars(arity);
 
@@ -304,9 +303,27 @@ impl<'a, W: Write> Generator<'a, W> {
         )?;
 
         self.indended(|generator| {
-            let generate_unreachable = has_switch_without_default_case(&_match.tree);
+            let mut rules = generator.module.rules[name].as_slice();
+            let mut generate_unreachable = false;
 
-            generator.generate_decision(_match.tree, &_match.actions, name)?;
+            while !rules.is_empty() {
+                let idx = rules
+                    .windows(2)
+                    .position(|rules| rules[0].priority != rules[1].priority)
+                    .map(|idx| idx + 1)
+                    .unwrap_or_else(|| rules.len());
+                let (lhs, rhs) = rules.split_at(idx);
+                let is_last_iteration = rhs.is_empty();
+                let _match =
+                    decision::compile(&generator.module, lhs, &decl.arg_tys, !is_last_iteration);
+
+                if is_last_iteration {
+                    generate_unreachable = has_switch_without_default_case(&_match.tree);
+                }
+
+                generator.generate_decision(_match.tree, &_match.actions, name)?;
+                rules = rhs;
+            }
 
             // if a switch is exhaustive over the constructors, there will be no
             // `else` clause generated and rust will cry about not all paths
@@ -378,7 +395,11 @@ fn has_switch_without_default_case(decision: &Decision) -> bool {
     }
 }
 
-pub fn generate(module: Module) -> Result<String, std::fmt::Error> {
+pub fn generate(mut module: Module) -> Result<String, std::fmt::Error> {
+    for (_, rules) in &mut module.rules {
+        rules.sort_unstable_by_key(|rule| std::cmp::Reverse(rule.priority));
+    }
+
     let mut buf = String::new();
     let mut generator = Generator::new(&module, &mut buf);
 

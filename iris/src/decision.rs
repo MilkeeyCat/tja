@@ -55,7 +55,7 @@ impl Pattern {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Decision {
     Leaf(ActionIdx),
     Fail,
@@ -152,6 +152,7 @@ impl<'a> Matrix<'a> {
         stack: &mut Vec<(&'a Type, OccurrenceIdx)>,
         actions: &mut IndexVec<ActionIdx, Action>,
         occurrence_idx: &mut OccurrenceIdx,
+        has_fallback: bool,
     ) -> Decision {
         if self.rows.is_empty() {
             Decision::Fail
@@ -207,12 +208,14 @@ impl<'a> Matrix<'a> {
 
                 if !is_sig_complete(stack[0].0, &ctors) && !has_infallible_ctor {
                     let element = stack.remove(0);
+                    let decision =
+                        self.default()
+                            .compile(stack, actions, occurrence_idx, has_fallback);
 
-                    default = Some(Box::new(self.default().compile(
-                        stack,
-                        actions,
-                        occurrence_idx,
-                    )));
+                    if !(has_fallback && decision == Decision::Fail) {
+                        default = Some(Box::new(decision));
+                    }
+
                     stack.insert(0, element);
                 }
 
@@ -235,8 +238,12 @@ impl<'a> Matrix<'a> {
 
                     cases.push((
                         ctor.clone(),
-                        self.specialize(ctor.clone())
-                            .compile(stack, actions, occurrence_idx),
+                        self.specialize(ctor.clone()).compile(
+                            stack,
+                            actions,
+                            occurrence_idx,
+                            has_fallback,
+                        ),
                     ));
 
                     if let Constructor::External(name) = &ctor {
@@ -250,9 +257,13 @@ impl<'a> Matrix<'a> {
             } else {
                 stack.swap(0, idx);
 
+                for row in &mut self.rows {
+                    row.pats.swap(0, idx);
+                }
+
                 Decision::Swap(
                     idx.into(),
-                    Box::new(self.compile(stack, actions, occurrence_idx)),
+                    Box::new(self.compile(stack, actions, occurrence_idx, has_fallback)),
                 )
             }
         }
@@ -270,7 +281,12 @@ fn is_sig_complete(ty: &Type, ctors: &HashSet<Constructor>) -> bool {
     }
 }
 
-pub fn compile<'a>(module: &'a Module, rules: &'a [Rule], pat_tys: &'a [Type]) -> Match<'a> {
+pub fn compile<'a>(
+    module: &'a Module,
+    rules: &'a [Rule],
+    pat_tys: &'a [Type],
+    has_fallback: bool,
+) -> Match<'a> {
     let mut occurrence_idx = OccurrenceIdx::new(0);
     let mut actions = IndexVec::<ActionIdx, _>::new();
     let mut matrix = Matrix::new(module);
@@ -301,6 +317,7 @@ pub fn compile<'a>(module: &'a Module, rules: &'a [Rule], pat_tys: &'a [Type]) -
                 .collect(),
             &mut actions,
             &mut occurrence_idx,
+            has_fallback,
         ),
         actions,
     }
