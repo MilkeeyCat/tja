@@ -1,5 +1,5 @@
 use crate::{
-    ast::{self, Definition, Expr, Literal, Pattern},
+    ast::{self, Body, Definition, Literal, Pattern},
     visitor::{Visitor, walk_pat},
 };
 use std::{
@@ -74,8 +74,8 @@ pub struct Extractor {
 #[derive(Debug)]
 pub struct Rule {
     pub args: Vec<Pattern>,
-    pub expr: Expr,
     pub priority: i64,
+    pub body: Body,
 }
 
 fn get_ty(module: &Module, name: &str) -> Type {
@@ -153,7 +153,7 @@ pub fn run(definitions: Vec<Definition>) -> Module {
                 if let Pattern::Application { name, args } = rule.pat {
                     module.rules.entry(name).or_default().push(Rule {
                         args,
-                        expr: rule.expr,
+                        body: rule.body,
                         priority: rule.priority.unwrap_or(0),
                     });
                 } else {

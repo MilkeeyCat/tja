@@ -1,4 +1,4 @@
-use crate::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern};
+use crate::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern, Let, Body};
 
 grammar;
 
@@ -26,10 +26,18 @@ Definition: Definition = {
     // I don't like partial being on decl but I don't know a better place for it
     "decl" <partial:"partial"?> <name: Ident> "(" <arg_tys: Comma<Ident>> ")" "->" <ret_ty: Ident> ";" => Definition::Declaration(Declaration {name, arg_tys, ret_ty, partial: partial.is_some()}),
     "type" <name:Ident> "=" <external_name:Ident> ";" => Definition::Type(Type {<>}),
-    "rule" <priority:Integer?> <pat:Pattern> "{" <expr:Expr> "}" => Definition::Rule(Rule{<>}),
+    "rule" <priority:Integer?> <pat:Pattern> "{" <body:Body> "}" => Definition::Rule(Rule{<>}),
     "extern" "constructor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
     "extern" <infallible:"infallible"?> "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Extractor {name, external_name, infallible: infallible.is_some()}),
     "extern" "const" <name:Const> ":" <ty:Ident> ";" => Definition::Extern(Extern::Const {<>}),
+}
+
+Let: Let = {
+    "let" <name:Ident> "=" <value:Expr> ";" => Let {<>}
+}
+
+Body: Body = {
+    <lets:Let*> <expr:Expr> => Body {<>}
 }
 
 Expr: Expr = {

@@ -57,8 +57,20 @@ pub struct Type {
 #[derive(Debug)]
 pub struct Rule {
     pub pat: Pattern,
-    pub expr: Expr,
     pub priority: Option<i64>,
+    pub body: Body,
+}
+
+#[derive(Debug)]
+pub struct Let {
+    pub name: String,
+    pub value: Expr,
+}
+
+#[derive(Debug)]
+pub struct Body {
+    pub lets: Vec<Let>,
+    pub expr: Expr,
 }
 
 #[derive(Debug)]

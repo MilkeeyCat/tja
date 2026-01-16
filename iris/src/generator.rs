@@ -23,11 +23,52 @@ macro_rules! writeln_indended {
     };
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct VariableIdx(usize);
+
+impl std::ops::AddAssign<usize> for VariableIdx {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs;
+    }
+}
+
+impl std::fmt::Display for VariableIdx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.0)
+    }
+}
+
+struct BodyEnv<'a> {
+    pat_env: &'a HashMap<String, OccurrenceIdx>,
+    env: HashMap<String, VariableIdx>,
+}
+
+impl<'a> BodyEnv<'a> {
+    fn new(pat_env: &'a HashMap<String, OccurrenceIdx>) -> Self {
+        Self {
+            pat_env,
+            env: HashMap::new(),
+        }
+    }
+
+    fn add(&mut self, name: String, var_idx: VariableIdx) {
+        assert!(self.env.insert(name, var_idx).is_none());
+    }
+
+    fn get<F: FnOnce(OccurrenceIdx) -> VariableIdx>(&self, name: &str, map: F) -> VariableIdx {
+        self.env
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| map(self.pat_env[name]))
+    }
+}
+
 struct Generator<'a, W: Write> {
     module: &'a Module,
     buf: &'a mut W,
     indent: usize,
-    variables: IndexVec<OccurrenceIdx, String>,
+    next_var_idx: VariableIdx,
+    occurrences: IndexVec<OccurrenceIdx, VariableIdx>,
     stack: Vec<OccurrenceIdx>,
 }
 
@@ -37,17 +78,35 @@ impl<'a, W: Write> Generator<'a, W> {
             module,
             buf,
             indent: 0,
-            variables: IndexVec::new(),
+            next_var_idx: VariableIdx::default(),
+            occurrences: IndexVec::new(),
             stack: Vec::new(),
         }
     }
 
-    fn create_vars(&mut self, n: usize) {
-        for i in 0..n {
-            let idx = self.variables.push(format!("v{}", self.variables.len()));
+    fn create_var(&mut self) -> VariableIdx {
+        let idx = self.next_var_idx;
 
-            self.stack.insert(i, idx);
+        self.next_var_idx += 1;
+
+        idx
+    }
+
+    fn push_new_occurences_to_stack(&mut self, count: usize) {
+        for idx in 0..count {
+            let var_idx = self.create_var();
+            let occurrence_idx = self.occurrences.push(var_idx);
+
+            self.stack.insert(idx, occurrence_idx);
         }
+    }
+
+    fn replace_first_stack_var_with(&mut self, count: usize) -> OccurrenceIdx {
+        let occurrence_idx = self.stack.remove(0);
+
+        self.push_new_occurences_to_stack(count);
+
+        occurrence_idx
     }
 
     fn indended<F: FnOnce(&mut Generator<W>) -> std::fmt::Result>(
@@ -121,14 +180,38 @@ impl<'a, W: Write> Generator<'a, W> {
     fn generate_decision(
         &mut self,
         decision: Decision,
-        actions: &IndexVec<ActionIdx, Action>,
+        actions: &mut IndexVec<ActionIdx, Action>,
         ctor_name: &str,
     ) -> std::fmt::Result {
         match decision {
             Decision::Leaf(action_idx) => {
-                let Action { env, expr } = &actions[action_idx];
+                let Action { env, body } = &actions[action_idx];
+                let mut env = BodyEnv::new(env);
+
+                for stmt in &body.lets {
+                    let var_idx = self.create_var();
+
+                    write_indended!(self, "let {} = ", var_idx);
+                    self.generate_expr(&env, &stmt.value)?;
+
+                    if let Expr::Call { name, .. } = &stmt.value
+                        && self.module.decls[name].partial
+                    {
+                        assert!(
+                            self.module.decls[ctor_name].partial,
+                            "can't call partial constructor in non-partial constructor"
+                        );
+
+                        write!(self.buf, "?")?;
+                    }
+
+                    writeln!(self.buf, ";")?;
+
+                    env.add(stmt.name.clone(), var_idx);
+                }
+
                 let wrap_in_some = !matches!(
-                    expr,
+                    &body.expr,
                     Expr::Call { name, .. } if !self.module.decls[name].partial
                 ) && self.module.decls[ctor_name].partial;
 
@@ -138,7 +221,7 @@ impl<'a, W: Write> Generator<'a, W> {
                     write!(self.buf, "Some(")?;
                 }
 
-                self.generate_expr(env, expr)?;
+                self.generate_expr(&env, &body.expr)?;
 
                 if wrap_in_some {
                     write!(self.buf, ")")?;
@@ -179,27 +262,26 @@ impl<'a, W: Write> Generator<'a, W> {
                     }
 
                     match ctor {
-                        Constructor::Int(value) => {
-                            writeln!(self.buf, "{} == {value} {{", self.variables[self.stack[0]])?
-                        }
+                        Constructor::Int(value) => writeln!(
+                            self.buf,
+                            "{} == {value} {{",
+                            self.occurrences[self.stack[0]]
+                        )?,
                         Constructor::True => {
-                            writeln!(self.buf, "{} {{", self.variables[self.stack[0]])?
+                            writeln!(self.buf, "{} {{", self.occurrences[self.stack[0]])?
                         }
                         Constructor::False => {
-                            writeln!(self.buf, "!{} {{", self.variables[self.stack[0]])?
+                            writeln!(self.buf, "!{} {{", self.occurrences[self.stack[0]])?
                         }
                         Constructor::External(name) => {
                             let decl = &self.module.decls[&name];
                             let arity = decl.arg_tys.len();
-                            let occurrence_idx = self.stack.remove(0);
-
-                            self.create_vars(arity);
-
+                            let occurrence_idx = self.replace_first_stack_var_with(arity);
                             let vars: Vec<_> = self
                                 .stack
                                 .iter()
                                 .take(arity)
-                                .map(|&idx| self.variables[idx].as_str())
+                                .map(|&idx| self.occurrences[idx].to_string())
                                 .collect();
                             let mut vars = if vars.len() > 1 {
                                 format!("({})", vars.join(", "))
@@ -223,7 +305,7 @@ impl<'a, W: Write> Generator<'a, W> {
                             write!(
                                 self.buf,
                                 "let {} = {}(ctx, {})",
-                                vars, etor_expr, self.variables[self.stack[0]]
+                                vars, etor_expr, self.occurrences[self.stack[0]]
                             )?;
 
                             if is_infallible {
@@ -234,7 +316,7 @@ impl<'a, W: Write> Generator<'a, W> {
                             }
                         }
                         Constructor::Pinned(name) => {
-                            writeln!(self.buf, "{} == {name} {{", self.variables[self.stack[0]])?
+                            writeln!(self.buf, "{} == {name} {{", self.occurrences[self.stack[0]])?
                         }
                     }
 
@@ -272,13 +354,14 @@ impl<'a, W: Write> Generator<'a, W> {
     }
 
     fn generate_ctor(&mut self, name: &str) -> std::fmt::Result {
-        self.variables.clear();
+        self.next_var_idx = VariableIdx::default();
+        self.occurrences.clear();
         self.stack.clear();
 
         let decl = &self.module.decls[name];
         let arity = decl.arg_tys.len();
 
-        self.create_vars(arity);
+        self.push_new_occurences_to_stack(arity);
 
         let params = self
             .stack
@@ -286,7 +369,10 @@ impl<'a, W: Write> Generator<'a, W> {
             .enumerate()
             .take(arity)
             .map(|(idx, &occurrence_idx)| {
-                format!("{}: {}", self.variables[occurrence_idx], decl.arg_tys[idx])
+                format!(
+                    "{}: {}",
+                    self.occurrences[occurrence_idx], decl.arg_tys[idx]
+                )
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -314,14 +400,14 @@ impl<'a, W: Write> Generator<'a, W> {
                     .unwrap_or_else(|| rules.len());
                 let (lhs, rhs) = rules.split_at(idx);
                 let is_last_iteration = rhs.is_empty();
-                let _match =
+                let mut _match =
                     decision::compile(&generator.module, lhs, &decl.arg_tys, !is_last_iteration);
 
                 if is_last_iteration {
                     generate_unreachable = has_switch_without_default_case(&_match.tree);
                 }
 
-                generator.generate_decision(_match.tree, &_match.actions, name)?;
+                generator.generate_decision(_match.tree, &mut _match.actions, name)?;
                 rules = rhs;
             }
 
@@ -339,11 +425,7 @@ impl<'a, W: Write> Generator<'a, W> {
         writeln!(self.buf, "}}")
     }
 
-    fn generate_expr(
-        &mut self,
-        env: &HashMap<String, OccurrenceIdx>,
-        expr: &Expr,
-    ) -> std::fmt::Result {
+    fn generate_expr(&mut self, env: &BodyEnv, expr: &Expr) -> std::fmt::Result {
         match expr {
             Expr::Call { name, args } => {
                 let ctor = &self.module.decls[name].constructor;
@@ -377,7 +459,11 @@ impl<'a, W: Write> Generator<'a, W> {
                 Literal::Bool(value) => write!(self.buf, "{value}"),
                 Literal::Const(value) => write!(self.buf, "{value}"),
             },
-            Expr::Ident(name) => write!(self.buf, "{}", self.variables[env[name]]),
+            Expr::Ident(name) => write!(
+                self.buf,
+                "{}",
+                env.get(name, |occurrence_idx| self.occurrences[occurrence_idx])
+            ),
         }
     }
 }

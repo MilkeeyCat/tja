@@ -2,7 +2,7 @@
 // http://moscova.inria.fr/~maranget/papers/ml05e-maranget.pdf
 
 use crate::{
-    ast::{Expr, Literal, Pattern},
+    ast::{Body, Literal, Pattern},
     lower::{BuiltinTy, Module, Rule, Type},
 };
 use index_vec::{IndexVec, define_index_type};
@@ -15,7 +15,7 @@ define_index_type! {
 #[derive(Debug)]
 pub struct Action<'a> {
     pub env: HashMap<String, OccurrenceIdx>,
-    pub expr: &'a Expr,
+    pub body: &'a Body,
 }
 
 define_index_type! {
@@ -294,7 +294,7 @@ pub fn compile<'a>(
     for rule in rules {
         let idx = actions.push(Action {
             env: HashMap::new(),
-            expr: &rule.expr,
+            body: &rule.body,
         });
 
         matrix.rows.push(Row {
