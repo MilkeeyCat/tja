@@ -350,6 +350,51 @@ impl<'a, W: Write> Generator<'a, W> {
 
                 self.generate_decision(*decision, actions, ctor_name)
             }
+            Decision::Guard(expr, action_idx, decision) => {
+                self.push_new_occurences_to_stack(1);
+
+                let var_idx = self.occurrences[self.stack[0]];
+                let env = &actions[action_idx].env;
+
+                if let Expr::Call { name, .. } = &expr
+                    && self.module.decls[name].partial
+                {
+                    assert!(
+                        self.module.decls[ctor_name].partial,
+                        "can't call partial constructor in non-partial constructor"
+                    );
+
+                    write_indended!(self, "if let Some({}) = ", var_idx);
+                    self.generate_expr(&BodyEnv::new(&env), &expr)?;
+                    writeln!(self.buf, "{{")?;
+                } else {
+                    write_indended!(self, "let {} = ", var_idx);
+                    self.generate_expr(&BodyEnv::new(&env), &expr)?;
+                    writeln!(self.buf, ";")?;
+                    writeln_indended!(self, "{{");
+                }
+
+                self.indended(|generator| {
+                    generator.generate_decision(*decision, actions, ctor_name)
+                })?;
+                self.stack.remove(0);
+                writeln_indended!(self, "}}");
+
+                Ok(())
+            }
+            Decision::Sequence(decisions) => {
+                let mut iter = decisions.into_iter().peekable();
+
+                while let Some(decision) = iter.next() {
+                    self.generate_decision(decision, actions, ctor_name)?;
+
+                    if iter.peek().is_some() {
+                        writeln!(self.buf)?;
+                    }
+                }
+
+                Ok(())
+            }
         }
     }
 
@@ -478,6 +523,10 @@ fn has_switch_without_default_case(decision: &Decision) -> bool {
                     .any(|(_, decision)| has_switch_without_default_case(decision))
         }
         Decision::Swap(_, decision) => has_switch_without_default_case(decision),
+        Decision::Guard(_, _, decision) => has_switch_without_default_case(decision),
+        Decision::Sequence(decisions) => decisions
+            .iter()
+            .any(|decision| has_switch_without_default_case(decision)),
     }
 }
 

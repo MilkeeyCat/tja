@@ -2,7 +2,7 @@
 // http://moscova.inria.fr/~maranget/papers/ml05e-maranget.pdf
 
 use crate::{
-    ast::{Body, Literal, Pattern},
+    ast::{Body, Expr, Guard, Literal, Pattern},
     lower::{BuiltinTy, Module, Rule, Type},
 };
 use index_vec::{IndexVec, define_index_type};
@@ -61,6 +61,8 @@ pub enum Decision {
     Fail,
     Switch(Vec<(Constructor, Decision)>, Option<Box<Decision>>),
     Swap(OccurrenceIdx, Box<Decision>),
+    Guard(Expr, ActionIdx, Box<Decision>),
+    Sequence(Vec<Decision>),
 }
 
 #[derive(Debug)]
@@ -72,6 +74,7 @@ pub struct Match<'a> {
 #[derive(Debug, Clone)]
 struct Row {
     pats: Vec<Pattern>,
+    guards: Vec<Guard>,
     action_idx: ActionIdx,
 }
 
@@ -101,6 +104,7 @@ impl<'a> Matrix<'a> {
 
             let mut new_row = Row {
                 pats: Vec::new(),
+                guards: row.guards.clone(),
                 action_idx: row.action_idx,
             };
 
@@ -129,6 +133,7 @@ impl<'a> Matrix<'a> {
         for row in &self.rows {
             let mut new_row = Row {
                 pats: Vec::new(),
+                guards: row.guards.clone(),
                 action_idx: row.action_idx,
             };
 
@@ -155,15 +160,71 @@ impl<'a> Matrix<'a> {
         if self.rows.is_empty() {
             Decision::Fail
         } else if self.rows[0].pats.iter().all(|pat| pat.is_wildcard()) {
-            let action = &mut actions[self.rows[0].action_idx];
+            if let Some(idx) = self
+                .rows
+                .iter()
+                .enumerate()
+                .find(|(_, row)| !row.pats.iter().all(|pat| pat.is_wildcard()))
+                .map(|(idx, _)| idx)
+            {
+                self.rows.swap(0, idx);
 
-            for (idx, pat) in self.rows[0].pats.iter().enumerate() {
-                if let Pattern::Ident(name) = pat {
-                    assert!(action.env.insert(name.to_string(), stack[idx].1).is_none());
+                self.compile(stack, actions, occurrence_idx, has_fallback)
+            } else {
+                // TODO: check that there's only 1 row without guards and if
+                // it's true make sure that it's the last row
+                let mut decisions = Vec::new();
+
+                for mut row in self.rows {
+                    if row.guards.is_empty() {
+                        let action = &mut actions[row.action_idx];
+
+                        for (idx, pat) in row.pats.iter().enumerate() {
+                            if let Pattern::Ident(name) = pat {
+                                assert!(
+                                    action.env.insert(name.to_string(), stack[idx].1).is_none()
+                                );
+                            }
+                        }
+
+                        return Decision::Leaf(row.action_idx);
+                    }
+
+                    let (pat, expr) = match row.guards.remove(0) {
+                        Guard::Pattern(pat, expr) => (pat, expr),
+                        Guard::Expr(expr) => (Pattern::Wildcard, expr),
+                    };
+
+                    row.pats.insert(0, pat);
+
+                    let mut matrix = Matrix::new(self.module);
+                    let action_idx = row.action_idx;
+                    let idx = *occurrence_idx;
+
+                    matrix.rows = vec![row];
+                    *occurrence_idx += 1;
+                    // FIXME: currently there's no way to get the epxression's
+                    // type. More precisely it's possible but only for bool and
+                    // call epxressions but not integer literals (maybe always
+                    // expect a call as guards?).
+                    // For now use bool as dummy type
+                    stack.insert(0, (&Type::Builtin(BuiltinTy::Bool), idx));
+
+                    decisions.push(Decision::Guard(
+                        expr,
+                        action_idx,
+                        Box::new(matrix.compile(stack, actions, occurrence_idx, true)),
+                    ));
+
+                    stack.remove(0);
                 }
-            }
 
-            Decision::Leaf(self.rows[0].action_idx)
+                if !has_fallback {
+                    decisions.push(Decision::Fail);
+                }
+
+                Decision::Sequence(decisions)
+            }
         } else {
             let idx = self.rows[0]
                 .pats
@@ -297,6 +358,7 @@ pub fn compile<'a>(
 
         matrix.rows.push(Row {
             pats: rule.args.clone(),
+            guards: rule.guards.clone(),
             action_idx: idx,
         });
     }

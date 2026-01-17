@@ -58,6 +58,7 @@ pub struct Type {
 pub struct Rule {
     pub pat: Pattern,
     pub priority: Option<i64>,
+    pub guards: Vec<Guard>,
     pub body: Body,
 }
 
@@ -73,16 +74,22 @@ pub struct Body {
     pub expr: Expr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Call { name: String, args: Vec<Expr> },
     Literal(Literal),
     Ident(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Int(i64),
     Bool(bool),
     Const(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum Guard {
+    Pattern(Pattern, Expr),
+    Expr(Expr),
 }
