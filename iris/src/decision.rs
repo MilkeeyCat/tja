@@ -95,9 +95,7 @@ impl<'a> Matrix<'a> {
         for row in &self.rows {
             let pat = &row.pats[0];
 
-            if let Some(pat_ctor) = pat.head_ctor()
-                && pat_ctor != ctor
-            {
+            if pat.head_ctor().as_ref() != Some(&ctor) {
                 continue;
             }
 
