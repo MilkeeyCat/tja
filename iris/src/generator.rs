@@ -210,7 +210,7 @@ impl<'a, W: Write> Generator<'a, W> {
                     env.add(stmt.name.clone(), var_idx);
                 }
 
-                let wrap_in_some = !matches!(
+                let wrap_in_some = matches!(
                     &body.expr,
                     Expr::Call { name, .. } if !self.module.decls[name].partial
                 ) && self.module.decls[ctor_name].partial;
