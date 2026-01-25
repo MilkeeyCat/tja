@@ -65,6 +65,7 @@ pub struct Rule {
 #[derive(Debug)]
 pub struct Let {
     pub name: String,
+    pub ty: String,
     pub value: Expr,
 }
 

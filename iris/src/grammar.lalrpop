@@ -49,7 +49,7 @@ Guards: Vec<Guard> = {
 };
 
 Let: Let = {
-    "let" <name:Ident> "=" <value:Expr> ";" => Let {<>}
+    "let" <name:Ident> ":" <ty:Ident> "=" <value:Expr> ";" => Let {<>}
 }
 
 Body: Body = {
