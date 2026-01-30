@@ -75,7 +75,7 @@ pub struct Body {
     pub expr: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Call { name: String, args: Vec<Expr> },
     Literal(Literal),
@@ -89,7 +89,7 @@ pub enum Literal {
     Const(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Guard {
     Pattern(Pattern, Expr),
     Expr(Expr),
