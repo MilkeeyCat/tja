@@ -2,10 +2,8 @@ use crate::{
     decision::{Condition, Decision},
     lower::{Expr, ExprIdx, Module, RuleSet, TyIdx},
 };
-use std::{
-    collections::HashSet,
-    fmt::{Arguments, Write},
-};
+use indexmap::{IndexSet, indexset};
+use std::fmt::{Arguments, Write};
 
 macro_rules! write_indended {
     ($dst:expr, $($arg:tt)*) => {
@@ -189,7 +187,7 @@ struct RuleSetGenerator<'a, W: Write> {
     module: &'a Module,
     ruleset: &'a RuleSet,
     buf: &'a mut IndentBuffer<W>,
-    bound_exprs: HashSet<ExprIdx>,
+    bound_exprs: IndexSet<ExprIdx>,
 }
 
 impl<W: Write> Generator<W> for RuleSetGenerator<'_, W> {
@@ -204,28 +202,38 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
             module: generator.module,
             ruleset,
             buf: generator.buf,
-            bound_exprs: HashSet::new(),
+            bound_exprs: IndexSet::new(),
         }
     }
 
-    fn generate_lets(&mut self, exprs: &[ExprIdx]) -> std::fmt::Result {
-        for &expr in exprs {
-            write_indended!(self.buf, "let v{} = ", expr.index())?;
-            self.generate_expr(expr)?;
-            writeln!(self.buf, ";")?;
-        }
+    fn generate_lets<F: FnOnce(&mut Self) -> std::fmt::Result>(
+        &mut self,
+        exprs: &IndexSet<ExprIdx>,
+        f: F,
+    ) -> std::fmt::Result {
+        let bound_exprs = self.bound_exprs.clone();
+        let mut exprs = exprs.difference(&bound_exprs).cloned();
 
-        Ok(())
+        match exprs.next() {
+            Some(expr) => {
+                write_indended!(self.buf, "let v{} = ", expr.index())?;
+                self.generate_expr(expr)?;
+                writeln!(self.buf, ";")?;
+
+                self.with_bound_exprs(&indexset![expr], |generator| {
+                    generator.generate_lets(&exprs.collect(), f)
+                })
+            }
+            None => f(self),
+        }
     }
 
     fn with_bound_exprs<F: FnOnce(&mut Self) -> std::fmt::Result>(
         &mut self,
-        exprs: &[ExprIdx],
+        exprs: &IndexSet<ExprIdx>,
         f: F,
     ) -> std::fmt::Result {
-        let exprs = exprs.iter().cloned().collect();
-
-        assert!(self.bound_exprs.intersection(&exprs).next().is_none());
+        let exprs: IndexSet<ExprIdx> = exprs.difference(&self.bound_exprs).cloned().collect();
 
         self.bound_exprs.extend(exprs.clone());
         f(self)?;
@@ -234,13 +242,42 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
         Ok(())
     }
 
+    fn decompose_expr(&self, expr: ExprIdx) -> IndexSet<ExprIdx> {
+        match &self.ruleset.exprs[expr] {
+            Expr::Integer { .. } | Expr::Parameter(_) | Expr::Bool(_) | Expr::Const(_) => {
+                indexset![expr]
+            }
+            Expr::Constructor { args, .. } => std::iter::chain(
+                args.iter().map(|expr| self.decompose_expr(*expr)).flatten(),
+                std::iter::once(expr),
+            )
+            .collect(),
+            Expr::Extractor { arg, .. } => {
+                std::iter::chain(self.decompose_expr(*arg), std::iter::once(expr)).collect()
+            }
+            Expr::MatchSome(expr) | Expr::MakeSome(expr) | Expr::TupleIndex { expr, .. } => {
+                self.decompose_expr(*expr)
+            }
+        }
+    }
+
     fn generate_decision(&mut self, decision: &Decision) -> std::fmt::Result {
         match decision {
             Decision::Return { bindings, expr } => {
-                self.generate_lets(bindings)?;
-                write_indended!(self.buf, "return ")?;
-                self.with_bound_exprs(bindings, |generator| generator.generate_expr(*expr))?;
-                writeln!(self.buf, ";")
+                let exprs = std::iter::chain(
+                    bindings
+                        .iter()
+                        .map(|expr| self.decompose_expr(*expr))
+                        .flatten(),
+                    self.decompose_expr(*expr),
+                )
+                .collect();
+
+                self.generate_lets(&exprs, |generator| {
+                    write_indended!(generator.buf, "return ")?;
+                    generator.generate_expr(*expr)?;
+                    writeln!(generator.buf, ";")
+                })
             }
             Decision::Fail => {
                 if self.module.decls[self.ruleset.decl].partial {
@@ -253,51 +290,50 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
                 condition,
                 then,
                 otherwise,
-            } => {
-                write_indended!(self.buf, "if ")?;
+            } => self.generate_lets(&condition.decompose(self), |generator| {
+                write_indended!(generator.buf, "if ")?;
 
-                let exprs_to_bind: &[ExprIdx] = match condition {
+                let exprs_to_bind: &IndexSet<ExprIdx> = match condition {
                     Condition::Eq(lhs, rhs) => {
-                        self.generate_expr(*lhs)?;
-                        write!(self.buf, " == ")?;
-                        self.generate_expr(*rhs)?;
+                        generator.generate_expr(*lhs)?;
+                        write!(generator.buf, " == ")?;
+                        generator.generate_expr(*rhs)?;
 
-                        &[]
+                        &IndexSet::new()
                     }
                     Condition::Some(matched, some) => {
-                        write!(self.buf, "let Some(")?;
-                        self.with_bound_exprs(&[*matched], |generator| {
+                        write!(generator.buf, "let Some(")?;
+                        generator.with_bound_exprs(&indexset![*matched], |generator| {
                             generator.generate_expr(*matched)
                         })?;
-                        write!(self.buf, ") = ")?;
-                        self.generate_expr(*some)?;
+                        write!(generator.buf, ") = ")?;
+                        generator.generate_expr(*some)?;
 
-                        &[*matched]
+                        &indexset![*matched]
                     }
                 };
 
-                writeln!(self.buf, " {{")?;
+                writeln!(generator.buf, " {{")?;
 
-                self.with_bound_exprs(exprs_to_bind, |generator| {
+                generator.with_bound_exprs(exprs_to_bind, |generator| {
                     generator.with_indent(|generator| generator.generate_decision(then))
                 })?;
 
                 if let Some(otherwise) = otherwise {
-                    writeln_indended!(self.buf, "}} else {{")?;
-                    self.with_indent(|generator| generator.generate_decision(otherwise))?;
+                    writeln_indended!(generator.buf, "}} else {{")?;
+                    generator.with_indent(|generator| generator.generate_decision(otherwise))?;
                 }
 
-                writeln_indended!(self.buf, "}}")?;
-
-                Ok(())
-            }
+                writeln_indended!(generator.buf, "}}")
+            }),
             Decision::Let { expr, decision } => {
-                let exprs_to_bind = &[*expr];
+                let exprs = std::iter::chain(
+                    self.decompose_expr(*expr).iter().cloned(),
+                    std::iter::once(*expr),
+                )
+                .collect();
 
-                self.generate_lets(exprs_to_bind)?;
-                self.with_bound_exprs(exprs_to_bind, |generator| {
-                    generator.generate_decision(decision)
-                })
+                self.generate_lets(&exprs, |generator| generator.generate_decision(decision))
             }
             Decision::Sequence(decisions) => {
                 for decision in decisions {
@@ -367,6 +403,23 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
 
                 write!(self.buf, ".{idx}")
             }
+        }
+    }
+}
+
+impl Condition {
+    fn decompose<W: Write>(&self, generator: &RuleSetGenerator<W>) -> IndexSet<ExprIdx> {
+        match self {
+            Self::Eq(lhs, rhs) => std::iter::chain(
+                generator.decompose_expr(*lhs),
+                generator.decompose_expr(*rhs),
+            )
+            .collect(),
+            Self::Some(lhs, rhs) => std::iter::chain(
+                generator.decompose_expr(*lhs),
+                generator.decompose_expr(*rhs),
+            )
+            .collect(),
         }
     }
 }
