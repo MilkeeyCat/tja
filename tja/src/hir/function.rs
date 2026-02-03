@@ -107,7 +107,7 @@ impl Function {
         loop {
             let mut done = true;
 
-            // Some dude said that in reverse is better
+            // some dude said that in reverse is better
             for (id, block) in defs_uses.iter().enumerate().rev() {
                 // out[v] = ∪ in[w] where w ∈ succ(v)
                 let live_out = block

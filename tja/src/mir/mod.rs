@@ -81,7 +81,7 @@ impl Operand {
         Self::Register(r, RegisterRole::Def)
     }
 
-    // Can't use `use` -.-
+    // can't use `use` -.-
     pub fn not_def(r: Register) -> Self {
         Self::Register(r, RegisterRole::Use)
     }

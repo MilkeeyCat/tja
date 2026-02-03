@@ -18,9 +18,9 @@ where
     for<'p> &'p P: IntoIterator<Item = &'p Box<dyn Predicate<T, Immediate>>>,
 {
     fn matches(&mut self, ctx: &PatternCtx<'_, '_, T>, operands: &[Operand]) -> bool {
-        // TODO: It should also check if the operand is vreg and go to the
+        // TODO: it should also check if the operand is vreg and go to the
         // instruction which defines the vreg and check if it's COPY with
-        // Operand::Immediate. If so, set the value directly.
+        // Operand::Immediate. If so, set the value directly
         match &operands[0] {
             Operand::Immediate(value) => {
                 let value = Immediate {

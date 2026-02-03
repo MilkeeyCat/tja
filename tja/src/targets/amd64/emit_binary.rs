@@ -11,11 +11,11 @@ use std::{
 };
 
 pub struct Options {
-    /// Produce assembly output
+    /// Produce assembly output.
     pub assembly_only: bool,
-    /// Compile and assemble but do not link
+    /// Compile and assemble but do not link.
     pub object_only: bool,
-    /// Link into a shared library
+    /// Link into a shared library.
     pub shared: bool,
 }
 

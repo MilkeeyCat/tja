@@ -65,7 +65,7 @@ impl<'a, T: Target> Pass<'a, Function, T> for InstructionSelection {
                             };
 
                             struct InstructionInfo {
-                                /// Multiplicand and result register
+                                /// Multiplicand and result register.
                                 reg: Register,
                                 mul_op: super::Opcode,
                             }

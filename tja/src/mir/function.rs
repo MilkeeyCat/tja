@@ -140,7 +140,7 @@ impl Function {
             let mut done = true;
             let mut cursor = self.block_cursor();
 
-            // Some dude said that in reverse is better
+            // some dude said that in reverse is better
             while let Some(idx) = cursor.move_prev() {
                 let block = cursor.current().unwrap();
                 // out[v] = ∪ in[w] where w ∈ succ(v)
