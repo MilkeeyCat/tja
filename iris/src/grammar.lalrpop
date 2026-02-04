@@ -1,6 +1,45 @@
 use crate::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern, Let, Body, Guard};
+use crate::lexer::Token;
 
 grammar;
+
+extern {
+    type Location = usize;
+    type Error = ();
+
+    enum Token {
+        "const" => Token::Const,
+        "constructor" => Token::Constructor,
+        "decl" => Token::Decl,
+        "extern" => Token::Extern,
+        "extractor" => Token::Extractor,
+        "false" => Token::False,
+        "if" => Token::If,
+        "infallible" => Token::Infallible,
+        "let" => Token::Let,
+        "partial" => Token::Partial,
+        "rule" => Token::Rule,
+        "true" => Token::True,
+        "type" => Token::Type,
+
+        "ident" => Token::Ident(<String>),
+        "integer" => Token::Integer(<i64>),
+
+        "&&" => Token::And,
+        "->" => Token::Arrow,
+        "=" => Token::Assign,
+        ":" => Token::Colon,
+        "," => Token::Comma,
+        "$" => Token::Dollar,
+        "{" => Token::LeftBracket,
+        "(" => Token::LeftParen,
+        "-" => Token::Minus,
+        "}" => Token::RightBracket,
+        ")" => Token::RightParen,
+        ";" => Token::Semicolon,
+        "_" => Token::Underscore,
+    }
+}
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -24,12 +63,12 @@ pub Definitions: Vec<Definition> = {
 
 Definition: Definition = {
     // I don't like partial being on decl but I don't know a better place for it
-    "decl" <partial:"partial"?> <name: Ident> "(" <arg_tys: Comma<Ident>> ")" "->" <ret_ty: Ident> ";" => Definition::Declaration(Declaration {name, arg_tys, ret_ty, partial: partial.is_some()}),
-    "type" <name:Ident> "=" <external_name:Ident> ";" => Definition::Type(Type {<>}),
-    "rule" <priority:Integer?> <pat:Pattern> <guards:("if" <Guards>)?> "{" <body:Body> "}" => Definition::Rule(Rule {pat, priority, guards: guards.unwrap_or_default(), body}),
-    "extern" "constructor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Constructor {<>}),
-    "extern" <infallible:"infallible"?> "extractor" <name:Ident> "=" <external_name:Ident> ";" => Definition::Extern(Extern::Extractor {name, external_name, infallible: infallible.is_some()}),
-    "extern" "const" <name:Const> ":" <ty:Ident> ";" => Definition::Extern(Extern::Const {<>}),
+    "decl" <partial:"partial"?> <name: "ident"> "(" <arg_tys: Comma<"ident">> ")" "->" <ret_ty: "ident"> ";" => Definition::Declaration(Declaration {name, arg_tys, ret_ty, partial: partial.is_some()}),
+    "type" <name:"ident"> "=" <external_name:"ident"> ";" => Definition::Type(Type {<>}),
+    "rule" <priority:"integer"?> <pat:Pattern> <guards:("if" <Guards>)?> "{" <body:Body> "}" => Definition::Rule(Rule {pat, priority, guards: guards.unwrap_or_default(), body}),
+    "extern" "constructor" <name:"ident"> "=" <external_name:"ident"> ";" => Definition::Extern(Extern::Constructor {<>}),
+    "extern" <infallible:"infallible"?> "extractor" <name:"ident"> "=" <external_name:"ident"> ";" => Definition::Extern(Extern::Extractor {name, external_name, infallible: infallible.is_some()}),
+    "extern" "const" <name:Const> ":" <ty:"ident"> ";" => Definition::Extern(Extern::Const {<>}),
 }
 
 Guard: Guard = {
@@ -49,7 +88,7 @@ Guards: Vec<Guard> = {
 };
 
 Let: Let = {
-    "let" <name:Ident> ":" <ty:Ident> "=" <value:Expr> ";" => Let {<>}
+    "let" <name:"ident"> ":" <ty:"ident"> "=" <value:Expr> ";" => Let {<>}
 }
 
 Body: Body = {
@@ -57,28 +96,24 @@ Body: Body = {
 }
 
 Expr: Expr = {
-    <name:Ident> "(" <args:Comma<Expr>> ")" => Expr::Call {<>},
+    <name:"ident"> "(" <args:Comma<Expr>> ")" => Expr::Call {<>},
     Literal => Expr::Literal(<>),
-    Ident => Expr::Ident(<>),
+    "ident" => Expr::Ident(<>),
 }
 
 Pattern: Pattern = {
-    "(" <name:Ident> <args:Pattern*> ")" => Pattern::Application {<>},
+    "(" <name:"ident"> <args:Pattern*> ")" => Pattern::Application {<>},
     "_" => Pattern::Wildcard,
     Literal => Pattern::Literal(<>),
-    Ident => Pattern::Ident(<>),
+    "ident" => Pattern::Ident(<>),
 }
 
 Literal: Literal = {
-    "-" <Integer> => Literal::Int(-<>),
-    Integer => Literal::Int(<>),
+    "-" <"integer"> => Literal::Int(-<>),
+    "integer" => Literal::Int(<>),
     "true" => Literal::Bool(true),
     "false" => Literal::Bool(false),
     Const => Literal::Const(<>),
 }
 
-Const = "$" <Ident>;
-
-Ident: String = r"[\p{XID_Start}_]\p{XID_Continue}*" => String::from(<>);
-
-Integer: i64 = r"\d+" => <>.parse().unwrap();
+Const = "$" <"ident">;

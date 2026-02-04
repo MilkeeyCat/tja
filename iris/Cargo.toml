@@ -14,3 +14,4 @@ lalrpop = "0.22.2"
 index_vec = "0.1.4"
 indexmap = "2.13.0"
 lalrpop-util = { version = "0.22.2", features = ["lexer", "unicode"] }
+logos = "0.16.1"
