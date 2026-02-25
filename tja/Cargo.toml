@@ -13,3 +13,4 @@ iris = { version = "0.1.0", path = "../iris" }
 typed-generational-arena = "0.2"
 index_vec = "0.1.4"
 paste = "1.0.15"
+indexmap = "2.13.0"

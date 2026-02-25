@@ -1,5 +1,4 @@
 use crate::{
-    datastructures::vecset::VecSet,
     mir::{
         BlockIdx, FrameIdx, Function, InstructionIdx, Operand, PhysicalRegister, Register,
         RegisterRole, VregIdx,
@@ -7,6 +6,7 @@ use crate::{
     pass::{Context, Pass},
     targets::{Abi, RegisterInfo, Target},
 };
+use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
@@ -144,9 +144,9 @@ pub struct AllocatorImpl<'a, 'b, T: Target> {
     /// Low-degree non-move-related nodes.
     simplify_worklist: Vec<VregIdx>,
     /// Low-degree move-related nodes.
-    freeze_worklist: VecSet<VregIdx>,
+    freeze_worklist: IndexSet<VregIdx>,
     /// High-degree nodes.
-    spill_worklist: VecSet<VregIdx>,
+    spill_worklist: IndexSet<VregIdx>,
     /// Nodes marked for spilling during this round.
     spilled_nodes: Vec<VregIdx>,
     /// Registers that have been coalesced, when the move u := v is coalesced,
@@ -165,21 +165,21 @@ pub struct AllocatorImpl<'a, 'b, T: Target> {
     /// Moves that will no longer be considered for coalescing.
     frozen_moves: HashSet<(BlockIdx, InstructionIdx)>,
     /// Moves enabled for possible coalescing.
-    worklist_moves: VecSet<(BlockIdx, InstructionIdx)>,
+    worklist_moves: IndexSet<(BlockIdx, InstructionIdx)>,
     /// Moves not yet ready for coalescing.
-    active_moves: VecSet<(BlockIdx, InstructionIdx)>,
+    active_moves: IndexSet<(BlockIdx, InstructionIdx)>,
 
     /// The set of interference edges (u, v) in the graph. If (u, v) ∈ adj_set
     /// then (v, u) ∈ adj_set.
     adj_set: HashSet<(Register, Register)>,
     /// Adjacency list representation of the graph, for each nonprecolored
     /// temporary u, adj_list[u] is the set of nodes that interfere with u.
-    adj_list: HashMap<VregIdx, VecSet<Register>>,
+    adj_list: HashMap<VregIdx, IndexSet<Register>>,
     /// The current degree of each node.
     degree: HashMap<VregIdx, usize>,
 
     /// A mapping from node to the list of moves it is associated with.
-    move_list: HashMap<Register, VecSet<(BlockIdx, InstructionIdx)>>,
+    move_list: HashMap<Register, IndexSet<(BlockIdx, InstructionIdx)>>,
     /// When a move (u, v) has been coalesced, and v put in coalesced_nodes, then
     /// alias(v) = u.
     alias: HashMap<VregIdx, Register>,
@@ -205,8 +205,8 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             spill_temps,
 
             simplify_worklist: Vec::new(),
-            freeze_worklist: VecSet::new(),
-            spill_worklist: VecSet::new(),
+            freeze_worklist: IndexSet::new(),
+            spill_worklist: IndexSet::new(),
             spilled_nodes: Vec::new(),
             select_stack: Vec::new(),
             coalesced_nodes: HashSet::new(),
@@ -215,8 +215,8 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             coalesced_moves: HashSet::new(),
             constrained_moves: HashSet::new(),
             frozen_moves: HashSet::new(),
-            worklist_moves: VecSet::new(),
-            active_moves: VecSet::new(),
+            worklist_moves: IndexSet::new(),
+            active_moves: IndexSet::new(),
 
             adj_set: HashSet::new(),
             adj_list,
@@ -290,7 +290,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
         }
     }
 
-    fn node_moves(&self, reg: &Register) -> VecSet<(BlockIdx, InstructionIdx)> {
+    fn node_moves(&self, reg: &Register) -> IndexSet<(BlockIdx, InstructionIdx)> {
         self.move_list
             .get(reg)
             .cloned()
@@ -298,9 +298,15 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             .intersection(
                 &self
                     .active_moves
-                    .union(&self.worklist_moves.clone().into_iter().collect())
+                    .union(
+                        &self
+                            .worklist_moves
+                            .clone()
+                            .into_iter()
+                            .collect::<IndexSet<_>>(),
+                    )
                     .cloned()
-                    .collect(),
+                    .collect::<IndexSet<_>>(),
             )
             .cloned()
             .collect()
@@ -333,7 +339,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
         }
     }
 
-    fn adjacent(&self, vreg_idx: &VregIdx) -> VecSet<Register> {
+    fn adjacent(&self, vreg_idx: &VregIdx) -> IndexSet<Register> {
         &self.adj_list[vreg_idx]
             - &self
                 .select_stack
@@ -348,14 +354,14 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         .collect(),
                 )
                 .cloned()
-                .collect()
+                .collect::<IndexSet<_>>()
     }
 
-    fn enable_moves(&mut self, nodes: VecSet<Register>) {
+    fn enable_moves(&mut self, nodes: IndexSet<Register>) {
         for node in nodes {
             for mv in self.node_moves(&node) {
                 if self.active_moves.contains(&mv) {
-                    self.active_moves.remove(&mv);
+                    self.active_moves.shift_remove(&mv);
                     self.worklist_moves.insert(mv);
                 }
             }
@@ -376,13 +382,13 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                 .len()
         {
             self.enable_moves(
-                VecSet::from([Register::Virtual(*vreg_idx)])
+                IndexSet::from([Register::Virtual(*vreg_idx)])
                     .union(&self.adjacent(vreg_idx))
                     .cloned()
                     .collect(),
             );
 
-            self.spill_worklist.remove(vreg_idx);
+            self.spill_worklist.shift_remove(vreg_idx);
 
             if self.move_related(&Register::Virtual(*vreg_idx)) {
                 self.freeze_worklist.insert(*vreg_idx);
@@ -427,13 +433,13 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         )
                         .len()
             {
-                self.freeze_worklist.remove(idx);
+                self.freeze_worklist.shift_remove(idx);
                 self.simplify_worklist.push(*idx);
             }
         }
     }
 
-    fn george_strat(&self, nodes: VecSet<Register>, u: Register) -> bool {
+    fn george_strat(&self, nodes: IndexSet<Register>, u: Register) -> bool {
         nodes.into_iter().all(|node| {
             (match node {
                 Register::Virtual(idx) => {
@@ -482,9 +488,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
 
     fn combine(&mut self, u: &Register, v: &VregIdx) {
         if self.freeze_worklist.contains(v) {
-            self.freeze_worklist.remove(v);
+            self.freeze_worklist.shift_remove(v);
         } else {
-            self.spill_worklist.remove(v);
+            self.spill_worklist.shift_remove(v);
         }
 
         self.coalesced_nodes.insert(*v);
@@ -511,7 +517,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                     .len()
             && self.freeze_worklist.contains(idx)
         {
-            self.freeze_worklist.remove(idx);
+            self.freeze_worklist.shift_remove(idx);
             self.spill_worklist.insert(*idx);
         }
     }
@@ -570,9 +576,9 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
     fn freeze_moves(&mut self, vreg_idx: &VregIdx) {
         for mv in self.node_moves(&Register::Virtual(*vreg_idx)) {
             if self.active_moves.contains(&mv) {
-                self.active_moves.remove(&mv);
+                self.active_moves.shift_remove(&mv);
             } else {
-                self.worklist_moves.remove(&mv);
+                self.worklist_moves.shift_remove(&mv);
             }
 
             self.frozen_moves.insert(mv);
@@ -596,7 +602,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
                         )
                         .len()
             {
-                self.freeze_worklist.remove(idx);
+                self.freeze_worklist.shift_remove(idx);
                 self.simplify_worklist.push(*idx);
             }
         }
@@ -617,7 +623,7 @@ impl<'a, 'b, T: Target> AllocatorImpl<'a, 'b, T> {
             .unwrap()
             .clone();
 
-        self.spill_worklist.remove(&vreg_idx);
+        self.spill_worklist.shift_remove(&vreg_idx);
         self.simplify_worklist.push(vreg_idx);
         self.freeze_moves(&vreg_idx);
     }

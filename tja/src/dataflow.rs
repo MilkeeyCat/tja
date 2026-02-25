@@ -1,13 +1,14 @@
-use crate::{datastructures::vecset::VecSet, mir::Register};
+use crate::mir::Register;
+use indexmap::IndexSet;
 
 #[derive(Default, Debug)]
 pub struct DefsUses {
-    pub defs: VecSet<Register>,
-    pub uses: VecSet<Register>,
+    pub defs: IndexSet<Register>,
+    pub uses: IndexSet<Register>,
 }
 
 #[derive(Default, Clone, Debug)]
 pub struct Liveness {
-    pub ins: VecSet<Register>,
-    pub outs: VecSet<Register>,
+    pub ins: IndexSet<Register>,
+    pub outs: IndexSet<Register>,
 }

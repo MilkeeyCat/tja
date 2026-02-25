@@ -1,5 +1,4 @@
 mod dataflow;
-mod datastructures;
 pub mod hir;
 #[macro_use]
 pub(crate) mod macros;

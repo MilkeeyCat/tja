@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-
 use super::{Operand, Register};
 use crate::{
     dataflow::{DefsUses, Liveness},
-    datastructures::vecset::VecSet,
     macros::usize_wrapper,
     mir::{
         BasicBlock, BasicBlockCursor, BasicBlockCursorMut, BlockIdx, Instruction,
@@ -12,6 +9,8 @@ use crate::{
     ty::TyIdx,
 };
 use index_vec::{IndexVec, define_index_type};
+use indexmap::IndexSet;
+use std::collections::HashMap;
 use typed_generational_arena::StandardArena;
 
 usize_wrapper! {RegisterClass}
@@ -173,8 +172,8 @@ impl Function {
         liveness
     }
 
-    pub fn registers(&self) -> VecSet<Register> {
-        let mut registers = VecSet::new();
+    pub fn registers(&self) -> IndexSet<Register> {
+        let mut registers = IndexSet::new();
 
         for (_, instr) in &self.instructions {
             for operand in &instr.operands {
