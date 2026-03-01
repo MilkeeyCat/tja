@@ -281,7 +281,7 @@ SUB64RI32 = TargetInstruction(
 # ==============================================================================
 
 
-def imul_r_r(size: int):
+def imul_r_r(size: int) -> TargetInstruction:
     return TargetInstruction(
         f"IMul{size}rr",
         [],
@@ -303,7 +303,7 @@ def imul_r_r(size: int):
 # ==============================================================================
 
 
-def idiv_r_r(size: int):
+def idiv_r_r(size: int) -> TargetInstruction:
     return TargetInstruction(
         f"IDiv{size}rr",
         [],
@@ -325,7 +325,7 @@ def idiv_r_r(size: int):
 # ==============================================================================
 
 
-def cmp_rm_r(size: int):
+def cmp_rm_r(size: int) -> TargetInstruction:
     instructions: list[TargetInstruction] = []
 
     for variant in ["r", "m"]:
