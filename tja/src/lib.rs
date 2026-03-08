@@ -1,10 +1,6 @@
-mod dataflow;
 pub mod hir;
 #[macro_use]
 pub(crate) mod macros;
-pub mod mir;
-pub mod pass;
-pub mod targets;
 pub mod ty;
 
 use crate::ty::TyIdx;
