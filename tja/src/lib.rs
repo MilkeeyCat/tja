@@ -1,4 +1,7 @@
 pub mod hir;
+pub mod mir;
+pub mod pass;
+pub mod targets;
 #[macro_use]
 pub(crate) mod macros;
 pub mod ty;
