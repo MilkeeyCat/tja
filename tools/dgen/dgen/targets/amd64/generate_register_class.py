@@ -4,10 +4,9 @@ from dgen.base.register_class import REGISTER_CLASSES
 from dgen.writer import Writer
 
 
-def generate_register_classes(buf: TextIOWrapper):
+def generate_register_class(buf: TextIOWrapper):
     writer = Writer(buf)
 
-    writer.writeln("#[repr(usize)]")
     writer.writeln("#[derive(Clone, Copy)]")
     writer.writeln("pub enum RegisterClass {")
     writer.indent()

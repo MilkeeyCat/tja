@@ -3,8 +3,8 @@ from pathlib import Path
 from .registers import *
 from .register_classes import *
 from .instructions import *
-from .generate_registers import generate_registers
-from .generate_register_classes import generate_register_classes
+from .generate_register import generate_register
+from .generate_register_class import generate_register_class
 
 
 def generate(out: str):
@@ -13,5 +13,5 @@ def generate(out: str):
     if not root.is_dir():
         root.mkdir(parents=True)
 
-    generate_registers(open(root / "register.rs", "w"))
-    generate_register_classes(open(root / "register_classes.rs", "w"))
+    generate_register(open(root / "register.rs", "w"))
+    generate_register_class(open(root / "register_class.rs", "w"))
