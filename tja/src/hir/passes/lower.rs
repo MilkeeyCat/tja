@@ -114,9 +114,9 @@ pub struct FnLowering<'a, T: Target> {
     pub mir_function: mir::Function<T::CallingConventionInstruction>,
     target: &'a T,
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
-    hir_to_mir_bb: HashMap<hir::BlockIdx, mir::BlockIdx<T::CallingConventionInstruction>>,
+    hir_to_mir_bb: HashMap<hir::BlockIdx, mir::BlockIdx>,
     pub ty_to_offsets: HashMap<TyIdx, Vec<usize>>,
-    current_bb_idx: mir::BlockIdx<T::CallingConventionInstruction>,
+    current_bb_idx: mir::BlockIdx,
 }
 
 impl<

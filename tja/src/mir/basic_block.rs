@@ -2,22 +2,24 @@ use crate::mir::{
     Function,
     instruction::{Instruction, InstructionIdx},
 };
+use slotmap::new_key_type;
 use std::collections::HashSet;
-use typed_generational_arena::StandardIndex;
 
-pub type BlockIdx<I> = StandardIndex<BasicBlock<I>>;
-
-#[derive(Debug)]
-pub struct BasicBlock<I: Instruction> {
-    pub name: String,
-    pub successors: HashSet<BlockIdx<I>>,
-    pub instruction_head: Option<InstructionIdx<I>>,
-    pub instruction_tail: Option<InstructionIdx<I>>,
-    pub next: Option<BlockIdx<I>>,
-    pub prev: Option<BlockIdx<I>>,
+new_key_type! {
+    pub struct BlockIdx;
 }
 
-impl<I: Instruction> BasicBlock<I> {
+#[derive(Debug)]
+pub struct BasicBlock {
+    pub name: String,
+    pub successors: HashSet<BlockIdx>,
+    pub instruction_head: Option<InstructionIdx>,
+    pub instruction_tail: Option<InstructionIdx>,
+    pub next: Option<BlockIdx>,
+    pub prev: Option<BlockIdx>,
+}
+
+impl BasicBlock {
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -33,7 +35,7 @@ impl<I: Instruction> BasicBlock<I> {
 pub struct Cursor<'a, I: Instruction> {
     pub func: &'a Function<I>,
 
-    idx: Option<BlockIdx<I>>,
+    idx: Option<BlockIdx>,
 }
 
 impl<'a, I: Instruction> Cursor<'a, I> {
@@ -61,39 +63,39 @@ impl<'a, I: Instruction> Cursor<'a, I> {
         self.idx = self.func.block_tail;
     }
 
-    pub fn idx(&self) -> Option<BlockIdx<I>> {
+    pub fn idx(&self) -> Option<BlockIdx> {
         self.idx
     }
 
-    pub fn set_idx(&mut self, idx: BlockIdx<I>) {
+    pub fn set_idx(&mut self, idx: BlockIdx) {
         self.idx = Some(idx);
     }
 
-    pub fn current(&self) -> Option<&BasicBlock<I>> {
+    pub fn current(&self) -> Option<&BasicBlock> {
         self.idx.map(|idx| &self.func.blocks[idx])
     }
 
-    pub fn peek_prev(&self) -> Option<BlockIdx<I>> {
+    pub fn peek_prev(&self) -> Option<BlockIdx> {
         match self.idx {
             None => self.func.block_tail,
             Some(idx) => self.func.blocks[idx].prev,
         }
     }
 
-    pub fn peek_next(&self) -> Option<BlockIdx<I>> {
+    pub fn peek_next(&self) -> Option<BlockIdx> {
         match self.idx {
             None => self.func.block_head,
             Some(idx) => self.func.blocks[idx].next,
         }
     }
 
-    pub fn move_prev(&mut self) -> Option<BlockIdx<I>> {
+    pub fn move_prev(&mut self) -> Option<BlockIdx> {
         self.idx = self.peek_prev();
 
         self.idx
     }
 
-    pub fn move_next(&mut self) -> Option<BlockIdx<I>> {
+    pub fn move_next(&mut self) -> Option<BlockIdx> {
         self.idx = self.peek_next();
 
         self.idx
@@ -103,7 +105,7 @@ impl<'a, I: Instruction> Cursor<'a, I> {
 pub struct CursorMut<'a, I: Instruction> {
     pub func: &'a mut Function<I>,
 
-    idx: Option<BlockIdx<I>>,
+    idx: Option<BlockIdx>,
 }
 
 impl<'a, I: Instruction> CursorMut<'a, I> {
@@ -131,43 +133,43 @@ impl<'a, I: Instruction> CursorMut<'a, I> {
         self.idx = self.func.block_tail;
     }
 
-    pub fn idx(&self) -> Option<BlockIdx<I>> {
+    pub fn idx(&self) -> Option<BlockIdx> {
         self.idx
     }
 
-    pub fn set_idx(&mut self, idx: BlockIdx<I>) {
+    pub fn set_idx(&mut self, idx: BlockIdx) {
         self.idx = Some(idx);
     }
 
-    pub fn current(&self) -> Option<&BasicBlock<I>> {
+    pub fn current(&self) -> Option<&BasicBlock> {
         self.idx.map(|idx| &self.func.blocks[idx])
     }
 
-    pub fn current_mut(&mut self) -> Option<&mut BasicBlock<I>> {
+    pub fn current_mut(&mut self) -> Option<&mut BasicBlock> {
         self.idx.map(|idx| &mut self.func.blocks[idx])
     }
 
-    pub fn peek_prev(&self) -> Option<BlockIdx<I>> {
+    pub fn peek_prev(&self) -> Option<BlockIdx> {
         match self.idx {
             None => self.func.block_tail,
             Some(idx) => self.func.blocks[idx].prev,
         }
     }
 
-    pub fn peek_next(&self) -> Option<BlockIdx<I>> {
+    pub fn peek_next(&self) -> Option<BlockIdx> {
         match self.idx {
             None => self.func.block_head,
             Some(idx) => self.func.blocks[idx].next,
         }
     }
 
-    pub fn move_prev(&mut self) -> Option<BlockIdx<I>> {
+    pub fn move_prev(&mut self) -> Option<BlockIdx> {
         self.idx = self.peek_prev();
 
         self.idx
     }
 
-    pub fn move_next(&mut self) -> Option<BlockIdx<I>> {
+    pub fn move_next(&mut self) -> Option<BlockIdx> {
         self.idx = self.peek_next();
 
         self.idx
@@ -175,10 +177,10 @@ impl<'a, I: Instruction> CursorMut<'a, I> {
 
     fn splice(
         &mut self,
-        existing_prev: Option<BlockIdx<I>>,
-        existing_next: Option<BlockIdx<I>>,
-        splice_start: BlockIdx<I>,
-        splice_end: BlockIdx<I>,
+        existing_prev: Option<BlockIdx>,
+        existing_next: Option<BlockIdx>,
+        splice_start: BlockIdx,
+        splice_end: BlockIdx,
     ) {
         if let Some(prev) = existing_prev {
             self.func.blocks[prev].next = Some(splice_start);
@@ -196,7 +198,7 @@ impl<'a, I: Instruction> CursorMut<'a, I> {
         self.func.blocks[splice_end].next = existing_next;
     }
 
-    pub fn insert_before(&mut self, idx: BlockIdx<I>) {
+    pub fn insert_before(&mut self, idx: BlockIdx) {
         let prev = match self.idx {
             None => self.func.block_tail,
             Some(idx) => self.func.blocks[idx].prev,
@@ -206,7 +208,7 @@ impl<'a, I: Instruction> CursorMut<'a, I> {
         self.idx = Some(idx);
     }
 
-    pub fn insert_after(&mut self, idx: BlockIdx<I>) {
+    pub fn insert_after(&mut self, idx: BlockIdx) {
         let next = match self.idx {
             None => self.func.block_head,
             Some(idx) => self.func.blocks[idx].next,

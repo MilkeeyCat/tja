@@ -8,7 +8,7 @@ use crate::{
     ty::TyIdx,
 };
 use index_vec::{IndexVec, define_index_type};
-use typed_generational_arena::StandardArena;
+use slotmap::SlotMap;
 
 define_index_type! {
     pub struct VregIdx = usize;
@@ -48,10 +48,10 @@ pub struct Function<I: Instruction> {
     pub name: String,
     pub vreg_info: VregInfo<<I::Register as Register>::RegisterClass>,
     pub frame_info: FrameInfo,
-    pub blocks: StandardArena<BasicBlock<I>>,
-    pub instructions: StandardArena<InstructionWrapper<I>>,
-    pub block_head: Option<BlockIdx<I>>,
-    pub block_tail: Option<BlockIdx<I>>,
+    pub blocks: SlotMap<BlockIdx, BasicBlock>,
+    pub instructions: SlotMap<InstructionIdx, InstructionWrapper<I>>,
+    pub block_head: Option<BlockIdx>,
+    pub block_tail: Option<BlockIdx>,
 }
 
 impl<I: Instruction> Function<I> {
@@ -60,14 +60,14 @@ impl<I: Instruction> Function<I> {
             name,
             vreg_info: VregInfo::new(),
             frame_info: FrameInfo::default(),
-            blocks: StandardArena::new(),
-            instructions: StandardArena::new(),
+            blocks: SlotMap::with_key(),
+            instructions: SlotMap::with_key(),
             block_head: None,
             block_tail: None,
         }
     }
 
-    pub fn create_block(&mut self, name: String) -> BlockIdx<I> {
+    pub fn create_block(&mut self, name: String) -> BlockIdx {
         self.blocks.insert(BasicBlock::new(name))
     }
 
@@ -79,15 +79,15 @@ impl<I: Instruction> Function<I> {
         BasicBlockCursorMut::new(self)
     }
 
-    pub fn instr_cursor(&self, idx: BlockIdx<I>) -> InstructionCursor<'_, I> {
+    pub fn instr_cursor(&self, idx: BlockIdx) -> InstructionCursor<'_, I> {
         InstructionCursor::new(self, idx)
     }
 
-    pub fn instr_cursor_mut(&mut self, idx: BlockIdx<I>) -> InstructionCursorMut<'_, I> {
+    pub fn instr_cursor_mut(&mut self, idx: BlockIdx) -> InstructionCursorMut<'_, I> {
         InstructionCursorMut::new(self, idx)
     }
 
-    pub fn create_instr(&mut self, instr: impl Into<I>) -> InstructionIdx<I> {
+    pub fn create_instr(&mut self, instr: impl Into<I>) -> InstructionIdx {
         self.instructions.insert(InstructionWrapper {
             instruction: instr.into(),
             next: None,

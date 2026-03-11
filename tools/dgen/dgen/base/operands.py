@@ -2,7 +2,7 @@ from .operand import Operand
 
 VREG = Operand("I::Register")
 FRAME_IDX = Operand("FrameIdx")
-BLOCK_IDX = Operand("BlockIdx<Self>")
+BLOCK_IDX = Operand("BlockIdx")
 VREG_OR_IMM = Operand("RegisterOrImmediate<I::Register>")
 GLOBAL_OR_FN = Operand("GlobalOrFunction")
 CCODE = Operand("ConditionCode")
