@@ -12,15 +12,6 @@ pub trait Target {
     type CallingConventionInstruction: Instruction;
 
     fn get_calling_convention(&self) -> &dyn CallingConvention<Target = Self>;
-
-    fn lower_operand(
-        &self,
-        operand: &hir::Operand,
-        types: &[TyIdx],
-        func: &mut FnLowering<Self>,
-    ) -> Vec<mir::VregIdx>
-    where
-        Self: Sized;
 }
 
 pub trait CallingConvention {
@@ -62,5 +53,5 @@ pub trait Register {
     fn class<I: Instruction<Register = impl Register<RegisterClass = Self::RegisterClass>>>(
         &self,
         func: &Function<I>,
-    ) -> Self::RegisterClass;
+    ) -> Option<Self::RegisterClass>;
 }

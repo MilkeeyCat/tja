@@ -36,7 +36,7 @@ impl<R: Register> Register for GenericRegister<R> {
     fn class<I: Instruction<Register = impl Register<RegisterClass = Self::RegisterClass>>>(
         &self,
         func: &Function<I>,
-    ) -> Self::RegisterClass {
+    ) -> Option<Self::RegisterClass> {
         match self {
             Self::Virtual(vreg) => func.vreg_info.get_vreg(*vreg).class,
             Self::Physical(reg) => reg.class(func),
@@ -99,7 +99,7 @@ impl<I: Instruction> Function<I> {
 #[derive(Debug)]
 pub struct Vreg<RC: RegisterClass> {
     pub ty: TyIdx,
-    pub class: RC,
+    pub class: Option<RC>,
 }
 
 #[derive(Default, Debug)]
@@ -114,12 +114,23 @@ impl<RC: RegisterClass> VregInfo<RC> {
         }
     }
 
-    pub fn create_vreg(&mut self, ty: TyIdx, class: RC) -> VregIdx {
-        self.vreg_info.push(Vreg { ty, class })
+    pub fn create_vreg(&mut self, ty: TyIdx) -> VregIdx {
+        self.vreg_info.push(Vreg { ty, class: None })
+    }
+
+    pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RC) -> VregIdx {
+        self.vreg_info.push(Vreg {
+            ty,
+            class: Some(class),
+        })
     }
 
     pub fn get_vreg(&self, idx: VregIdx) -> &Vreg<RC> {
         &self.vreg_info[idx]
+    }
+
+    pub fn set_class(&mut self, idx: VregIdx, class: RC) {
+        self.vreg_info[idx].class = Some(class);
     }
 }
 

@@ -166,12 +166,80 @@ impl<
             hir::Operand::Const(_, ty) => ty,
         };
 
+        let mut vreg_indices: Vec<mir::VregIdx> = Vec::new();
         let mut types = Vec::new();
         let mut offsets = Vec::new();
 
         self.lower_ty(ty, &mut types, &mut offsets, 0);
 
-        let vreg_indices = self.target.lower_operand(&operand, &types, self);
+        match &operand {
+            hir::Operand::Local(_) => {
+                for ty in types {
+                    vreg_indices.push(self.mir_function.vreg_info.create_vreg(ty));
+                }
+            }
+            hir::Operand::Const(c, ty) => match c {
+                Const::Global(idx) => {
+                    let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
+                    let instr_idx =
+                        self.mir_function
+                            .create_instr(GenericInstruction::GlobalValue {
+                                op0: vreg_idx.into(),
+                                op1: (*idx).into(),
+                            });
+
+                    self.instr_cursor_mut().insert_after(instr_idx);
+                    vreg_indices.push(vreg_idx);
+                }
+                Const::Function(idx) => {
+                    let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
+                    let instr_idx =
+                        self.mir_function
+                            .create_instr(GenericInstruction::GlobalValue {
+                                op0: vreg_idx.into(),
+                                op1: (*idx).into(),
+                            });
+
+                    self.instr_cursor_mut().insert_after(instr_idx);
+                    vreg_indices.push(vreg_idx);
+                }
+                Const::Int(value) => {
+                    let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
+                    let instr_idx = self.mir_function.create_instr(GenericInstruction::Copy {
+                        op0: vreg_idx.into(),
+                        op1: (*value as i64).into(),
+                    });
+
+                    self.instr_cursor_mut().insert_after(instr_idx);
+                    vreg_indices.push(vreg_idx);
+                }
+                Const::Aggregate(consts) => {
+                    match self.ty_storage.get_ty(*ty) {
+                        Ty::Struct(tys) => {
+                            assert_eq!(consts.len(), tys.len());
+
+                            for (c, ty) in consts.iter().zip(tys) {
+                                let tmp =
+                                    self.get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
+
+                                vreg_indices.extend_from_slice(tmp);
+                            }
+                        }
+                        Ty::Array { ty, len } => {
+                            assert_eq!(consts.len(), *len);
+
+                            for c in consts.iter() {
+                                let tmp =
+                                    self.get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
+
+                                vreg_indices.extend_from_slice(tmp);
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                }
+            },
+        }
 
         self.ty_to_offsets.entry(ty).or_insert(offsets);
         self.operand_to_vreg_indices
@@ -337,12 +405,10 @@ impl<
                                     let vreg_idx = if size == 1 {
                                         self.get_or_create_vreg(idx.clone())
                                     } else {
-                                        let class = GenericRegister::<R>::from(base)
-                                            .class(&self.mir_function);
                                         let def_vreg_idx = self
                                             .mir_function
                                             .vreg_info
-                                            .create_vreg(self.ty_storage.ptr_ty, class);
+                                            .create_vreg(self.ty_storage.ptr_ty);
                                         let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
                                         let instr_idx = self.mir_function.create_instr(
                                             GenericInstruction::Mul {
@@ -494,11 +560,10 @@ impl<
         base: GenericRegister<R>,
         offset: RegisterOrImmediate<GenericRegister<R>>,
     ) -> mir::VregIdx {
-        let class = base.class(&self.mir_function);
         let vreg_idx = self
             .mir_function
             .vreg_info
-            .create_vreg(self.ty_storage.ptr_ty, class);
+            .create_vreg(self.ty_storage.ptr_ty);
         let instr_idx = self.mir_function.create_instr(GenericInstruction::PtrAdd {
             op0: vreg_idx.into(),
             op1: base,

@@ -34,7 +34,7 @@ impl super::Register for Register {
     >(
         &self,
         _func: &mir::Function<I>,
-    ) -> Self::RegisterClass {
+    ) -> Option<Self::RegisterClass> {
         todo!()
     }
 }
@@ -76,99 +76,5 @@ impl super::Target for Target {
 
     fn get_calling_convention(&self) -> &dyn super::CallingConvention<Target = Self> {
         &self.default_cc
-    }
-
-    fn lower_operand(
-        &self,
-        operand: &hir::Operand,
-        types: &[TyIdx],
-        lowering: &mut FnLowering<Self>,
-    ) -> Vec<mir::VregIdx> {
-        let mut vreg_indices: Vec<mir::VregIdx> = Vec::new();
-
-        match &operand {
-            hir::Operand::Local(_) => {
-                for &ty in types {
-                    vreg_indices.push(
-                        lowering
-                            .mir_function
-                            .vreg_info
-                            .create_vreg(ty, ty_to_reg_class(lowering.ty_storage, ty)),
-                    );
-                }
-            }
-            hir::Operand::Const(c, ty) => {
-                let reg_class = ty_to_reg_class(lowering.ty_storage, *ty);
-
-                match c {
-                    Const::Global(idx) => {
-                        let vreg_idx = lowering.mir_function.vreg_info.create_vreg(*ty, reg_class);
-                        let instr_idx =
-                            lowering
-                                .mir_function
-                                .create_instr(GenericInstruction::GlobalValue {
-                                    op0: vreg_idx.into(),
-                                    op1: (*idx).into(),
-                                });
-
-                        lowering.instr_cursor_mut().insert_after(instr_idx);
-                        vreg_indices.push(vreg_idx);
-                    }
-                    Const::Function(idx) => {
-                        let vreg_idx = lowering.mir_function.vreg_info.create_vreg(*ty, reg_class);
-                        let instr_idx =
-                            lowering
-                                .mir_function
-                                .create_instr(GenericInstruction::GlobalValue {
-                                    op0: vreg_idx.into(),
-                                    op1: (*idx).into(),
-                                });
-
-                        lowering.instr_cursor_mut().insert_after(instr_idx);
-                        vreg_indices.push(vreg_idx);
-                    }
-                    Const::Int(value) => {
-                        let vreg_idx = lowering.mir_function.vreg_info.create_vreg(*ty, reg_class);
-                        let instr_idx =
-                            lowering
-                                .mir_function
-                                .create_instr(GenericInstruction::Copy {
-                                    op0: vreg_idx.into(),
-                                    op1: (*value as i64).into(),
-                                });
-
-                        lowering.instr_cursor_mut().insert_after(instr_idx);
-                        vreg_indices.push(vreg_idx);
-                    }
-                    Const::Aggregate(consts) => {
-                        match lowering.ty_storage.get_ty(*ty) {
-                            Ty::Struct(tys) => {
-                                assert_eq!(consts.len(), tys.len());
-
-                                for (c, ty) in consts.iter().zip(tys) {
-                                    let tmp = lowering
-                                        .get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
-
-                                    vreg_indices.extend_from_slice(tmp);
-                                }
-                            }
-                            Ty::Array { ty, len } => {
-                                assert_eq!(consts.len(), *len);
-
-                                for c in consts.iter() {
-                                    let tmp = lowering
-                                        .get_or_create_vregs(hir::Operand::Const(c.clone(), *ty));
-
-                                    vreg_indices.extend_from_slice(tmp);
-                                }
-                            }
-                            _ => unreachable!(),
-                        };
-                    }
-                }
-            }
-        }
-
-        vreg_indices
     }
 }
