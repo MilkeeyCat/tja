@@ -1,9 +1,9 @@
 from .operand import Operand
 
-VREG = Operand("I::Register")
+VREG = Operand("R", True)
 FRAME_IDX = Operand("FrameIdx")
 BLOCK_IDX = Operand("BlockIdx")
-VREG_OR_IMM = Operand("RegisterOrImmediate<I::Register>")
+VREG_OR_IMM = Operand("RegisterOrImmediate<R>", True)
 GLOBAL_OR_FN = Operand("GlobalOrFunction")
 CCODE = Operand("ConditionCode")
 

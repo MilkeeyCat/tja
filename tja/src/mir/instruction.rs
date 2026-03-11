@@ -4,11 +4,14 @@ use crate::{
     targets::Register,
 };
 use derive_more::From;
-pub use generated::GenericInstruction;
+pub use generated::{
+    Add, Br, BrCond, Copy, FrameIndex, GenericInstruction, GlobalValue, ICmp, Load, Mul, PtrAdd,
+    SDiv, Store, Sub, UDiv,
+};
 use slotmap::new_key_type;
 
 mod generated {
-    use super::{GlobalOrFunction, Instruction, RegisterOrImmediate};
+    use super::{GlobalOrFunction, Instruction, Register, RegisterOrImmediate};
     use crate::{
         ConditionCode,
         mir::{BlockIdx, FrameIdx},
