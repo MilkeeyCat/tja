@@ -28,22 +28,10 @@ pub trait Instruction {
     type Register: Register;
 }
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum RegisterOrImmediate<R: Register> {
     Register(R),
     Immediate(i64),
-}
-
-impl<R: Register> From<R> for RegisterOrImmediate<R> {
-    fn from(reg: R) -> Self {
-        Self::Register(reg)
-    }
-}
-
-impl<R: Register> From<i64> for RegisterOrImmediate<R> {
-    fn from(value: i64) -> Self {
-        Self::Immediate(value)
-    }
 }
 
 #[derive(Debug, From)]

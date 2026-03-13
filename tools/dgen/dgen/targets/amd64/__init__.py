@@ -5,6 +5,7 @@ from .register_classes import *
 from .instructions import *
 from .generate_register import generate_register
 from .generate_register_class import generate_register_class
+from .generate_instruction import generate_instruction
 
 
 def generate(out: str):
@@ -15,3 +16,4 @@ def generate(out: str):
 
     generate_register(open(root / "register.rs", "w"))
     generate_register_class(open(root / "register_class.rs", "w"))
+    generate_instruction(open(root / "instruction.rs", "w"))

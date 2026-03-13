@@ -1,6 +1,6 @@
 use crate::{
-    hir::{self, passes::lower::FnLowering},
-    mir::{self, Function, Instruction, VregIdx},
+    hir::passes::lower::FnLowering,
+    mir::{Function, Instruction, VregIdx},
     ty::{self, TyIdx},
 };
 
