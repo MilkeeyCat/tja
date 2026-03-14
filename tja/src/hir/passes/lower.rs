@@ -3,8 +3,8 @@ use crate::{
     hir::{self, LocalIdx, LocalStorage, op::BinOp},
     mir::{
         self, BasicBlockCursor, BasicBlockCursorMut, GenericInstruction, GenericRegister,
-        Instruction, InstructionCursor, InstructionCursorMut, instruction::RegisterOrImmediate,
-        instruction::*,
+        Instruction, InstructionCursor, InstructionCursorMut, instruction as instr,
+        instruction::RegisterOrImmediate,
     },
     pass::Pass,
     targets::{Abi, Register, Target},
@@ -86,7 +86,7 @@ impl<
         let instr_idx = {
             let bb_idx = lowering.mir_function.blocks[entry_bb].next.unwrap();
 
-            lowering.mir_function.create_instr(Br { op0: bb_idx })
+            lowering.mir_function.create_instr(instr::Br::new(bb_idx))
         };
 
         lowering.instr_cursor_mut().insert_after(instr_idx);
@@ -180,30 +180,27 @@ impl<
             hir::Operand::Const(c, ty) => match c {
                 Const::Global(idx) => {
                     let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
-                    let instr_idx = self.mir_function.create_instr(GlobalValue {
-                        op0: vreg_idx.into(),
-                        op1: (*idx).into(),
-                    });
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr(instr::GlobalValue::new(vreg_idx.into(), (*idx).into()));
 
                     self.instr_cursor_mut().insert_after(instr_idx);
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Function(idx) => {
                     let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
-                    let instr_idx = self.mir_function.create_instr(GlobalValue {
-                        op0: vreg_idx.into(),
-                        op1: (*idx).into(),
-                    });
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr(instr::GlobalValue::new(vreg_idx.into(), (*idx).into()));
 
                     self.instr_cursor_mut().insert_after(instr_idx);
                     vreg_indices.push(vreg_idx);
                 }
                 Const::Int(value) => {
                     let vreg_idx = self.mir_function.vreg_info.create_vreg(*ty);
-                    let instr_idx = self.mir_function.create_instr(Copy {
-                        op0: vreg_idx.into(),
-                        op1: (*value as i64).into(),
-                    });
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr(instr::Copy::new(vreg_idx.into(), (*value as i64).into()));
 
                     self.instr_cursor_mut().insert_after(instr_idx);
                     vreg_indices.push(vreg_idx);
@@ -287,31 +284,31 @@ impl<
                 let rhs = self.get_or_create_vreg(rhs.clone());
 
                 let instr_idx = match kind {
-                    BinOp::Add => self.mir_function.create_instr(Add {
-                        op0: def.into(),
-                        op1: lhs.into(),
-                        op2: rhs.into(),
-                    }),
-                    BinOp::Sub => self.mir_function.create_instr(Sub {
-                        op0: def.into(),
-                        op1: lhs.into(),
-                        op2: rhs.into(),
-                    }),
-                    BinOp::Mul => self.mir_function.create_instr(Mul {
-                        op0: def.into(),
-                        op1: lhs.into(),
-                        op2: GenericRegister::from(rhs).into(),
-                    }),
-                    BinOp::SDiv => self.mir_function.create_instr(SDiv {
-                        op0: def.into(),
-                        op1: lhs.into(),
-                        op2: rhs.into(),
-                    }),
-                    BinOp::UDiv => self.mir_function.create_instr(UDiv {
-                        op0: def.into(),
-                        op1: lhs.into(),
-                        op2: rhs.into(),
-                    }),
+                    BinOp::Add => self.mir_function.create_instr(instr::Add::new(
+                        def.into(),
+                        lhs.into(),
+                        rhs.into(),
+                    )),
+                    BinOp::Sub => self.mir_function.create_instr(instr::Sub::new(
+                        def.into(),
+                        lhs.into(),
+                        rhs.into(),
+                    )),
+                    BinOp::Mul => self.mir_function.create_instr(instr::Mul::new(
+                        def.into(),
+                        lhs.into(),
+                        GenericRegister::from(rhs).into(),
+                    )),
+                    BinOp::SDiv => self.mir_function.create_instr(instr::SDiv::new(
+                        def.into(),
+                        lhs.into(),
+                        rhs.into(),
+                    )),
+                    BinOp::UDiv => self.mir_function.create_instr(instr::UDiv::new(
+                        def.into(),
+                        lhs.into(),
+                        rhs.into(),
+                    )),
                 };
 
                 self.instr_cursor_mut().insert_after(instr_idx);
@@ -322,10 +319,9 @@ impl<
                     .mir_function
                     .frame_info
                     .create_stack_object(T::Abi::ty_size(self.ty_storage, *ty));
-                let instr_idx = self.mir_function.create_instr(FrameIndex {
-                    op0: def.into(),
-                    op1: frame_idx,
-                });
+                let instr_idx = self
+                    .mir_function
+                    .create_instr(instr::FrameIndex::new(def.into(), frame_idx));
 
                 self.instr_cursor_mut().insert_after(instr_idx);
             }
@@ -336,10 +332,9 @@ impl<
 
                 for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
                     let ptr_add = self.ptr_add(base.into(), (offset as i64).into());
-                    let instr_idx = self.mir_function.create_instr(Store {
-                        op0: vreg_idx.into(),
-                        op1: ptr_add.into(),
-                    });
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr(instr::Store::new(vreg_idx.into(), ptr_add.into()));
 
                     self.instr_cursor_mut().insert_after(instr_idx);
                 }
@@ -351,10 +346,9 @@ impl<
 
                 for (vreg_idx, offset) in vregs.into_iter().zip(offsets) {
                     let ptr_add = self.ptr_add(base.into(), (offset as i64).into());
-                    let instr_idx = self.mir_function.create_instr(Load {
-                        op0: vreg_idx.into(),
-                        op1: ptr_add.into(),
-                    });
+                    let instr_idx = self
+                        .mir_function
+                        .create_instr(instr::Load::new(vreg_idx.into(), ptr_add.into()));
 
                     self.instr_cursor_mut().insert_after(instr_idx);
                 }
@@ -403,11 +397,12 @@ impl<
                                             .vreg_info
                                             .create_vreg(self.ty_storage.ptr_ty);
                                         let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
-                                        let instr_idx = self.mir_function.create_instr(Mul {
-                                            op0: def_vreg_idx.into(),
-                                            op1: lhs_vreg_idx.into(),
-                                            op2: (size as i64).into(),
-                                        });
+                                        let instr_idx =
+                                            self.mir_function.create_instr(instr::Mul::new(
+                                                def_vreg_idx.into(),
+                                                lhs_vreg_idx.into(),
+                                                (size as i64).into(),
+                                            ));
 
                                         self.instr_cursor_mut().insert_after(instr_idx);
 
@@ -433,10 +428,10 @@ impl<
                 }
 
                 let def_vreg_idx = self.get_or_create_vreg(hir::Operand::Local(*out));
-                let instr_idx = self.mir_function.create_instr(Copy {
-                    op0: def_vreg_idx.into(),
-                    op1: GenericRegister::Virtual(base).into(),
-                });
+                let instr_idx = self.mir_function.create_instr(instr::Copy::new(
+                    def_vreg_idx.into(),
+                    GenericRegister::Virtual(base).into(),
+                ));
 
                 self.instr_cursor_mut().insert_after(instr_idx);
             }
@@ -449,12 +444,12 @@ impl<
                 let out = self.get_or_create_vreg(hir::Operand::Local(*out));
                 let lhs = self.get_or_create_vreg(lhs.clone());
                 let rhs = self.get_or_create_vreg(rhs.clone());
-                let instr_idx = self.mir_function.create_instr(ICmp {
-                    op0: out.into(),
-                    op1: *cond_code,
-                    op2: lhs.into(),
-                    op3: rhs.into(),
-                });
+                let instr_idx = self.mir_function.create_instr(instr::ICmp::new(
+                    out.into(),
+                    *cond_code,
+                    lhs.into(),
+                    rhs.into(),
+                ));
 
                 self.instr_cursor_mut().insert_after(instr_idx);
             }
@@ -517,11 +512,10 @@ impl<
                         .successors
                         .extend([iftrue, iffalse]);
 
-                    let br_cond_idx = self.mir_function.create_instr(BrCond {
-                        op0: condition.into(),
-                        op1: iftrue,
-                    });
-                    let br_idx = self.mir_function.create_instr(Br { op0: iffalse });
+                    let br_cond_idx = self
+                        .mir_function
+                        .create_instr(instr::BrCond::new(condition.into(), iftrue));
+                    let br_idx = self.mir_function.create_instr(instr::Br::new(iffalse));
                     let mut cursor = self.instr_cursor_mut();
 
                     cursor.insert_after(br_cond_idx);
@@ -529,7 +523,7 @@ impl<
                 }
                 hir::Branch::Unconditional { block_idx } => {
                     let bb_idx = self.hir_to_mir_bb[block_idx];
-                    let instr_idx = self.mir_function.create_instr(Br { op0: bb_idx });
+                    let instr_idx = self.mir_function.create_instr(instr::Br::new(bb_idx));
 
                     self.block_cursor_mut()
                         .current_mut()
@@ -551,11 +545,9 @@ impl<
             .mir_function
             .vreg_info
             .create_vreg(self.ty_storage.ptr_ty);
-        let instr_idx = self.mir_function.create_instr(PtrAdd {
-            op0: vreg_idx.into(),
-            op1: base,
-            op2: offset,
-        });
+        let instr_idx =
+            self.mir_function
+                .create_instr(instr::PtrAdd::new(vreg_idx.into(), base, offset));
 
         self.instr_cursor_mut().insert_after(instr_idx);
 

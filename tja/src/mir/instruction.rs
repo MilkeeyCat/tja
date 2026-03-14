@@ -4,10 +4,7 @@ use crate::{
     targets::Register,
 };
 use derive_more::From;
-pub use generated::{
-    Add, Br, BrCond, Copy, FrameIndex, GenericInstruction, GlobalValue, ICmp, Load, Mul, PtrAdd,
-    SDiv, Store, Sub, UDiv,
-};
+pub use generated::*;
 use slotmap::new_key_type;
 
 mod generated {

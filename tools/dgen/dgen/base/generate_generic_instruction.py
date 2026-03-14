@@ -44,9 +44,40 @@ def generate_instructions(writer: Writer):
         writer.writeln("{")
         writer.indent()
 
-        for [idx, operand] in enumerate(instr.outs + instr.ins):
-            writer.writeln(f"pub op{idx}: {str(operand)},")
+        for name, operand in instr.outs + instr.ins:
+            writer.writeln(f"pub {name}: {str(operand)},")
 
+        writer.dedent()
+        writer.writeln("}")
+        writer.writeln("")
+
+        writer.write("impl")
+
+        if is_generic:
+            writer.buf.write("<R: Register>")
+
+        writer.buf.write(f" {instr.name}")
+
+        if is_generic:
+            writer.buf.write("<R>")
+
+        writer.buf.write(" {\n")
+        writer.indent()
+        writer.write("pub fn new(")
+
+        for name, operand in instr.outs + instr.ins:
+            writer.buf.write(f"{name}: {str(operand)}, ")
+
+        writer.buf.write(") -> Self {\n")
+        writer.indent()
+        writer.write("Self {")
+
+        for name, operand in instr.outs + instr.ins:
+            writer.buf.write(f"{name}, ")
+
+        writer.buf.write("}\n")
+        writer.dedent()
+        writer.writeln("}")
         writer.dedent()
         writer.writeln("}")
         writer.writeln("")
@@ -79,4 +110,4 @@ def generate_instructions(writer: Writer):
 
 
 def is_instr_generic(instr: Instruction) -> bool:
-    return any(map(lambda op: op.is_generic, instr.ins + instr.outs))
+    return any(map(lambda op: op[1].is_generic, instr.ins + instr.outs))
