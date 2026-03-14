@@ -1,391 +1,160 @@
-from dgen.targets.amd64.registers import RAX
+from .registers import AH, AL, AX, DX, EAX, EDX, RAX, RBP, RDX
 from .instruction import Instruction
-from .operand import r, w, rw, implicit
+from .operand import Value, r, w, rw, implicit
 from .values import *
 
-#
-# from .register_classes import *
-# from .operands import *
-#
-# O = TypeVar("O", bound=Operand)
-#
-#
-# @overload
-# def get_operand(name: str, type: type[O]) -> O:
-#    ...
-#
-#
-# @overload
-# def get_operand(variant: str, size: int) -> Operand:
-#    ...
-#
-#
-# def get_operand(name_or_variant: str, size_or_type: int | type[O]) -> O | Operand:
-#    if isinstance(size_or_type, int):
-#        return {
-#            "r": get_operand(f"GPR{size_or_type}", Register),
-#            "m": get_operand(f"I{size_or_type}MEM", Memory),
-#            "i": get_operand(f"I{size_or_type}IMM", Immediate),
-#        }[name_or_variant]
-#    else:
-#        operand = globals()[name_or_variant]
-#
-#        if not isinstance(operand, size_or_type):
-#            assert False
-#
-#        return operand
-#
-#
-## ==============================================================================
-## MOV
-## ==============================================================================
-#
-#
-# def mov_rm_r(size: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Mov{size}{variant}r",
-#                [("dst", operand)],
-#                [("src1", operand), ("src2", get_operand("r", size))],
-#                "mov {dst}, {src2}",
-#                ("dst", "src1"),
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [MOV8RR, MOV8MR],
-#    [MOV16RR, MOV16MR],
-#    [MOV32RR, MOV32MR],
-#    [MOV64RR, MOV64MR],
-# ] = [mov_rm_r(size) for size in [8, 16, 32, 64]]
-#
-#
-# def mov_r_m(size: int) -> TargetInstruction:
-#    operand = get_operand("r", size)
-#
-#    return TargetInstruction(
-#        f"Mov{size}rm",
-#        [("dst", operand)],
-#        [("src1", operand), ("src2", get_operand("m", size))],
-#        "mov {dst}, {src2}",
-#        ("dst", "src1"),
-#    )
-#
-#
-# [
-#    MOV8RM,
-#    MOV16RM,
-#    MOV32RM,
-#    MOV64RM,
-# ] = [mov_r_m(size) for size in [8, 16, 32, 64]]
-#
-#
-# def mov_rm_i(size: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Mov{size}{variant}i",
-#                [("dst", operand)],
-#                [("src1", operand), ("src2", get_operand("i", size))],
-#                "mov {dst}, {src2}",
-#                ("dst", "src1"),
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [MOV8RI, MOV8MI],
-#    [MOV16RI, MOV16MI],
-#    [MOV32RI, MOV32MI],
-# ] = [mov_rm_i(size) for size in [8, 16, 32]]
-# MOV64RI = TargetInstruction(
-#    f"Mov64ri",
-#    [("dst", GPR64)],
-#    [("src1", GPR64), ("src2", I64IMM)],
-#    "mov {dst}, {src2}",
-#    ("dst", "src1"),
-# )
-#
-#
-## ==============================================================================
-## MOVSX
-## ==============================================================================
-#
-#
-# def movsx_r_rm(size1: int, size2: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        instructions.append(
-#            TargetInstruction(
-#                f"Movsx{size1}r{variant}{size2}",
-#                [("dst", get_operand("r", size2))],
-#                [("src", get_operand(variant, size1))],
-#                "movsx {dst}, {src}",
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [MOVSX16RR8, MOVSX16RM8] = movsx_r_rm(16, 8)
-# [MOVSX32RR8, MOVSX32RM8] = movsx_r_rm(32, 8)
-# [MOVSX64RR8, MOVSX64RM8] = movsx_r_rm(64, 8)
-# [MOVSX32RR16, MOVSX32RM16] = movsx_r_rm(32, 16)
-# [MOVSX64RR16, MOVSX64RM16] = movsx_r_rm(64, 16)
-#
-#
-## ==============================================================================
-## ADD
-## ==============================================================================
-#
-#
-# def add_rm_i(size: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Add{size}{variant}i",
-#                [("dst", operand)],
-#                [("src1", operand), ("src2", get_operand("i", size))],
-#                "add {dst}, {src2}",
-#                ("dst", "src1"),
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [ADD8RI, ADD8MI],
-#    [ADD16RI, ADD16MI],
-#    [ADD32RI, ADD32MI],
-# ] = [add_rm_i(size) for size in [8, 16, 32]]
-#
-#
-# def add_rm_r(size: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Add{size}{variant}r",
-#                [("dst", operand)],
-#                [("src1", operand), ("src2", get_operand("r", size))],
-#                "add {dst}, {src2}",
-#                ("dst", "src1"),
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [ADD8RR, ADD8MR],
-#    [ADD16RR, ADD16MR],
-#    [ADD32RR, ADD32MR],
-#    [ADD64RR, ADD64MR],
-# ] = [add_rm_r(size) for size in [8, 16, 32, 64]]
-# ADD64RI32 = TargetInstruction(
-#    f"Add64ri32",
-#    [("dst", GPR64)],
-#    [("src1", GPR64), ("src2", I32IMM)],
-#    "add {dst}, {src2}",
-#    ("dst", "src1"),
-# )
-#
-#
-## ==============================================================================
-## SUB
-## ==============================================================================
-#
-#
-# def sub_rm_i(size: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Sub{size}{variant}i",
-#                [("dst", operand)],
-#                [("src1", operand), ("src2", get_operand("i", size))],
-#                "sub {dst}, {src2}",
-#                ("dst", "src1"),
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [SUB8RI, SUB8MI],
-#    [SUB16RI, SUB16MI],
-#    [SUB32RI, SUB32MI],
-# ] = [sub_rm_i(size) for size in [8, 16, 32]]
-#
-#
-# def sub_rm_r(size: int) -> list[TargetInstruction]:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Sub{size}{variant}r",
-#                [("dst", operand)],
-#                [("src1", operand), ("src2", get_operand("r", size))],
-#                "sub {dst}, {src2}",
-#                ("dst", "src1"),
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [SUB8RR, SUB8MR],
-#    [SUB16RR, SUB16MR],
-#    [SUB32RR, SUB32MR],
-#    [SUB64RR, SUB64MR],
-# ] = [sub_rm_r(size) for size in [8, 16, 32, 64]]
-# SUB64RI32 = TargetInstruction(
-#    f"Sub64ri32",
-#    [("dst", GPR64)],
-#    [("src1", GPR64), ("src2", I32IMM)],
-#    "sub {dst}, {src2}",
-#    ("dst", "src1"),
-# )
-#
-#
-## ==============================================================================
-## IMUL
-## ==============================================================================
-#
-#
-# def imul_r_r(size: int) -> TargetInstruction:
-#    return TargetInstruction(
-#        f"IMul{size}rr",
-#        [],
-#        [("src", get_operand("r", size))],
-#        "imul {src}",
-#    )
-#
-#
-# [
-#    IMUL8RR,
-#    IMUL16RR,
-#    IMUL32RR,
-#    IMUL64RR,
-# ] = [imul_r_r(size) for size in [8, 16, 32, 64]]
-#
-#
-## ==============================================================================
-## IDIV
-## ==============================================================================
-#
-#
-# def idiv_r_r(size: int) -> TargetInstruction:
-#    return TargetInstruction(
-#        f"IDiv{size}rr",
-#        [],
-#        [("src", get_operand("r", size))],
-#        "idiv {src}",
-#    )
-#
-#
-# [
-#    IDIV8RR,
-#    IDIV16RR,
-#    IDIV32RR,
-#    IDIV64RR,
-# ] = [idiv_r_r(size) for size in [8, 16, 32, 64]]
-#
-#
-## ==============================================================================
-## CMP
-## ==============================================================================
-#
-#
-# def cmp_rm_r(size: int) -> TargetInstruction:
-#    instructions: list[TargetInstruction] = []
-#
-#    for variant in ["r", "m"]:
-#        operand = get_operand(variant, size)
-#
-#        instructions.append(
-#            TargetInstruction(
-#                f"Cmp{size}{variant}r",
-#                [],
-#                [("src1", operand), ("src2", get_operand("r", size))],
-#                "cmp {src1}, {src2}",
-#            )
-#        )
-#
-#    return instructions
-#
-#
-# [
-#    [CMP8RR, CMP8MR],
-#    [CMP16RR, CMP16MR],
-#    [CMP32RR, CMP32MR],
-#    [CMP64RR, CMP64MR],
-# ] = [cmp_rm_r(size) for size in [8, 16, 32, 64]]
-#
-# CMP8RI = TargetInstruction(
-#    f"Cmp8ri",
-#    [],
-#    [("src1", GPR8), ("src2", I8IMM)],
-#    "cmp {src1}, {src2}",
-# )
-#
-#
-## ==============================================================================
-## XOR
-## ==============================================================================
-#
-#
-# def xor_r_r(size: int) -> TargetInstruction:
-#    operand = get_operand("r", size)
-#
-#    return TargetInstruction(
-#        f"Xor{size}rr",
-#        [("dst", operand)],
-#        [("src1", operand), ("src2", operand)],
-#        "xor {dst}, {src2}",
-#        ("dst", "src1"),
-#    )
-#
-#
-# [
-#    XOR8RR,
-#    XOR16RR,
-#    XOR32RR,
-#    XOR64RR,
-# ] = [xor_r_r(size) for size in [8, 16, 32, 64]]
-#
-#
+
+def get_value(variant: str, size: int) -> Value:
+    name = {
+        "r": f"R{size}",
+        "m": f"MEM{size}",
+        "i": f"IMM{size}",
+    }[variant]
+
+    value = globals()[name]
+
+    if not isinstance(value, Value):
+        assert False, "value not found"
+
+    return value
+
+
+# ==============================================================================
+# MOV
+# ==============================================================================
+
+
+# rm, r
+for size in [8, 16, 32, 64]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Mov{size}{variant}r", "mov", [w(value), r(get_value("r", size))])
+
+# r, m
+for size in [8, 16, 32, 64]:
+    value = get_value("r", size)
+
+    Instruction(f"Mov{size}rm", "mov", [w(value), r(get_value("m", size))])
+
+# rm, i
+for size in [8, 16, 32]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Mov{size}{variant}i", "mov", [w(value), r(get_value("i", size))])
+
+Instruction(f"Mov64ri", "mov", [w(R64), r(IMM64)])
+
+
+# ==============================================================================
+# MOVSX
+# ==============================================================================
+
+
+# r, rm
+for from_, to in [(8, 16), (8, 32), (8, 64), (16, 32), (16, 64)]:
+    for variant in ["r", "m"]:
+        Instruction(
+            f"Movsx{to}r{variant}{from_}",
+            "movsx",
+            [w(get_value("r", to)), r(get_value(variant, from_))],
+        )
+
+
+# ==============================================================================
+# ADD
+# ==============================================================================
+
+
+# rm, i
+for size in [8, 16, 32]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Add{size}{variant}i", "add", [rw(value), r(get_value("i", size))])
+
+# rm, r
+for size in [8, 16, 32, 64]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Add{size}{variant}r", "add", [rw(value), r(get_value("r", size))])
+
+Instruction(f"Add64ri32", "add", [rw(R64), r(IMM32)])
+
+
+# ==============================================================================
+# SUB
+# ==============================================================================
+
+
+# rm, i
+for size in [8, 16, 32]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Sub{size}{variant}i", "sub", [rw(value), r(get_value("i", size))])
+
+# rm, r
+for size in [8, 16, 32, 64]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Sub{size}{variant}r", "sub", [rw(value), r(get_value("r", size))])
+
+Instruction(f"Sub64ri32", "sub", [rw(R64), r(IMM32)])
+
+
+# ==============================================================================
+# IMUL
+# ==============================================================================
+
+
+Instruction("IMul8r", "imul", [w(implicit(AX)), r(implicit(AL)), r(R8)])
+Instruction("IMul16r", "imul", [rw(implicit(AX)), w(implicit(DX)), r(R16)])
+Instruction("IMul32r", "imul", [rw(implicit(EAX)), w(implicit(EDX)), r(R32)])
+Instruction("IMul64r", "imul", [rw(implicit(RAX)), w(implicit(RDX)), r(R64)])
+
+
+# ==============================================================================
+# IDIV
+# ==============================================================================
+
+
+Instruction(
+    "IDiv8r", "idiv", [w(implicit(AL)), w(implicit(AH)), r(implicit(AX)), r(R8)]
+)
+Instruction("IDiv16r", "idiv", [rw(implicit(AX)), rw(implicit(DX)), r(R16)])
+Instruction("IDiv32r", "idiv", [rw(implicit(EAX)), rw(implicit(EDX)), r(R32)])
+Instruction("IDiv64r", "idiv", [rw(implicit(RAX)), rw(implicit(RDX)), r(R64)])
+
+
+# ==============================================================================
+# CMP
+# ==============================================================================
+
+
+for size in [8, 16, 32, 64]:
+    for variant in ["r", "m"]:
+        value = get_value(variant, size)
+
+        Instruction(f"Cmp{size}{variant}r", "cmp", [r(value), r(get_value("r", size))])
+
+Instruction(f"Cmp8ri", "cmp", [r(R8), r(IMM8)])
+
+
+# ==============================================================================
+# XOR
+# ==============================================================================
+
+
+for size in [8, 16, 32, 64]:
+    value = get_value("r", size)
+
+    Instruction(f"Xor{size}rr", "xor", [rw(value), r(value)])
+
+
 # ==============================================================================
 # LEA
 # ==============================================================================
@@ -394,50 +163,38 @@ from .values import *
 Instruction("Lea64", "lea", [w(R64), r(ADDR)])
 
 
-## ==============================================================================
-## SHL
-## ==============================================================================
-#
-#
-# SHL64R8I = TargetInstruction(
-#    "Shl64r8i",
-#    [("dst", GPR64)],
-#    [("src1", GPR64), ("src2", I8IMM)],
-#    "shl {dst}, {src2}",
-#    ("dst", "src1"),
-# )
-#
-#
-## ==============================================================================
-## SHR
-## ==============================================================================
-#
-#
-# SHR64R8I = TargetInstruction(
-#    "Shr64r8i",
-#    [("dst", GPR64)],
-#    [("src1", GPR64), ("src2", I8IMM)],
-#    "shr {dst}, {src2}",
-#    ("dst", "src1"),
-# )
-#
-#
-## ==============================================================================
-## PUSH
-## ==============================================================================
-#
-#
-# PUSH64R = TargetInstruction("Push64r", [], [("src", GPR64)], "push {src}")
-#
-#
-## ==============================================================================
-## POP
-## ==============================================================================
-#
-#
-# POP64R = TargetInstruction("Pop64r", [("dst", GPR64)], [], "pop {dst}")
-#
-#
+# ==============================================================================
+# SHL
+# ==============================================================================
+
+
+Instruction("Shl64r8i", "shl", [rw(R64), r(IMM8)])
+
+
+# ==============================================================================
+# SHR
+# ==============================================================================
+
+
+Instruction("Shr64r8i", "shr", [rw(R64), r(IMM8)])
+
+
+# ==============================================================================
+# PUSH
+# ==============================================================================
+
+
+Instruction("Push64r", "push", [r(R64)])
+
+
+# ==============================================================================
+# POP
+# ==============================================================================
+
+
+Instruction("Pop64r", "pop", [w(R64)])
+
+
 # ==============================================================================
 # CALL
 # ==============================================================================
@@ -459,6 +216,7 @@ Instruction("Jmp", "jmp", [r(BLOCK_IDX)])
 # ==============================================================================
 
 
+# TODO: add more variants
 Instruction("Ja", "ja", [r(BLOCK_IDX)])
 
 
@@ -467,6 +225,7 @@ Instruction("Ja", "ja", [r(BLOCK_IDX)])
 # ==============================================================================
 
 
+# TODO: add more variants
 Instruction("Setar", "seta", [w(R8)])
 Instruction("Setam", "seta", [w(MEM8)])
 
@@ -476,7 +235,7 @@ Instruction("Setam", "seta", [w(MEM8)])
 # ==============================================================================
 
 
-Instruction("Leave", "leave", [])
+Instruction("Leave64", "leave", [rw(implicit(RBP))])
 
 
 # ==============================================================================
@@ -491,6 +250,7 @@ Instruction("Ret", "ret", [])
 # CWD/CDQ/CQO
 # ==============================================================================
 
-Instruction("Cwd", "cwd", [rw(implicit(RAX))])
-Instruction("Cdq", "cdq", [])
-Instruction("Cqo", "cqo", [])
+
+Instruction("Cwd", "cwd", [w(implicit(DX)), r(implicit(AX))])
+Instruction("Cdq", "cdq", [w(implicit(EDX)), r(implicit(EAX))])
+Instruction("Cqo", "cqo", [w(implicit(RDX)), r(implicit(RAX))])
