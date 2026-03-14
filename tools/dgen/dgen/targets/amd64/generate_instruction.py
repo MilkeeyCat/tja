@@ -54,7 +54,7 @@ def generate_instructions(writer: Writer):
         writer.indent()
 
         for idx, operand in enumerate(instr.operands):
-            writer.writeln(f"op{idx}: {operand.print()},")
+            writer.writeln(f"op{idx}: {operand.operand.print(operand.access_type)},")
 
         writer.dedent()
         writer.writeln("}")
@@ -70,7 +70,7 @@ def generate_instructions(writer: Writer):
         writer.write("pub fn new(")
 
         for idx, operand in enumerate(instr.operands):
-            writer.buf.write(f"op{idx}: {operand.print()}, ")
+            writer.buf.write(f"op{idx}: {operand.operand.print(operand.access_type)}, ")
 
         writer.buf.write(") -> Self {\n")
         writer.indent()

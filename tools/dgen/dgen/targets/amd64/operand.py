@@ -23,15 +23,13 @@ class AccessType(IntFlag):
 
 
 class Operand(ABC):
-    access_type: AccessType
     generics: list[Generic]
 
-    def __init__(self, access_type: AccessType, generics: list[Generic]) -> None:
-        self.access_type = access_type
+    def __init__(self, generics: list[Generic]) -> None:
         self.generics = generics
 
     @abstractmethod
-    def print(self) -> str:
+    def print(self, access_type: AccessType) -> str:
         pass
 
 
@@ -39,74 +37,65 @@ class Explicit(Operand):
     type_name: str
     generics: list[Generic]
 
-    def __init__(
-        self, access_type: AccessType, type_name: str, generics: list[Generic]
-    ) -> None:
-        super().__init__(access_type, generics)
+    def __init__(self, type_name: str, generics: list[Generic] | None = None) -> None:
+        super().__init__(generics or [])
 
         self.type_name = type_name
 
-    def print(self) -> str:
-        if self.access_type == AccessType.ReadWrite:
+    def print(self, access_type: AccessType) -> str:
+        if access_type == AccessType.ReadWrite:
             return "ReadWrite<" + self.type_name + ">"
         else:
             return self.type_name
 
 
+class Memory(Explicit):
+    size: int
+
+    def __init__(self, size: int) -> None:
+        super().__init__("Memory<R>", [REGISTER])
+
+        self.size = size
+
+    def print(self, access_type: AccessType) -> str:
+        return self.type_name
+
+
 class Implicit(Operand):
     reg: Register
 
-    def __init__(self, access_type: AccessType, reg: Register) -> None:
-        super().__init__(access_type, [REGISTER])
+    def __init__(self, reg: Register) -> None:
+        super().__init__([REGISTER])
 
         self.reg = reg
 
-    def print(self) -> str:
-        if self.access_type == AccessType.ReadWrite:
+    def print(self, access_type: AccessType) -> str:
+        if access_type == AccessType.ReadWrite:
             return "ReadWrite<R>"
         else:
             return "R"
 
 
-class Value(ABC):
-    @abstractmethod
-    def into_operand(self, access_type: AccessType) -> Operand:
-        pass
+class InstructionOperand:
+    operand: Operand
+    access_type: AccessType
+
+    def __init__(self, operand: Operand, access_type: AccessType):
+        self.operand = operand
+        self.access_type = access_type
 
 
-class ImplicitValue(Value):
-    reg: Register
-
-    def __init__(self, reg: Register):
-        self.reg = reg
-
-    def into_operand(self, access_type: AccessType) -> Operand:
-        return Implicit(access_type, self.reg)
+def implicit(reg: Register) -> Implicit:
+    return Implicit(reg)
 
 
-class ExplicitValue(Value):
-    type_name: str
-    generics: list[Generic]
-
-    def __init__(self, type_name: str, generics: list[Generic] | None = None):
-        self.type_name = type_name
-        self.generics = generics or []
-
-    def into_operand(self, access_type: AccessType) -> Operand:
-        return Explicit(access_type, self.type_name, self.generics)
+def r(operand: Operand) -> InstructionOperand:
+    return InstructionOperand(operand, AccessType.Read)
 
 
-def implicit(reg: Register) -> ImplicitValue:
-    return ImplicitValue(reg)
+def w(operand: Operand) -> InstructionOperand:
+    return InstructionOperand(operand, AccessType.Write)
 
 
-def r(value: Value) -> Operand:
-    return value.into_operand(AccessType.Read)
-
-
-def w(value: Value) -> Operand:
-    return value.into_operand(AccessType.Write)
-
-
-def rw(value: Value) -> Operand:
-    return value.into_operand(AccessType.ReadWrite)
+def rw(operand: Operand) -> InstructionOperand:
+    return InstructionOperand(operand, AccessType.ReadWrite)

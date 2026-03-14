@@ -1,22 +1,22 @@
 from .registers import AH, AL, AX, DX, EAX, EDX, RAX, RBP, RDX
 from .instruction import Instruction
-from .operand import Value, r, w, rw, implicit
-from .values import *
+from .operand import Operand, r, w, rw, implicit
+from .operands import *
 
 
-def get_value(variant: str, size: int) -> Value:
+def get_operand(variant: str, size: int) -> Operand:
     name = {
         "r": f"R{size}",
         "m": f"MEM{size}",
         "i": f"IMM{size}",
     }[variant]
 
-    value = globals()[name]
+    operand = globals()[name]
 
-    if not isinstance(value, Value):
-        assert False, "value not found"
+    if not isinstance(operand, Operand):
+        assert False, "operand not found"
 
-    return value
+    return operand
 
 
 # ==============================================================================
@@ -27,22 +27,26 @@ def get_value(variant: str, size: int) -> Value:
 # rm, r
 for size in [8, 16, 32, 64]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Mov{size}{variant}r", "mov", [w(value), r(get_value("r", size))])
+        Instruction(
+            f"Mov{size}{variant}r", "mov", [w(operand), r(get_operand("r", size))]
+        )
 
 # r, m
 for size in [8, 16, 32, 64]:
-    value = get_value("r", size)
+    operand = get_operand("r", size)
 
-    Instruction(f"Mov{size}rm", "mov", [w(value), r(get_value("m", size))])
+    Instruction(f"Mov{size}rm", "mov", [w(operand), r(get_operand("m", size))])
 
 # rm, i
 for size in [8, 16, 32]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Mov{size}{variant}i", "mov", [w(value), r(get_value("i", size))])
+        Instruction(
+            f"Mov{size}{variant}i", "mov", [w(operand), r(get_operand("i", size))]
+        )
 
 Instruction(f"Mov64ri", "mov", [w(R64), r(IMM64)])
 
@@ -58,7 +62,7 @@ for from_, to in [(8, 16), (8, 32), (8, 64), (16, 32), (16, 64)]:
         Instruction(
             f"Movsx{to}r{variant}{from_}",
             "movsx",
-            [w(get_value("r", to)), r(get_value(variant, from_))],
+            [w(get_operand("r", to)), r(get_operand(variant, from_))],
         )
 
 
@@ -70,16 +74,20 @@ for from_, to in [(8, 16), (8, 32), (8, 64), (16, 32), (16, 64)]:
 # rm, i
 for size in [8, 16, 32]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Add{size}{variant}i", "add", [rw(value), r(get_value("i", size))])
+        Instruction(
+            f"Add{size}{variant}i", "add", [rw(operand), r(get_operand("i", size))]
+        )
 
 # rm, r
 for size in [8, 16, 32, 64]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Add{size}{variant}r", "add", [rw(value), r(get_value("r", size))])
+        Instruction(
+            f"Add{size}{variant}r", "add", [rw(operand), r(get_operand("r", size))]
+        )
 
 Instruction(f"Add64ri32", "add", [rw(R64), r(IMM32)])
 
@@ -92,16 +100,20 @@ Instruction(f"Add64ri32", "add", [rw(R64), r(IMM32)])
 # rm, i
 for size in [8, 16, 32]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Sub{size}{variant}i", "sub", [rw(value), r(get_value("i", size))])
+        Instruction(
+            f"Sub{size}{variant}i", "sub", [rw(operand), r(get_operand("i", size))]
+        )
 
 # rm, r
 for size in [8, 16, 32, 64]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Sub{size}{variant}r", "sub", [rw(value), r(get_value("r", size))])
+        Instruction(
+            f"Sub{size}{variant}r", "sub", [rw(operand), r(get_operand("r", size))]
+        )
 
 Instruction(f"Sub64ri32", "sub", [rw(R64), r(IMM32)])
 
@@ -137,9 +149,11 @@ Instruction("IDiv64r", "idiv", [rw(implicit(RAX)), rw(implicit(RDX)), r(R64)])
 
 for size in [8, 16, 32, 64]:
     for variant in ["r", "m"]:
-        value = get_value(variant, size)
+        operand = get_operand(variant, size)
 
-        Instruction(f"Cmp{size}{variant}r", "cmp", [r(value), r(get_value("r", size))])
+        Instruction(
+            f"Cmp{size}{variant}r", "cmp", [r(operand), r(get_operand("r", size))]
+        )
 
 Instruction(f"Cmp8ri", "cmp", [r(R8), r(IMM8)])
 
@@ -150,9 +164,9 @@ Instruction(f"Cmp8ri", "cmp", [r(R8), r(IMM8)])
 
 
 for size in [8, 16, 32, 64]:
-    value = get_value("r", size)
+    operand = get_operand("r", size)
 
-    Instruction(f"Xor{size}rr", "xor", [rw(value), r(value)])
+    Instruction(f"Xor{size}rr", "xor", [rw(operand), r(operand)])
 
 
 # ==============================================================================

@@ -1,16 +1,16 @@
-from .operand import Generic, Operand
+from .operand import Generic, InstructionOperand
 
 
 class Instruction:
     name: str
     mnemonic: str
-    operands: list[Operand]
+    operands: list[InstructionOperand]
 
     def __init__(
         self,
         name: str,
         mnemonic: str,
-        operands: list[Operand],
+        operands: list[InstructionOperand],
     ):
         self.name = name
         self.mnemonic = mnemonic
@@ -25,7 +25,7 @@ class Instruction:
                     [
                         generic
                         for operand in self.operands
-                        for generic in operand.generics
+                        for generic in operand.operand.generics
                     ]
                 )
             ),
