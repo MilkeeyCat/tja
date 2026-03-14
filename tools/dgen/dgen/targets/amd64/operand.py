@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import IntFlag
 
-from dgen.base.register import Register
+from dgen.base.register import Register as PhysicalRegister
 
 
 class Generic:
@@ -43,28 +43,24 @@ class Explicit(Operand):
         self.type_name = type_name
 
     def print(self, access_type: AccessType) -> str:
+        return self.type_name
+
+
+class Register(Explicit):
+    def __init__(self) -> None:
+        super().__init__("R", [REGISTER])
+
+    def print(self, access_type: AccessType) -> str:
         if access_type == AccessType.ReadWrite:
             return "ReadWrite<" + self.type_name + ">"
         else:
             return self.type_name
 
 
-class Memory(Explicit):
-    size: int
-
-    def __init__(self, size: int) -> None:
-        super().__init__("Memory<R>", [REGISTER])
-
-        self.size = size
-
-    def print(self, access_type: AccessType) -> str:
-        return self.type_name
-
-
 class Implicit(Operand):
-    reg: Register
+    reg: PhysicalRegister
 
-    def __init__(self, reg: Register) -> None:
+    def __init__(self, reg: PhysicalRegister) -> None:
         super().__init__([REGISTER])
 
         self.reg = reg
@@ -85,7 +81,7 @@ class InstructionOperand:
         self.access_type = access_type
 
 
-def implicit(reg: Register) -> Implicit:
+def implicit(reg: PhysicalRegister) -> Implicit:
     return Implicit(reg)
 
 
