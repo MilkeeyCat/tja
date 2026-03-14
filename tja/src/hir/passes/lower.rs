@@ -2,9 +2,9 @@ use crate::{
     Const,
     hir::{self, LocalIdx, LocalStorage, op::BinOp},
     mir::{
-        self, BasicBlockCursor, BasicBlockCursorMut, GenericInstruction, GenericRegister,
-        Instruction, InstructionCursor, InstructionCursorMut, instruction as instr,
-        instruction::RegisterOrImmediate,
+        self, BasicBlockCursor, BasicBlockCursorMut, GenericInstruction, Instruction,
+        InstructionCursor, InstructionCursorMut, VregIdx,
+        instruction::{self as instr, RegisterOrImmediate},
     },
     pass::Pass,
     targets::{Abi, Register, Target},
@@ -28,8 +28,8 @@ pub struct Lower;
 
 impl<
     T: Target<CallingConventionInstruction = GenericInstruction<I>>,
-    I: Instruction<Register = GenericRegister<R>>,
-    R: Register,
+    I: Instruction<Register = R>,
+    R: Register + From<VregIdx>,
 > Pass<Context<'_, '_, T>, hir::Function, mir::Function<T::CallingConventionInstruction>>
     for Lower
 {
@@ -121,8 +121,8 @@ pub struct FnLowering<'a, T: Target> {
 impl<
     'a,
     T: Target<CallingConventionInstruction = GenericInstruction<I>>,
-    I: Instruction<Register = GenericRegister<R>>,
-    R: Register,
+    I: Instruction<Register = R>,
+    R: Register + From<VregIdx>,
 > FnLowering<'a, T>
 {
     pub fn block_cursor(&self) -> BasicBlockCursor<'_, T::CallingConventionInstruction> {
@@ -297,7 +297,7 @@ impl<
                     BinOp::Mul => self.mir_function.create_instr(instr::Mul::new(
                         def.into(),
                         lhs.into(),
-                        GenericRegister::from(rhs).into(),
+                        R::from(rhs).into(),
                     )),
                     BinOp::SDiv => self.mir_function.create_instr(instr::SDiv::new(
                         def.into(),
@@ -409,10 +409,7 @@ impl<
                                         def_vreg_idx
                                     };
 
-                                    base = self.ptr_add(
-                                        base.into(),
-                                        GenericRegister::Virtual(vreg_idx).into(),
-                                    );
+                                    base = self.ptr_add(base.into(), R::from(vreg_idx).into());
                                 }
                                 hir::Operand::Const(hir::Const::Int(value), _) => {
                                     offset += size * (*value as usize);
@@ -428,10 +425,9 @@ impl<
                 }
 
                 let def_vreg_idx = self.get_or_create_vreg(hir::Operand::Local(*out));
-                let instr_idx = self.mir_function.create_instr(instr::Copy::new(
-                    def_vreg_idx.into(),
-                    GenericRegister::Virtual(base).into(),
-                ));
+                let instr_idx = self
+                    .mir_function
+                    .create_instr(instr::Copy::new(def_vreg_idx.into(), R::from(base).into()));
 
                 self.instr_cursor_mut().insert_after(instr_idx);
             }
@@ -536,11 +532,7 @@ impl<
         }
     }
 
-    fn ptr_add(
-        &mut self,
-        base: GenericRegister<R>,
-        offset: RegisterOrImmediate<GenericRegister<R>>,
-    ) -> mir::VregIdx {
+    fn ptr_add(&mut self, base: R, offset: RegisterOrImmediate<R>) -> mir::VregIdx {
         let vreg_idx = self
             .mir_function
             .vreg_info
