@@ -1,58 +1,36 @@
-pub mod amd64;
-
-use crate::hir::passes::lower::FnLowering;
-use crate::mir::{
-    FrameIdx, InstructionCursorMut, Opcode, PhysicalRegister, RegisterClass, VregIdx,
+use crate::{
+    hir::passes::lower::FnLowering,
+    mir::{Function, Instruction, VregIdx},
+    ty::{self, TyIdx},
 };
-use crate::ty::{Storage, TyIdx};
 
-pub trait RegisterInfo {
-    fn get_registers_by_class(&self, class: &RegisterClass) -> &[PhysicalRegister];
-    fn overlaps(&self, a: &PhysicalRegister, b: &PhysicalRegister) -> bool;
-    fn get_name(&self, r: &PhysicalRegister) -> &'static str;
-    fn get_register_size(&self, r: &PhysicalRegister) -> usize;
-}
+pub mod amd64;
 
 pub trait Target {
     type Abi: Abi;
-    type RegisterInfo: RegisterInfo;
+    type GenericInstruction: Instruction;
 
-    fn abi(&self) -> &Self::Abi;
-    fn register_info(&self) -> &Self::RegisterInfo;
-
-    fn store_reg_to_stack_slot(
-        &self,
-        cursor: &mut InstructionCursorMut,
-        vreg_idx: VregIdx,
-        frame_idx: FrameIdx,
-        size: usize,
-    );
-    fn load_reg_from_stack_slot(
-        &self,
-        cursor: &mut InstructionCursorMut,
-        vreg_idx: VregIdx,
-        frame_idx: FrameIdx,
-        size: usize,
-    );
-    fn is_move_op(&self, opcode: Opcode) -> bool;
+    fn get_calling_convention(&self) -> &dyn CallingConvention<Target = Self>;
 }
 
 pub trait CallingConvention {
-    fn lower_ret<A: Abi>(
+    type Target: Target;
+
+    fn lower_ret(
         &self,
-        lowering: &mut FnLowering<A>,
+        lowering: &mut FnLowering<Self::Target>,
         operand: Option<(Vec<VregIdx>, TyIdx)>,
     );
-    fn lower_params<A: Abi>(
+    fn lower_params(
         &self,
-        lowering: &mut FnLowering<A>,
+        lowering: &mut FnLowering<Self::Target>,
         vreg_indices: Vec<Vec<VregIdx>>,
         tys: Vec<TyIdx>,
         ret_ty: TyIdx,
     );
-    fn lower_call<A: Abi>(
+    fn lower_call(
         &self,
-        lowering: &mut FnLowering<A>,
+        lowering: &mut FnLowering<Self::Target>,
         callee_vreg_idx: VregIdx,
         arg_vreg_indices: Vec<Vec<VregIdx>>,
         arg_tys: Vec<TyIdx>,
@@ -61,13 +39,23 @@ pub trait CallingConvention {
 }
 
 pub trait Abi {
-    type CallingConvention: CallingConvention;
+    type Register: Register;
 
-    fn field_offset(&self, storage: &Storage, fields: &[TyIdx], i: usize) -> usize;
-    fn ty_size(&self, storage: &Storage, ty: TyIdx) -> usize;
-    fn alignment(&self, storage: &Storage, ty: TyIdx) -> usize;
-    fn calling_convention(&self) -> &Self::CallingConvention;
+    fn field_offset(storage: &ty::Storage, fields: &[TyIdx], i: usize) -> usize;
+    fn ty_size(storage: &ty::Storage, ty: TyIdx) -> usize;
+    fn alignment(storage: &ty::Storage, ty: TyIdx) -> usize;
 
-    fn callee_saved_regs(&self) -> &'static [PhysicalRegister];
-    fn caller_saved_regs(&self) -> &'static [PhysicalRegister];
+    fn callee_saved_regs() -> &'static [Self::Register];
+    fn caller_saved_regs() -> &'static [Self::Register];
+}
+
+pub trait RegisterClass: Copy {}
+
+pub trait Register {
+    type RegisterClass: RegisterClass;
+
+    fn class<I: Instruction<Register = impl Register<RegisterClass = Self::RegisterClass>>>(
+        &self,
+        func: &Function<I>,
+    ) -> Option<Self::RegisterClass>;
 }

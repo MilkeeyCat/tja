@@ -1,78 +1,62 @@
 use crate::{
-    ConditionCode,
-    dataflow::DefsUses,
-    mir::{
-        BlockIdx, FrameIdx, Function, GenericOpcode, Opcode, Operand, OperandIdx, Register,
-        RegisterRole,
-    },
+    FunctionIdx, GlobalIdx,
+    mir::{BlockIdx, Function},
+    targets::Register,
 };
-use index_vec::IndexVec;
-use std::collections::HashSet;
-use typed_generational_arena::StandardIndex;
+use derive_more::From;
+pub use generated::*;
+use slotmap::new_key_type;
 
-pub type InstructionIdx = StandardIndex<Instruction>;
+mod generated {
+    use super::{GlobalOrFunction, Instruction, Register, RegisterOrImmediate};
+    use crate::{
+        ConditionCode,
+        mir::{BlockIdx, FrameIdx},
+    };
+
+    include!(concat!(env!("OUT_DIR"), "/generic_instruction.rs"));
+}
+
+new_key_type! {
+    pub struct InstructionIdx;
+}
+
+pub trait Instruction {
+    type Register: Register;
+}
+
+#[derive(Debug, From)]
+pub enum RegisterOrImmediate<R: Register> {
+    Register(R),
+    Immediate(i64),
+}
+
+#[derive(Debug, From)]
+pub enum GlobalOrFunction {
+    Global(GlobalIdx),
+    Immediate(FunctionIdx),
+}
+
+impl<I: Instruction> Instruction for GenericInstruction<I> {
+    type Register = I::Register;
+}
 
 #[derive(Debug)]
-pub struct Instruction {
-    pub opcode: Opcode,
-    pub operands: IndexVec<OperandIdx, Operand>,
-    pub tied_operands: Option<(OperandIdx, OperandIdx)>,
-    pub implicit_defs: HashSet<Register>,
-    pub implicit_uses: HashSet<Register>,
+pub struct InstructionWrapper<I: Instruction> {
+    pub instruction: I,
     pub next: Option<InstructionIdx>,
     pub prev: Option<InstructionIdx>,
 }
 
-impl Instruction {
-    pub fn new(opcode: Opcode) -> Self {
-        Self {
-            opcode,
-            operands: IndexVec::new(),
-            tied_operands: None,
-            implicit_defs: HashSet::new(),
-            implicit_uses: HashSet::new(),
-            next: None,
-            prev: None,
-        }
-    }
-
-    pub fn is_copy(&self) -> bool {
-        self.opcode == GenericOpcode::Copy.into()
-    }
-
-    pub fn defs_uses(&self) -> DefsUses {
-        DefsUses {
-            defs: self
-                .operands
-                .iter()
-                .filter_map(|operand| match operand {
-                    Operand::Register(r, RegisterRole::Def) => Some(r.clone()),
-                    _ => None,
-                })
-                .chain(self.implicit_defs.iter().cloned())
-                .collect(),
-            uses: self
-                .operands
-                .iter()
-                .filter_map(|operand| match operand {
-                    Operand::Register(r, RegisterRole::Use) => Some(r.clone()),
-                    _ => None,
-                })
-                .chain(self.implicit_uses.iter().cloned())
-                .collect(),
-        }
-    }
-}
-
-pub struct Cursor<'a> {
-    pub func: &'a Function,
+pub struct Cursor<'a, I: Instruction> {
+    pub func: &'a Function<I>,
 
     bb_idx: BlockIdx,
     idx: Option<InstructionIdx>,
 }
 
-impl<'a> Cursor<'a> {
-    pub fn new(func: &'a Function, bb_idx: BlockIdx) -> Self {
+impl<'a, I: Instruction> Cursor<'a, I> {
+    pub fn new(func: &'a Function<I>, bb_idx: BlockIdx) -> Self {
         Self {
             func,
             bb_idx,
@@ -108,7 +92,7 @@ impl<'a> Cursor<'a> {
         self.idx = Some(idx);
     }
 
-    pub fn current(&self) -> Option<&Instruction> {
+    pub fn current(&self) -> Option<&InstructionWrapper<I>> {
         self.idx.map(|idx| &self.func.instructions[idx])
     }
 
@@ -139,15 +123,15 @@ impl<'a> Cursor<'a> {
     }
 }
 
-pub struct CursorMut<'a> {
-    pub func: &'a mut Function,
+pub struct CursorMut<'a, I: Instruction> {
+    pub func: &'a mut Function<I>,
 
     bb_idx: BlockIdx,
     idx: Option<InstructionIdx>,
 }
 
-impl<'a> CursorMut<'a> {
-    pub fn new(func: &'a mut Function, bb_idx: BlockIdx) -> Self {
+impl<'a, I: Instruction> CursorMut<'a, I> {
+    pub fn new(func: &'a mut Function<I>, bb_idx: BlockIdx) -> Self {
         Self {
             func,
             bb_idx,
@@ -183,11 +167,11 @@ impl<'a> CursorMut<'a> {
         self.idx = Some(idx);
     }
 
-    pub fn current(&self) -> Option<&Instruction> {
+    pub fn current(&self) -> Option<&InstructionWrapper<I>> {
         self.idx.map(|idx| &self.func.instructions[idx])
     }
 
-    pub fn current_mut(&mut self) -> Option<&mut Instruction> {
+    pub fn current_mut(&mut self) -> Option<&mut InstructionWrapper<I>> {
         self.idx.map(|idx| &mut self.func.instructions[idx])
     }
 
@@ -286,169 +270,6 @@ impl<'a> CursorMut<'a> {
                 }
             }
             None => (),
-        }
-    }
-}
-
-pub type GenericBuilder<'a> = Builder<'a, ()>;
-pub type ManualBuilder<'a> = Builder<'a, InstructionIdx>;
-
-pub struct Builder<'a, S> {
-    pub(crate) func: &'a mut Function,
-    pub(crate) state: S,
-}
-
-impl<'a> GenericBuilder<'a> {
-    pub fn new(func: &'a mut Function) -> Self {
-        Self { func, state: () }
-    }
-
-    pub fn with_opcode(self, opcode: Opcode) -> ManualBuilder<'a> {
-        let idx = self.func.instructions.insert(Instruction::new(opcode));
-
-        Builder {
-            func: self.func,
-            state: idx,
-        }
-    }
-
-    pub fn frame_idx(self, lhs: Register, rhs: FrameIdx) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::FrameIndex.into())
-            .add_def(lhs)
-            .add_operand(rhs.into())
-            .idx()
-    }
-
-    pub fn ptr_add(self, out: Register, lhs: Operand, rhs: Operand) -> InstructionIdx {
-        assert!(matches!(
-            rhs,
-            Operand::Register(_, _) | Operand::Immediate(_)
-        ));
-
-        self.with_opcode(GenericOpcode::PtrAdd.into())
-            .add_def(out)
-            .add_operand(lhs)
-            .add_operand(rhs)
-            .idx()
-    }
-
-    pub fn load(self, lhs: Register, rhs: Operand) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::Load.into())
-            .add_def(lhs)
-            .add_operand(rhs)
-            .idx()
-    }
-
-    pub fn store(self, lhs: Register, rhs: Operand) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::Store.into())
-            .add_use(lhs)
-            .add_operand(rhs)
-            .idx()
-    }
-
-    pub fn br(self, idx: BlockIdx) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::Br.into())
-            .add_operand(Operand::Block(idx))
-            .idx()
-    }
-
-    pub fn br_cond(self, cond: Operand, idx: BlockIdx) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::BrCond.into())
-            .add_operand(cond)
-            .add_operand(Operand::Block(idx))
-            .idx()
-    }
-
-    pub fn global_value(self, lhs: Register, rhs: Operand) -> InstructionIdx {
-        assert!(matches!(rhs, Operand::Global(..) | Operand::Function(..)));
-
-        self.with_opcode(GenericOpcode::GlobalValue.into())
-            .add_def(lhs)
-            .add_operand(rhs)
-            .idx()
-    }
-
-    pub fn copy(self, lhs: Register, rhs: Operand) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::Copy.into())
-            .add_def(lhs)
-            .add_operand(rhs)
-            .idx()
-    }
-
-    pub fn icmp(
-        self,
-        out: Register,
-        cond_code: ConditionCode,
-        lhs: Register,
-        rhs: Register,
-    ) -> InstructionIdx {
-        self.with_opcode(GenericOpcode::ICmp.into())
-            .add_def(out)
-            .add_operand(Operand::Immediate(cond_code as u64))
-            .add_use(lhs)
-            .add_use(rhs)
-            .idx()
-    }
-}
-
-impl<'a> ManualBuilder<'a> {
-    pub fn new(func: &'a mut Function, idx: InstructionIdx) -> Self {
-        Self { func, state: idx }
-    }
-
-    pub fn set_opcode(&mut self, opcode: Opcode) -> &mut Self {
-        self.func.instructions[self.state].opcode = opcode;
-
-        self
-    }
-
-    pub fn set_tied_operands(&mut self, lhs: OperandIdx, rhs: OperandIdx) -> &mut Self {
-        self.func.instructions[self.state].tied_operands = Some((lhs, rhs));
-
-        self
-    }
-
-    pub fn clear_inputs(&mut self) -> &mut Self {
-        self.func.instructions[self.state]
-            .operands
-            .retain(|op| matches!(op, Operand::Register(_, RegisterRole::Def)));
-
-        self
-    }
-
-    pub fn add_operand(&mut self, operand: Operand) -> &mut Self {
-        self.func.add_operand(self.state, operand);
-
-        self
-    }
-
-    pub fn add_def(&mut self, reg: Register) -> &mut Self {
-        self.add_operand(Operand::def(reg));
-
-        self
-    }
-
-    pub fn add_use(&mut self, reg: Register) -> &mut Self {
-        self.add_operand(Operand::not_def(reg));
-
-        self
-    }
-
-    pub fn add_implicit_def(&mut self, reg: Register) -> &mut Self {
-        self.func.add_implicit_def(self.state, reg);
-
-        self
-    }
-
-    pub fn idx(&self) -> InstructionIdx {
-        self.state
-    }
-}
-
-impl<'a> Extend<Operand> for ManualBuilder<'a> {
-    fn extend<T: IntoIterator<Item = Operand>>(&mut self, iter: T) {
-        for operand in iter {
-            self.add_operand(operand);
         }
     }
 }

@@ -1,8 +1,13 @@
-use crate::mir::{Function, InstructionIdx};
+use crate::mir::{
+    Function,
+    instruction::{Instruction, InstructionIdx},
+};
+use slotmap::new_key_type;
 use std::collections::HashSet;
-use typed_generational_arena::StandardIndex;
 
-pub type BlockIdx = StandardIndex<BasicBlock>;
+new_key_type! {
+    pub struct BlockIdx;
+}
 
 #[derive(Debug)]
 pub struct BasicBlock {
@@ -19,22 +24,22 @@ impl BasicBlock {
         Self {
             name,
             successors: HashSet::new(),
-            next: None,
-            prev: None,
             instruction_head: None,
             instruction_tail: None,
+            next: None,
+            prev: None,
         }
     }
 }
 
-pub struct Cursor<'a> {
-    pub func: &'a Function,
+pub struct Cursor<'a, I: Instruction> {
+    pub func: &'a Function<I>,
 
     idx: Option<BlockIdx>,
 }
 
-impl<'a> Cursor<'a> {
-    pub fn new(func: &'a Function) -> Self {
+impl<'a, I: Instruction> Cursor<'a, I> {
+    pub fn new(func: &'a Function<I>) -> Self {
         Self { func, idx: None }
     }
 
@@ -97,14 +102,14 @@ impl<'a> Cursor<'a> {
     }
 }
 
-pub struct CursorMut<'a> {
-    pub func: &'a mut Function,
+pub struct CursorMut<'a, I: Instruction> {
+    pub func: &'a mut Function<I>,
 
     idx: Option<BlockIdx>,
 }
 
-impl<'a> CursorMut<'a> {
-    pub fn new(func: &'a mut Function) -> Self {
+impl<'a, I: Instruction> CursorMut<'a, I> {
+    pub fn new(func: &'a mut Function<I>) -> Self {
         Self { func, idx: None }
     }
 
