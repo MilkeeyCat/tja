@@ -41,6 +41,7 @@ impl<I: Instruction> Instruction for GenericInstruction<I> {
     type Register = I::Register;
 }
 
+#[derive(Debug)]
 pub struct InstructionWrapper<I: Instruction> {
     pub instruction: I,
     pub next: Option<InstructionIdx>,

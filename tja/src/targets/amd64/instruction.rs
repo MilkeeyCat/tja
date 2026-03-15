@@ -1,11 +1,34 @@
-use super::{AddressMode, Memory, ReadWrite};
 use crate::{
-    mir::{self, BlockIdx},
-    targets::Register,
+    mir,
+    targets::{self, amd64::Register},
 };
+use derive_more::From;
+pub use generated::*;
 
-include!(concat!(env!("OUT_DIR"), "/amd64/instruction.rs"));
+mod generated {
+    use crate::{
+        mir::BlockIdx,
+        targets::{
+            Register,
+            amd64::{AddressMode, Memory, ReadWrite},
+        },
+    };
 
-impl<R: Register> mir::Instruction for Instruction<R> {
+    include!(concat!(env!("OUT_DIR"), "/amd64/instruction.rs"));
+}
+
+#[derive(Debug, From)]
+pub enum Instruction<R: targets::Register> {
+    Call(Call<R>),
+    Target(generated::Instruction<R>),
+}
+
+impl<R: targets::Register> mir::Instruction for Instruction<R> {
     type Register = R;
+}
+
+#[derive(Debug)]
+pub struct Call<R: targets::Register> {
+    target: R,
+    clobbers: Vec<Register>,
 }
