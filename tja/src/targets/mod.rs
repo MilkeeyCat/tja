@@ -40,9 +40,14 @@ pub trait CallingConvention {
 }
 
 pub trait Abi {
+    type Register: Register;
+
     fn field_offset(storage: &ty::Storage, fields: &[TyIdx], i: usize) -> usize;
     fn ty_size(storage: &ty::Storage, ty: TyIdx) -> usize;
     fn alignment(storage: &ty::Storage, ty: TyIdx) -> usize;
+
+    fn callee_saved_regs() -> &'static [Self::Register];
+    fn caller_saved_regs() -> &'static [Self::Register];
 }
 
 pub trait RegisterClass: Copy {}

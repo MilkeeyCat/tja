@@ -32,3 +32,9 @@ pub struct Call<R: targets::Register> {
     target: R,
     clobbers: Vec<Register>,
 }
+
+impl<R: targets::Register> Call<R> {
+    pub fn new(target: R, clobbers: Vec<Register>) -> Self {
+        Self { target, clobbers }
+    }
+}

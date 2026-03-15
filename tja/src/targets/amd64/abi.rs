@@ -1,5 +1,5 @@
 use crate::{
-    targets::Abi,
+    targets::{Abi, amd64::Register},
     ty::{self, Ty, TyIdx},
 };
 
@@ -7,6 +7,8 @@ use crate::{
 pub struct SysV;
 
 impl Abi for SysV {
+    type Register = Register;
+
     fn field_offset(storage: &ty::Storage, fields: &[TyIdx], i: usize) -> usize {
         fields
             .iter()
@@ -46,5 +48,31 @@ impl Abi for SysV {
                 .unwrap_or_default(),
             _ => Self::ty_size(storage, ty),
         }
+    }
+
+    fn callee_saved_regs() -> &'static [Self::Register] {
+        &[
+            Register::Rbx,
+            Register::Rsp,
+            Register::Rbp,
+            Register::R12,
+            Register::R13,
+            Register::R14,
+            Register::R15,
+        ]
+    }
+
+    fn caller_saved_regs() -> &'static [Self::Register] {
+        &[
+            Register::Rax,
+            Register::Rcx,
+            Register::Rdx,
+            Register::Rsi,
+            Register::Rdi,
+            Register::R8,
+            Register::R9,
+            Register::R10,
+            Register::R11,
+        ]
     }
 }
