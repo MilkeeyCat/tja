@@ -27,17 +27,16 @@ impl<'a, 'ty, T: Target> Context<'a, 'ty, T> {
 pub struct Lower;
 
 impl<
-    T: Target<CallingConventionInstruction = GenericInstruction<I>>,
+    T: Target<GenericInstruction = GenericInstruction<I>>,
     I: Instruction<Register = R>,
     R: Register + From<VregIdx>,
-> Pass<Context<'_, '_, T>, hir::Function, mir::Function<T::CallingConventionInstruction>>
-    for Lower
+> Pass<Context<'_, '_, T>, hir::Function, mir::Function<T::GenericInstruction>> for Lower
 {
     fn run(
         &self,
         ctx: Context<'_, '_, T>,
         function: hir::Function,
-    ) -> mir::Function<T::CallingConventionInstruction> {
+    ) -> mir::Function<T::GenericInstruction> {
         let Context { target, ty_storage } = ctx;
         let mut mir_function = mir::Function::new(function.name.clone());
 
@@ -110,7 +109,7 @@ impl<
 pub struct FnLowering<'a, T: Target> {
     pub ty_storage: &'a ty::Storage,
     pub hir_function: &'a hir::Function,
-    pub mir_function: mir::Function<T::CallingConventionInstruction>,
+    pub mir_function: mir::Function<T::GenericInstruction>,
     target: &'a T,
     operand_to_vreg_indices: HashMap<hir::Operand, Vec<mir::VregIdx>>,
     hir_to_mir_bb: HashMap<hir::BlockIdx, mir::BlockIdx>,
@@ -120,12 +119,12 @@ pub struct FnLowering<'a, T: Target> {
 
 impl<
     'a,
-    T: Target<CallingConventionInstruction = GenericInstruction<I>>,
+    T: Target<GenericInstruction = GenericInstruction<I>>,
     I: Instruction<Register = R>,
     R: Register + From<VregIdx>,
 > FnLowering<'a, T>
 {
-    pub fn block_cursor(&self) -> BasicBlockCursor<'_, T::CallingConventionInstruction> {
+    pub fn block_cursor(&self) -> BasicBlockCursor<'_, T::GenericInstruction> {
         let mut cursor = self.mir_function.block_cursor();
 
         cursor.set_idx(self.current_bb_idx);
@@ -133,7 +132,7 @@ impl<
         cursor
     }
 
-    pub fn block_cursor_mut(&mut self) -> BasicBlockCursorMut<'_, T::CallingConventionInstruction> {
+    pub fn block_cursor_mut(&mut self) -> BasicBlockCursorMut<'_, T::GenericInstruction> {
         let mut cursor = self.mir_function.block_cursor_mut();
 
         cursor.set_idx(self.current_bb_idx);
@@ -141,15 +140,13 @@ impl<
         cursor
     }
 
-    pub fn instr_cursor(&self) -> InstructionCursor<'_, T::CallingConventionInstruction> {
+    pub fn instr_cursor(&self) -> InstructionCursor<'_, T::GenericInstruction> {
         self.mir_function
             .instr_cursor(self.current_bb_idx)
             .at_tail()
     }
 
-    pub fn instr_cursor_mut(
-        &mut self,
-    ) -> InstructionCursorMut<'_, T::CallingConventionInstruction> {
+    pub fn instr_cursor_mut(&mut self) -> InstructionCursorMut<'_, T::GenericInstruction> {
         self.mir_function
             .instr_cursor_mut(self.current_bb_idx)
             .at_tail()

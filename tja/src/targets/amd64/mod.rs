@@ -50,7 +50,7 @@ impl Target {
 
 impl super::Target for Target {
     type Abi = abi::SysV;
-    type CallingConventionInstruction = GenericInstruction<Instruction<GenericRegister<Register>>>;
+    type GenericInstruction = GenericInstruction<Instruction<GenericRegister<Register>>>;
 
     fn get_calling_convention(&self) -> &dyn super::CallingConvention<Target = Self> {
         &self.default_cc

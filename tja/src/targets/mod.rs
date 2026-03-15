@@ -8,8 +8,7 @@ pub mod amd64;
 
 pub trait Target {
     type Abi: Abi;
-    // FIXME: it's not really calling convention, think of a better name
-    type CallingConventionInstruction: Instruction;
+    type GenericInstruction: Instruction;
 
     fn get_calling_convention(&self) -> &dyn CallingConvention<Target = Self>;
 }

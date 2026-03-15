@@ -620,10 +620,6 @@ impl CallingConvention for SysV {
                 .into(),
             ));
 
-        //for reg in lowering.abi.caller_saved_regs() {
-        //    instr_builder.add_implicit_def(mir::Register::Physical(*reg));
-        //}
-
         lowering.instr_cursor_mut().insert_after(instr_idx);
 
         if stack_offset > 0 {
