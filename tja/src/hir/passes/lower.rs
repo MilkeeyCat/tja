@@ -30,14 +30,14 @@ impl<
     T: Target<GenericInstruction = GenericInstruction<I>>,
     I: Instruction<Register = R>,
     R: Register + From<VregIdx>,
-> Pass<Context<'_, '_, T>, hir::Function, mir::Function<T::GenericInstruction>> for Lower
+> Pass<&Context<'_, '_, T>, hir::Function, mir::Function<T::GenericInstruction>> for Lower
 {
     fn run(
         &self,
-        ctx: Context<'_, '_, T>,
+        ctx: &Context<'_, '_, T>,
         function: hir::Function,
     ) -> mir::Function<T::GenericInstruction> {
-        let Context { target, ty_storage } = ctx;
+        let &Context { target, ty_storage } = ctx;
         let mut mir_function = mir::Function::new(function.name.clone());
 
         if function.is_declaration() {
@@ -547,5 +547,34 @@ impl<
 impl<T: Target> LocalStorage for FnLowering<'_, T> {
     fn get_local_ty(&self, idx: hir::LocalIdx) -> TyIdx {
         self.hir_function.locals[idx]
+    }
+}
+
+#[derive(Default)]
+pub struct LowerFunctionToModuleAdapter;
+
+impl<
+    T: Target<GenericInstruction = GenericInstruction<I>>,
+    I: Instruction<Register = R>,
+    R: Register + From<VregIdx>,
+> Pass<Context<'_, '_, T>, hir::Module, mir::Module<T::GenericInstruction>>
+    for LowerFunctionToModuleAdapter
+{
+    fn run(
+        &self,
+        ctx: Context<'_, '_, T>,
+        module: hir::Module,
+    ) -> mir::Module<T::GenericInstruction> {
+        let lower = Lower::default();
+
+        mir::Module {
+            name: module.name,
+            globals: module.globals,
+            functions: module
+                .functions
+                .into_iter()
+                .map(|func| lower.run(&ctx, func))
+                .collect(),
+        }
     }
 }
