@@ -1,29 +1,26 @@
-use crate::mir::PhysicalRegister;
+use super::RegisterClass;
+use crate::{
+    mir::{Function, GenericRegister, Instruction},
+    targets,
+};
 
 include!(concat!(env!("OUT_DIR"), "/amd64/register.rs"));
 
-pub(super) struct RegisterDesc {
-    pub(super) name: &'static str,
-    pub(super) size: usize,
-    pub(super) subregs: &'static [Register],
-}
+impl targets::Register for Register {
+    type RegisterClass = RegisterClass;
 
-impl Register {
-    pub const fn into_physical_reg(self) -> PhysicalRegister {
-        PhysicalRegister(self as usize)
+    fn class<
+        I: Instruction<Register = impl targets::Register<RegisterClass = Self::RegisterClass>>,
+    >(
+        &self,
+        _func: &Function<I>,
+    ) -> Option<Self::RegisterClass> {
+        todo!()
     }
 }
 
-impl From<PhysicalRegister> for Register {
-    fn from(value: PhysicalRegister) -> Self {
-        assert!(*value < Self::num());
-
-        unsafe { std::mem::transmute::<_, Self>(value) }
-    }
-}
-
-impl Into<PhysicalRegister> for Register {
-    fn into(self) -> PhysicalRegister {
-        self.into_physical_reg()
+impl From<Register> for GenericRegister<Register> {
+    fn from(reg: Register) -> Self {
+        Self::Physical(reg)
     }
 }

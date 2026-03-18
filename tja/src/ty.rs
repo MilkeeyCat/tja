@@ -17,15 +17,14 @@ pub enum Ty {
 }
 
 impl Ty {
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> Option<usize> {
         match self {
-            Self::Void => 0,
-            Self::I8 => 1,
-            Self::I16 => 2,
-            Self::I32 => 4,
-            Self::I64 | Self::Ptr => 8,
-            // aggregate types size is determined by abi
-            Self::Struct(_) | Self::Array { .. } => unreachable!(),
+            Self::Void => Some(0),
+            Self::I8 => Some(1),
+            Self::I16 => Some(2),
+            Self::I32 => Some(4),
+            Self::I64 | Self::Ptr => Some(8),
+            Self::Struct(_) | Self::Array { .. } => None,
         }
     }
 }

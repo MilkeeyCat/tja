@@ -1,19 +1,14 @@
-use super::{Operand, Register};
 use crate::{
-    dataflow::{DefsUses, Liveness},
-    macros::usize_wrapper,
     mir::{
-        BasicBlock, BasicBlockCursor, BasicBlockCursorMut, BlockIdx, Instruction,
-        InstructionCursor, InstructionCursorMut, InstructionIdx, instruction,
+        BasicBlock, BasicBlockCursor, BasicBlockCursorMut, BlockIdx, InstructionCursor,
+        InstructionCursorMut, InstructionIdx,
+        instruction::{Instruction, InstructionWrapper},
     },
+    targets::{Register, RegisterClass},
     ty::TyIdx,
 };
 use index_vec::{IndexVec, define_index_type};
-use indexmap::IndexSet;
-use std::collections::HashMap;
-use typed_generational_arena::StandardArena;
-
-usize_wrapper! {RegisterClass}
+use slotmap::SlotMap;
 
 define_index_type! {
     pub struct VregIdx = usize;
@@ -23,34 +18,118 @@ define_index_type! {
     pub struct FrameIdx = usize;
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum GenericRegister<R: Register> {
+    Virtual(VregIdx),
+    Physical(R),
+}
+
+impl<R: Register> From<VregIdx> for GenericRegister<R> {
+    fn from(vreg: VregIdx) -> Self {
+        Self::Virtual(vreg)
+    }
+}
+
+impl<R: Register> Register for GenericRegister<R> {
+    type RegisterClass = R::RegisterClass;
+
+    fn class<I: Instruction<Register = impl Register<RegisterClass = Self::RegisterClass>>>(
+        &self,
+        func: &Function<I>,
+    ) -> Option<Self::RegisterClass> {
+        match self {
+            Self::Virtual(vreg) => func.vreg_info.get_vreg(*vreg).class,
+            Self::Physical(reg) => reg.class(func),
+        }
+    }
+}
+
+pub struct Function<I: Instruction> {
+    pub name: String,
+    pub vreg_info: VregInfo<<I::Register as Register>::RegisterClass>,
+    pub frame_info: FrameInfo,
+    pub blocks: SlotMap<BlockIdx, BasicBlock>,
+    pub instructions: SlotMap<InstructionIdx, InstructionWrapper<I>>,
+    pub block_head: Option<BlockIdx>,
+    pub block_tail: Option<BlockIdx>,
+}
+
+impl<I: Instruction> Function<I> {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            vreg_info: VregInfo::new(),
+            frame_info: FrameInfo::default(),
+            blocks: SlotMap::with_key(),
+            instructions: SlotMap::with_key(),
+            block_head: None,
+            block_tail: None,
+        }
+    }
+
+    pub fn create_block(&mut self, name: String) -> BlockIdx {
+        self.blocks.insert(BasicBlock::new(name))
+    }
+
+    pub fn block_cursor(&self) -> BasicBlockCursor<'_, I> {
+        BasicBlockCursor::new(self)
+    }
+
+    pub fn block_cursor_mut(&mut self) -> BasicBlockCursorMut<'_, I> {
+        BasicBlockCursorMut::new(self)
+    }
+
+    pub fn instr_cursor(&self, idx: BlockIdx) -> InstructionCursor<'_, I> {
+        InstructionCursor::new(self, idx)
+    }
+
+    pub fn instr_cursor_mut(&mut self, idx: BlockIdx) -> InstructionCursorMut<'_, I> {
+        InstructionCursorMut::new(self, idx)
+    }
+
+    pub fn create_instr(&mut self, instr: impl Into<I>) -> InstructionIdx {
+        self.instructions.insert(InstructionWrapper {
+            instruction: instr.into(),
+            next: None,
+            prev: None,
+        })
+    }
+}
+
 #[derive(Debug)]
-pub struct Vreg {
+pub struct Vreg<RC: RegisterClass> {
     pub ty: TyIdx,
-    pub class: Option<RegisterClass>,
+    pub class: Option<RC>,
 }
 
 #[derive(Default, Debug)]
-pub struct VregInfo {
-    vreg_info: IndexVec<VregIdx, Vreg>,
+pub struct VregInfo<RC: RegisterClass> {
+    vreg_info: IndexVec<VregIdx, Vreg<RC>>,
 }
 
-impl VregInfo {
+impl<RC: RegisterClass> VregInfo<RC> {
+    fn new() -> Self {
+        Self {
+            vreg_info: IndexVec::default(),
+        }
+    }
+
     pub fn create_vreg(&mut self, ty: TyIdx) -> VregIdx {
         self.vreg_info.push(Vreg { ty, class: None })
     }
 
-    pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RegisterClass) -> VregIdx {
+    pub fn create_vreg_with_class(&mut self, ty: TyIdx, class: RC) -> VregIdx {
         self.vreg_info.push(Vreg {
             ty,
             class: Some(class),
         })
     }
 
-    pub fn get_vreg(&self, idx: VregIdx) -> &Vreg {
+    pub fn get_vreg(&self, idx: VregIdx) -> &Vreg<RC> {
         &self.vreg_info[idx]
     }
 
-    pub fn set_class(&mut self, idx: VregIdx, class: RegisterClass) {
+    pub fn set_class(&mut self, idx: VregIdx, class: RC) {
         self.vreg_info[idx].class = Some(class);
     }
 }
@@ -76,151 +155,5 @@ impl FrameInfo {
 
     pub fn objects_iter(&self) -> impl Iterator<Item = &StackObject> {
         self.objects.iter()
-    }
-}
-
-#[derive(Debug)]
-pub struct Function {
-    pub name: String,
-    pub vreg_info: VregInfo,
-    pub frame_info: FrameInfo,
-    pub blocks: StandardArena<BasicBlock>,
-    pub instructions: StandardArena<Instruction>,
-    pub block_head: Option<BlockIdx>,
-    pub block_tail: Option<BlockIdx>,
-}
-
-impl Function {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            vreg_info: VregInfo::default(),
-            frame_info: FrameInfo::default(),
-            blocks: StandardArena::new(),
-            instructions: StandardArena::new(),
-            block_head: None,
-            block_tail: None,
-        }
-    }
-
-    pub fn liveness(&self) -> HashMap<BlockIdx, Liveness> {
-        let compute_defs_uses = |func: &Function, bb_idx: BlockIdx| {
-            let mut defs_uses = DefsUses::default();
-            let mut cursor = func.instr_cursor(bb_idx);
-
-            while cursor.move_next().is_some() {
-                let DefsUses { defs, uses } = cursor.current().unwrap().defs_uses();
-
-                defs_uses.defs.extend(defs);
-                defs_uses.uses.extend(uses);
-            }
-
-            defs_uses.uses = &defs_uses.uses - &defs_uses.defs;
-
-            defs_uses
-        };
-
-        let defs_uses = {
-            let mut defs_uses = HashMap::new();
-            let mut cursor = self.block_cursor();
-
-            while let Some(bb_idx) = cursor.move_next() {
-                defs_uses.insert(bb_idx, compute_defs_uses(cursor.func, bb_idx));
-            }
-
-            defs_uses
-        };
-        let mut liveness: HashMap<BlockIdx, Liveness> = defs_uses
-            .keys()
-            .map(|idx| (*idx, Liveness::default()))
-            .collect();
-
-        loop {
-            let mut done = true;
-            let mut cursor = self.block_cursor();
-
-            // some dude said that in reverse is better
-            while let Some(idx) = cursor.move_prev() {
-                let block = cursor.current().unwrap();
-                // out[v] = ∪ in[w] where w ∈ succ(v)
-                let live_out = block
-                    .successors
-                    .iter()
-                    .map(|idx| liveness[idx].ins.clone())
-                    .reduce(|acc, el| acc.union(&el).cloned().collect())
-                    .unwrap_or_default();
-                // in[v] = use(v) ∪ (out[v] - def(v))
-                let live_in = defs_uses[&idx]
-                    .uses
-                    .union(&(&liveness[&idx].outs - &defs_uses[&idx].defs))
-                    .cloned()
-                    .collect();
-
-                if &liveness[&idx].ins != &live_in || &liveness[&idx].outs != &live_out {
-                    done &= false;
-                }
-
-                liveness.get_mut(&idx).unwrap().ins = live_in;
-                liveness.get_mut(&idx).unwrap().outs = live_out;
-            }
-
-            if done {
-                break;
-            }
-        }
-
-        liveness
-    }
-
-    pub fn registers(&self) -> IndexSet<Register> {
-        let mut registers = IndexSet::new();
-
-        for (_, instr) in &self.instructions {
-            for operand in &instr.operands {
-                if let Operand::Register(reg, _) = operand {
-                    registers.insert(reg.clone());
-                }
-            }
-        }
-
-        registers
-    }
-
-    pub fn is_declaration(&self) -> bool {
-        self.blocks.is_empty()
-    }
-
-    pub fn add_operand(&mut self, instr_idx: InstructionIdx, operand: Operand) {
-        // TODO: store more info
-        self.instructions[instr_idx].operands.push(operand);
-    }
-
-    pub fn add_implicit_def(&mut self, instr_idx: InstructionIdx, reg: Register) {
-        // TODO: store more info
-        self.instructions[instr_idx].implicit_defs.insert(reg);
-    }
-
-    pub fn create_block(&mut self, name: String) -> BlockIdx {
-        self.blocks.insert(BasicBlock::new(name))
-    }
-
-    pub fn block_cursor(&self) -> BasicBlockCursor<'_> {
-        BasicBlockCursor::new(self)
-    }
-
-    pub fn block_cursor_mut(&mut self) -> BasicBlockCursorMut<'_> {
-        BasicBlockCursorMut::new(self)
-    }
-
-    pub fn instr_cursor(&self, idx: BlockIdx) -> InstructionCursor<'_> {
-        InstructionCursor::new(self, idx)
-    }
-
-    pub fn instr_cursor_mut(&mut self, idx: BlockIdx) -> InstructionCursorMut<'_> {
-        InstructionCursorMut::new(self, idx)
-    }
-
-    pub fn create_instr(&mut self) -> instruction::GenericBuilder<'_> {
-        instruction::GenericBuilder::new(self)
     }
 }
