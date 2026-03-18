@@ -394,11 +394,26 @@ impl<
                                             .vreg_info
                                             .create_vreg(self.ty_storage.ptr_ty);
                                         let lhs_vreg_idx = self.get_or_create_vreg(idx.clone());
+                                        let rhs_vreg_idx = {
+                                            let vreg_idx = self
+                                                .mir_function
+                                                .vreg_info
+                                                .create_vreg(self.ty_storage.ptr_ty);
+                                            let instr_idx =
+                                                self.mir_function.create_instr(instr::Copy::new(
+                                                    vreg_idx.into(),
+                                                    (size as i64).into(),
+                                                ));
+
+                                            self.instr_cursor_mut().insert_after(instr_idx);
+
+                                            vreg_idx
+                                        };
                                         let instr_idx =
                                             self.mir_function.create_instr(instr::Mul::new(
                                                 def_vreg_idx.into(),
                                                 lhs_vreg_idx.into(),
-                                                (size as i64).into(),
+                                                rhs_vreg_idx.into(),
                                             ));
 
                                         self.instr_cursor_mut().insert_after(instr_idx);

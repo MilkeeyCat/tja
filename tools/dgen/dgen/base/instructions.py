@@ -6,7 +6,7 @@ Instruction("Add", [("dst", R0)], [("lhs", R0), ("rhs", R0)])
 
 Instruction("Sub", [("dst", R0)], [("lhs", R0), ("rhs", R0)])
 
-Instruction("Mul", [("dst", R0)], [("lhs", R0), ("rhs", VREG_OR_IMM)])
+Instruction("Mul", [("dst", R0)], [("lhs", R0), ("rhs", R0)])
 
 Instruction("SDiv", [("dst", R0)], [("lhs", R0), ("rhs", R0)])
 
