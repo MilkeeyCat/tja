@@ -33,6 +33,10 @@ impl super::Target for Target {
     }
 }
 
+/// The terms "above" and "below" are associated with the CF flag and refer to
+/// the relationship between two unsigned integer values. The terms "greater" and
+/// "less" are associated with the SF and OF flags and refer to the relationship
+/// between two signed integer values.
 #[derive(Debug, Display)]
 pub enum ConditionCode {
     #[display("a")]
