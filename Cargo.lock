@@ -553,6 +553,7 @@ dependencies = [
  "iris",
  "paste",
  "slotmap",
+ "smallvec",
  "thiserror",
 ]
 

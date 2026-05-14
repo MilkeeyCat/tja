@@ -1,7 +1,4 @@
-use crate::hir::{
-    function::{Function, FunctionIdx, Signature},
-    ty::TyIdx,
-};
+use crate::hir::{Function, FunctionIdx, Signature, TyIdx};
 use index_vec::{IndexVec, define_index_type};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -44,7 +41,7 @@ enum FunctionOrGlobalIdx {
 pub struct RedeclarationError;
 
 #[derive(Default)]
-struct Declarations {
+pub struct Declarations {
     names: HashMap<String, FunctionOrGlobalIdx>,
     funcs: IndexVec<FunctionIdx, FunctionDeclaration>,
     globals: IndexVec<GlobalIdx, GlobalDeclaration>,
@@ -100,8 +97,8 @@ pub struct GlobalRedefinitionError;
 
 #[derive(Default)]
 pub struct Module {
-    decls: Declarations,
-    funcs: HashMap<FunctionIdx, Function>,
+    pub(super) decls: Declarations,
+    pub(super) funcs: HashMap<FunctionIdx, Function>,
     globals: HashMap<GlobalIdx, Global>,
 }
 
