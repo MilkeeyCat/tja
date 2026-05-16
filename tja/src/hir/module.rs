@@ -1,10 +1,14 @@
 use crate::hir::{Function, FunctionIdx, Signature, TyIdx};
+use derive_more::From;
 use index_vec::{IndexVec, define_index_type};
 use std::collections::HashMap;
 use thiserror::Error;
 
+#[derive(From)]
+#[from(u8, i8, u16, i16, u32, i32, i64)]
 pub struct Immediate(i64);
 
+#[derive(From)]
 pub enum Constant {
     Global(GlobalIdx),
     Function(FunctionIdx),
