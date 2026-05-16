@@ -23,3 +23,12 @@ pub enum Value {
         result_idx: usize,
     },
 }
+
+impl Value {
+    pub fn ty(&self) -> TyIdx {
+        match self {
+            Self::Param { ty, .. } => *ty,
+            Self::Instr { ty, .. } => *ty,
+        }
+    }
+}

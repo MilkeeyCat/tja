@@ -11,8 +11,8 @@ define_index_type! {
 }
 
 pub struct Signature {
-    params: Vec<TyIdx>,
-    returns: Vec<TyIdx>,
+    pub params: Vec<TyIdx>,
+    pub returns: Vec<TyIdx>,
 }
 
 impl Signature {
@@ -53,8 +53,8 @@ impl BlockNode {
     }
 }
 
-#[derive(Default)]
 pub struct Function {
+    idx: FunctionIdx,
     instrs: SlotMap<InstructionId, InstructionNode>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
     blocks: SlotMap<BlockId, BlockNode>,
@@ -63,6 +63,21 @@ pub struct Function {
 }
 
 impl Function {
+    pub(super) fn new(idx: FunctionIdx) -> Self {
+        Self {
+            idx,
+            instrs: SlotMap::with_key(),
+            instr_results: HashMap::new(),
+            blocks: SlotMap::with_key(),
+            first_block: None,
+            last_block: None,
+        }
+    }
+
+    pub(super) fn idx(&self) -> FunctionIdx {
+        self.idx
+    }
+
     pub(super) fn create_instr(&mut self, instr: Instruction) -> InstructionId {
         self.instrs.insert(InstructionNode::new(instr))
     }

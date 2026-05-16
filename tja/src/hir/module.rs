@@ -12,9 +12,9 @@ pub enum Constant {
     Aggregate(Vec<Self>),
 }
 
-struct FunctionDeclaration {
+pub(super) struct FunctionDeclaration {
     name: String,
-    sig: Signature,
+    pub(super) sig: Signature,
 }
 
 struct GlobalDeclaration {
@@ -65,6 +65,10 @@ impl Declarations {
         self.names.insert(name, FunctionOrGlobalIdx::Function(idx));
 
         Ok(idx)
+    }
+
+    pub(super) fn get_function(&self, func: FunctionIdx) -> &FunctionDeclaration {
+        &self.funcs[func]
     }
 
     pub fn declare_global(
@@ -120,7 +124,7 @@ impl Module {
             return Err(FunctionRedefinitionError);
         }
 
-        self.funcs.insert(func, Function::default());
+        self.funcs.insert(func, Function::new(func));
 
         Ok(())
     }
