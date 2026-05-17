@@ -10,8 +10,8 @@ new_key_type! {
 
 pub struct Block {
     params: Vec<Value>,
-    first_instr: Option<InstructionId>,
-    last_instr: Option<InstructionId>,
+    pub(super) first_instr: Option<InstructionId>,
+    pub(super) last_instr: Option<InstructionId>,
     pub(super) terminator: Option<Terminator>,
 }
 
@@ -222,6 +222,8 @@ impl InstructionInserter for AppendInstrInserter<'_> {
             Instruction::Const { .. } => vec![ty],
         };
         let instr = func.create_instr(instr);
+
+        func.append_instr(instr, self.block);
 
         if !results.is_empty() {
             func.create_instr_results(

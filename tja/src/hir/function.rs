@@ -99,6 +99,21 @@ impl Function {
         self.last_block = Some(block);
     }
 
+    pub(super) fn append_instr(&mut self, instr: InstructionId, block: BlockId) {
+        let block = &mut self.blocks[block].block;
+        let node = &mut self.instrs[instr];
+
+        node.prev = block.last_instr;
+
+        if let Some(last) = block.last_instr {
+            self.instrs[last].next = Some(instr);
+        } else {
+            block.first_instr = Some(instr);
+        }
+
+        block.last_instr = Some(instr);
+    }
+
     pub(super) fn create_instr_results(&mut self, instr: InstructionId, values: Vec<Value>) {
         assert!(
             self.instr_results.insert(instr, values).is_none(),
