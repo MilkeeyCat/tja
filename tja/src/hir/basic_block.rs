@@ -69,7 +69,7 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
     }
 
     pub fn ret(mut self, values: Vec<Value>) -> Result<(), SignatureMismatchError> {
-        let sig = &self.decls.get_function(self.func.idx()).sig;
+        let sig = &self.decls.function(self.func.idx()).sig;
         let tys = values.iter().map(|value| value.ty()).collect();
 
         if sig.returns != tys {

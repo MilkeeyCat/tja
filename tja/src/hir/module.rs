@@ -71,7 +71,7 @@ impl Declarations {
         Ok(idx)
     }
 
-    pub(super) fn get_function(&self, func: FunctionIdx) -> &FunctionDeclaration {
+    pub(super) fn function(&self, func: FunctionIdx) -> &FunctionDeclaration {
         &self.funcs[func]
     }
 
