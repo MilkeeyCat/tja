@@ -1,10 +1,15 @@
 use crate::hir::{
-    Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, Terminator, TyIdx, TyStorage,
-    Value, basic_block::AppendInstrInserter, module::Declarations,
+    Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, TyIdx, TyStorage, Value,
+    basic_block::{AppendInstrInserter, BlocksIter},
+    instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
+    module::Declarations,
 };
 use index_vec::define_index_type;
 use slotmap::SlotMap;
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+};
 
 define_index_type! {
     pub struct FunctionIdx = usize;
@@ -128,8 +133,50 @@ impl Function {
             .unwrap_or(&[])
     }
 
-    pub(super) fn set_terminator(&mut self, block: BlockId, terminator: Terminator) {
-        self.blocks.get_mut(block).unwrap().block.terminator = Some(terminator);
+    pub(super) fn next_block(&self, block: BlockId) -> Option<BlockId> {
+        self.blocks.get(block)?.next
+    }
+
+    pub(super) fn next_instr(&self, instr: InstructionId) -> Option<InstructionId> {
+        self.instrs.get(instr)?.next
+    }
+
+    pub fn blocks_iter<'a>(&'a self) -> BlocksIter<'a> {
+        BlocksIter::new(self, self.first_block)
+    }
+
+    pub fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
+        InstrsIter::new(self, self.blocks[block].block.first_instr)
+    }
+
+    pub(super) fn block(&self, block: BlockId) -> &Block {
+        &self.blocks[block].block
+    }
+
+    pub(super) fn block_mut(&mut self, block: BlockId) -> &mut Block {
+        &mut self.blocks[block].block
+    }
+
+    pub(super) fn instr(&self, instr: InstructionId) -> &Instruction {
+        &self.instrs[instr].instr
+    }
+
+    pub(super) fn display_instr<'a>(
+        &'a self,
+        instr: InstructionId,
+        decls: &'a Declarations,
+        ty_storage: &'a TyStorage,
+        instr_to_idx: &'a BTreeMap<InstructionId, usize>,
+    ) -> DisplayInstr<'a> {
+        DisplayInstr::new(decls, self, ty_storage, instr_to_idx, instr)
+    }
+
+    pub(super) fn display_terminator<'a>(
+        &'a self,
+        block: BlockId,
+        instr_to_idx: &'a BTreeMap<InstructionId, usize>,
+    ) -> DisplayTerminator<'a> {
+        DisplayTerminator::new(self, instr_to_idx, block)
     }
 }
 
@@ -158,6 +205,10 @@ impl<'a> Builder<'a> {
         block
     }
 
+    pub fn block_params(&self, block: BlockId) -> &[Value] {
+        &self.func.block(block).params()
+    }
+
     pub fn select_block(&mut self, block: BlockId) {
         self.current_block = Some(block);
     }
@@ -169,5 +220,119 @@ impl<'a> Builder<'a> {
             self.decls,
             self.ty_storage,
         )
+    }
+}
+
+pub struct DisplayFunction<'a> {
+    module: &'a Module,
+    ty_storage: &'a TyStorage,
+    func: FunctionIdx,
+}
+
+impl<'a> DisplayFunction<'a> {
+    pub(super) fn new(module: &'a Module, ty_storage: &'a TyStorage, func: FunctionIdx) -> Self {
+        Self {
+            module,
+            ty_storage,
+            func,
+        }
+    }
+}
+
+impl Display for DisplayFunction<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let decl = self.module.decls.function(self.func);
+        let func = self.module.funcs.get(&self.func);
+
+        if func.is_some() {
+            write!(f, "define")?;
+        } else {
+            write!(f, "declare")?;
+        }
+
+        write!(f, " {}(", decl.name)?;
+
+        let mut iter = decl.sig.params.iter().peekable();
+
+        while let Some(ty) = iter.next() {
+            write!(f, "{}", ty.display(self.ty_storage))?;
+
+            if iter.peek().is_some() {
+                write!(f, ", ")?;
+            }
+        }
+
+        write!(f, ")")?;
+
+        if !decl.sig.returns.is_empty() {
+            write!(f, " -> ")?;
+
+            let mut iter = decl.sig.returns.iter().peekable();
+
+            while let Some(ty) = iter.next() {
+                write!(f, "{}", ty.display(self.ty_storage))?;
+
+                if iter.peek().is_some() {
+                    write!(f, ", ")?;
+                }
+            }
+        }
+
+        if let Some(func) = func {
+            writeln!(f, " {{")?;
+
+            let block_to_idx: BTreeMap<BlockId, usize> = func
+                .blocks
+                .keys()
+                .enumerate()
+                .map(|(idx, block)| (block, idx))
+                .collect();
+            let instr_to_idx: BTreeMap<_, _> = func
+                .instrs
+                .keys()
+                .enumerate()
+                .map(|(idx, instr)| (instr, idx))
+                .collect();
+
+            for block in func.blocks_iter() {
+                write!(f, "bb{}(", block_to_idx[&block])?;
+
+                let mut iter = func.block(block).params().iter().peekable();
+
+                while let Some(value) = iter.next() {
+                    write!(
+                        f,
+                        "{}: {}",
+                        value.display(&instr_to_idx),
+                        value.ty().display(self.ty_storage),
+                    )?;
+
+                    if iter.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                writeln!(f, "):")?;
+
+                for instr in func.instrs_iter(block) {
+                    writeln!(
+                        f,
+                        "\t{}",
+                        func.display_instr(
+                            instr,
+                            &self.module.decls,
+                            self.ty_storage,
+                            &instr_to_idx
+                        )
+                    )?;
+                }
+
+                writeln!(f, "\t{}", func.display_terminator(block, &instr_to_idx))?;
+            }
+
+            writeln!(f, "}}")?;
+        }
+
+        Ok(())
     }
 }

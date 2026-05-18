@@ -1,8 +1,20 @@
 use index_vec::{IndexVec, define_index_type};
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    fmt::Display,
+};
 
 define_index_type! {
     pub struct TyIdx = usize;
+}
+
+impl TyIdx {
+    pub fn display<'a>(&self, ty_storage: &'a Storage) -> DisplayTy<'a> {
+        DisplayTy {
+            ty_storage,
+            ty: *self,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -14,6 +26,43 @@ pub enum Ty {
     Ptr,
     Struct(Vec<TyIdx>),
     Array { ty: TyIdx, len: usize },
+}
+
+pub struct DisplayTy<'a> {
+    ty_storage: &'a Storage,
+    ty: TyIdx,
+}
+
+impl Display for DisplayTy<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.ty_storage.get(self.ty) {
+            Ty::I8 => write!(f, "i8"),
+            Ty::I16 => write!(f, "i16"),
+            Ty::I32 => write!(f, "i32"),
+            Ty::I64 => write!(f, "i64"),
+            Ty::Ptr => write!(f, "ptr"),
+            Ty::Struct(tys) => {
+                write!(f, "{{")?;
+
+                let mut iter = tys.iter().peekable();
+
+                while let Some(ty) = iter.next() {
+                    write!(f, "{}", ty.display(self.ty_storage))?;
+
+                    if iter.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                write!(f, "}}")?;
+
+                Ok(())
+            }
+            Ty::Array { ty, len } => {
+                write!(f, "[{} x {}]", ty.display(self.ty_storage), len)
+            }
+        }
+    }
 }
 
 pub struct Storage {
