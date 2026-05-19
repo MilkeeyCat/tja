@@ -198,6 +198,14 @@ impl<'a> Builder<'a> {
     }
 
     pub fn create_block(&mut self, params: Vec<TyIdx>) -> BlockId {
+        if self.func.first_block.is_none() {
+            assert_eq!(
+                self.decls.function(self.func.idx).sig.params,
+                params,
+                "entry basic block params must be equal to function's params"
+            );
+        }
+
         let block = self.func.create_block(params);
 
         self.func.append_block(block);
