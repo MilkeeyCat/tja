@@ -2,7 +2,6 @@ use crate::hir::{Function, FunctionIdx, Signature, TyIdx, TyStorage, function::D
 use derive_more::From;
 use index_vec::{IndexVec, define_index_type};
 use std::{collections::HashMap, fmt::Display};
-use thiserror::Error;
 
 #[derive(From)]
 #[from(u8, i8, u16, i16, u32, i32, i64)]
@@ -113,10 +112,6 @@ enum FunctionOrGlobalIdx {
     Global(GlobalIdx),
 }
 
-#[derive(Debug, Error)]
-#[error("declaration already exists")]
-pub struct RedeclarationError;
-
 #[derive(Default)]
 pub struct Declarations {
     names: HashMap<String, FunctionOrGlobalIdx>,
@@ -125,14 +120,12 @@ pub struct Declarations {
 }
 
 impl Declarations {
-    pub fn declare_function(
-        &mut self,
-        name: String,
-        sig: Signature,
-    ) -> Result<FunctionIdx, RedeclarationError> {
-        if self.names.contains_key(&name) {
-            return Err(RedeclarationError);
-        }
+    pub fn declare_function(&mut self, name: String, sig: Signature) -> FunctionIdx {
+        assert!(
+            !self.names.contains_key(&name),
+            "name '{}' is already declared",
+            name,
+        );
 
         let idx = self.funcs.push(FunctionDeclaration {
             name: name.clone(),
@@ -141,7 +134,24 @@ impl Declarations {
 
         self.names.insert(name, FunctionOrGlobalIdx::Function(idx));
 
-        Ok(idx)
+        idx
+    }
+
+    pub fn declare_global(&mut self, name: String, ty: TyIdx) -> GlobalIdx {
+        assert!(
+            !self.names.contains_key(&name),
+            "name '{}' is already declared",
+            name,
+        );
+
+        let idx = self.globals.push(GlobalDeclaration {
+            name: name.clone(),
+            ty,
+        });
+
+        self.names.insert(name, FunctionOrGlobalIdx::Global(idx));
+
+        idx
     }
 
     pub(super) fn function(&self, func: FunctionIdx) -> &FunctionDeclaration {
@@ -151,34 +161,7 @@ impl Declarations {
     pub(super) fn global(&self, global: GlobalIdx) -> &GlobalDeclaration {
         &self.globals[global]
     }
-
-    pub fn declare_global(
-        &mut self,
-        name: String,
-        ty: TyIdx,
-    ) -> Result<GlobalIdx, RedeclarationError> {
-        if self.names.contains_key(&name) {
-            return Err(RedeclarationError);
-        }
-
-        let idx = self.globals.push(GlobalDeclaration {
-            name: name.clone(),
-            ty,
-        });
-
-        self.names.insert(name, FunctionOrGlobalIdx::Global(idx));
-
-        Ok(idx)
-    }
 }
-
-#[derive(Debug, Error)]
-#[error("function is already defined")]
-pub struct FunctionRedefinitionError;
-
-#[derive(Debug, Error)]
-#[error("global is already defined")]
-pub struct GlobalRedefinitionError;
 
 #[derive(Default)]
 pub struct Module {
@@ -192,44 +175,26 @@ impl Module {
         Default::default()
     }
 
-    pub fn declare_function(
-        &mut self,
-        name: String,
-        sig: Signature,
-    ) -> Result<FunctionIdx, RedeclarationError> {
+    pub fn declare_function(&mut self, name: String, sig: Signature) -> FunctionIdx {
         self.decls.declare_function(name, sig)
     }
 
-    pub fn define_function(&mut self, func: FunctionIdx) -> Result<(), FunctionRedefinitionError> {
-        if self.funcs.contains_key(&func) {
-            return Err(FunctionRedefinitionError);
-        }
-
-        self.funcs.insert(func, Function::new(func));
-
-        Ok(())
+    pub fn define_function(&mut self, func: FunctionIdx) {
+        assert!(
+            self.funcs.insert(func, Function::new(func)).is_none(),
+            "function is already defined"
+        );
     }
 
-    pub fn declare_global(
-        &mut self,
-        name: String,
-        ty: TyIdx,
-    ) -> Result<GlobalIdx, RedeclarationError> {
+    pub fn declare_global(&mut self, name: String, ty: TyIdx) -> GlobalIdx {
         self.decls.declare_global(name, ty)
     }
 
-    pub fn define_global(
-        &mut self,
-        idx: GlobalIdx,
-        global: Global,
-    ) -> Result<(), GlobalRedefinitionError> {
-        if self.globals.contains_key(&idx) {
-            return Err(GlobalRedefinitionError);
-        }
-
-        self.globals.insert(idx, global);
-
-        Ok(())
+    pub fn define_global(&mut self, idx: GlobalIdx, global: Global) {
+        assert!(
+            self.globals.insert(idx, global).is_none(),
+            "global is already defined"
+        );
     }
 
     pub fn display<'a>(&'a self, ty_storage: &'a TyStorage) -> DisplayModule<'a> {

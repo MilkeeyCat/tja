@@ -70,65 +70,89 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         }
     }
 
-    pub fn const_(&mut self, const_: Constant, ty: TyIdx) -> Result<Value, ConstValidationError> {
-        validate_const(&const_, ty, self.ty_storage, vec![])?;
+    pub fn const_(&mut self, const_: Constant, ty: TyIdx) -> Value {
+        if let Err(err) = validate_const(&const_, ty, self.ty_storage, vec![]) {
+            panic!("{}", err.display(&const_, ty, self.decls, self.ty_storage));
+        }
 
         let instr = self
             .inserter
             .insert_instr(self.func, Instruction::Const { const_ }, ty);
 
-        Ok(self.func.instr_results(instr)[0])
+        self.func.instr_results(instr)[0]
     }
 
-    pub fn ret(mut self, values: Vec<Value>) -> Result<(), SignatureMismatchError> {
+    pub fn ret(mut self, values: Vec<Value>) {
         let sig = &self.decls.function(self.func.idx()).sig;
-        let tys = values.iter().map(|value| value.ty()).collect();
+        let tys: Vec<_> = values.iter().map(|value| value.ty()).collect();
 
-        if sig.returns != tys {
-            return Err(SignatureMismatchError {
-                expected: sig.returns.clone(),
-                actual: tys,
-            });
-        }
+        assert_eq!(sig.returns, tys, "signatures are not equal");
 
         let terminator = Terminator::Return(values.into());
 
         self.inserter.insert_terminator(self.func, terminator);
-
-        Ok(())
     }
 }
 
-#[derive(Debug)]
-pub struct SignatureMismatchError {
-    pub expected: Vec<TyIdx>,
-    pub actual: Vec<TyIdx>,
-}
-
-#[derive(Debug)]
-pub enum ConstValidationErrorKind {
+enum ValidateConstErrorKind {
     UnexpectedValue { expected_ty: TyIdx },
     SizeMismatch { expected: usize, actual: usize },
 }
 
-#[derive(Debug)]
-pub struct ConstValidationError {
-    pub projection: Vec<usize>,
-    pub kind: ConstValidationErrorKind,
+struct ValidateConstError {
+    projection: Vec<usize>,
+    kind: ValidateConstErrorKind,
 }
 
-impl ConstValidationError {
+impl ValidateConstError {
+    fn display(
+        self,
+        const_: &Constant,
+        ty: TyIdx,
+        decls: &Declarations,
+        ty_storage: &TyStorage,
+    ) -> String {
+        let err = match self.kind {
+            ValidateConstErrorKind::SizeMismatch { expected, actual } => {
+                format!("size mismatch, expected {}, got {}", expected, actual)
+            }
+            ValidateConstErrorKind::UnexpectedValue { expected_ty } => {
+                format!(
+                    "unexpected type, expected {}",
+                    expected_ty.display(ty_storage)
+                )
+            }
+        };
+
+        return format!(
+            "const {} doesn't match {} type, projection {} - {}",
+            const_.display(decls),
+            ty.display(ty_storage),
+            format!(
+                "[{}]",
+                self.projection
+                    .into_iter()
+                    .map(|idx| idx.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            err
+        );
+    }
+}
+
+impl ValidateConstError {
     fn unexpected_value(projection: Vec<usize>, expected_ty: TyIdx) -> Self {
         Self {
             projection,
-            kind: ConstValidationErrorKind::UnexpectedValue { expected_ty },
+            kind: ValidateConstErrorKind::UnexpectedValue { expected_ty },
         }
     }
 
     fn size_mismatch(projection: Vec<usize>, expected: usize, actual: usize) -> Self {
         Self {
             projection,
-            kind: ConstValidationErrorKind::SizeMismatch { expected, actual },
+            kind: ValidateConstErrorKind::SizeMismatch { expected, actual },
         }
     }
 }
@@ -138,25 +162,25 @@ fn validate_const(
     ty: TyIdx,
     ty_storage: &TyStorage,
     projection: Vec<usize>,
-) -> Result<(), ConstValidationError> {
+) -> Result<(), ValidateConstError> {
     match ty_storage.get(ty) {
         Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64 => {
             if !matches!(const_, Constant::Imm(..)) {
-                return Err(ConstValidationError::unexpected_value(projection, ty));
+                return Err(ValidateConstError::unexpected_value(projection, ty));
             }
         }
         Ty::Ptr => {
             if !matches!(const_, Constant::Global(..) | Constant::Function(..)) {
-                return Err(ConstValidationError::unexpected_value(projection, ty));
+                return Err(ValidateConstError::unexpected_value(projection, ty));
             }
         }
         Ty::Struct(tys) => {
             let Constant::Aggregate(consts) = const_ else {
-                return Err(ConstValidationError::unexpected_value(projection, ty));
+                return Err(ValidateConstError::unexpected_value(projection, ty));
             };
 
             if tys.len() != consts.len() {
-                return Err(ConstValidationError::size_mismatch(
+                return Err(ValidateConstError::size_mismatch(
                     projection,
                     tys.len(),
                     consts.len(),
@@ -178,11 +202,11 @@ fn validate_const(
         }
         &Ty::Array { ty: elem_ty, len } => {
             let Constant::Aggregate(consts) = const_ else {
-                return Err(ConstValidationError::unexpected_value(projection, ty));
+                return Err(ValidateConstError::unexpected_value(projection, ty));
             };
 
             if len != consts.len() {
-                return Err(ConstValidationError::size_mismatch(
+                return Err(ValidateConstError::size_mismatch(
                     projection,
                     len,
                     consts.len(),
