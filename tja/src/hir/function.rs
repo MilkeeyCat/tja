@@ -16,8 +16,8 @@ define_index_type! {
 }
 
 pub struct Signature {
-    pub params: Vec<TyIdx>,
-    pub returns: Vec<TyIdx>,
+    pub(super) params: Vec<TyIdx>,
+    pub(super) returns: Vec<TyIdx>,
 }
 
 impl Signature {
@@ -32,34 +32,14 @@ struct InstructionNode {
     next: Option<InstructionId>,
 }
 
-impl InstructionNode {
-    fn new(instr: Instruction) -> Self {
-        Self {
-            instr,
-            prev: None,
-            next: None,
-        }
-    }
-}
-
 struct BlockNode {
     block: Block,
     prev: Option<BlockId>,
     next: Option<BlockId>,
 }
 
-impl BlockNode {
-    fn new(block: Block) -> Self {
-        Self {
-            block,
-            prev: None,
-            next: None,
-        }
-    }
-}
-
 pub struct Function {
-    idx: FunctionIdx,
+    pub(super) idx: FunctionIdx,
     instrs: SlotMap<InstructionId, InstructionNode>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
     blocks: SlotMap<BlockId, BlockNode>,
@@ -79,17 +59,20 @@ impl Function {
         }
     }
 
-    pub(super) fn idx(&self) -> FunctionIdx {
-        self.idx
-    }
-
     pub(super) fn create_instr(&mut self, instr: Instruction) -> InstructionId {
-        self.instrs.insert(InstructionNode::new(instr))
+        self.instrs.insert(InstructionNode {
+            instr,
+            prev: None,
+            next: None,
+        })
     }
 
     pub(super) fn create_block(&mut self, params: Vec<TyIdx>) -> BlockId {
-        self.blocks
-            .insert_with_key(|block| BlockNode::new(Block::new(block, params)))
+        self.blocks.insert_with_key(|block| BlockNode {
+            block: Block::new(block, params),
+            prev: None,
+            next: None,
+        })
     }
 
     fn append_block(&mut self, block: BlockId) {
@@ -214,7 +197,7 @@ impl<'a> Builder<'a> {
     }
 
     pub fn block_params(&self, block: BlockId) -> &[Value] {
-        &self.func.block(block).params()
+        &self.func.block(block).params
     }
 
     pub fn select_block(&mut self, block: BlockId) {
@@ -223,7 +206,12 @@ impl<'a> Builder<'a> {
 
     pub fn block_builder<'s>(&'s mut self) -> BlockBuilder<'s, AppendInstrInserter<'s>> {
         BlockBuilder::new(
-            AppendInstrInserter::new(self.decls, self.ty_storage, self.current_block.unwrap()),
+            AppendInstrInserter::new(
+                self.decls,
+                self.ty_storage,
+                self.current_block
+                    .expect("basic block must be selected, consider calling `select_block` first"),
+            ),
             self.func,
             self.decls,
             self.ty_storage,
@@ -305,7 +293,7 @@ impl Display for DisplayFunction<'_> {
             for block in func.blocks_iter() {
                 write!(f, "bb{}(", block_to_idx[&block])?;
 
-                let mut iter = func.block(block).params().iter().peekable();
+                let mut iter = func.block(block).params.iter().peekable();
 
                 while let Some(value) = iter.next() {
                     write!(

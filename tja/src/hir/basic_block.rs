@@ -9,7 +9,7 @@ new_key_type! {
 }
 
 pub struct Block {
-    params: Vec<Value>,
+    pub(super) params: Vec<Value>,
     pub(super) first_instr: Option<InstructionId>,
     pub(super) last_instr: Option<InstructionId>,
     terminator: Option<Terminator>,
@@ -27,10 +27,6 @@ impl Block {
             last_instr: None,
             terminator: None,
         }
-    }
-
-    pub(super) fn params(&self) -> &[Value] {
-        &self.params
     }
 
     pub(super) fn terminator(&self) -> &Terminator {
@@ -83,7 +79,7 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
     }
 
     pub fn ret(mut self, values: Vec<Value>) {
-        let sig = &self.decls.function(self.func.idx()).sig;
+        let sig = &self.decls.function(self.func.idx).sig;
         let tys: Vec<_> = values.iter().map(|value| value.ty()).collect();
 
         assert_eq!(sig.returns, tys, "signatures are not equal");
