@@ -4,9 +4,11 @@ mod instruction;
 mod module;
 mod ty;
 
-pub use basic_block::{Block, BlockId, Builder as BlockBuilder};
-pub use function::{Builder as FunctionBuilder, Function, FunctionIdx, Signature};
-pub use instruction::{Instruction, InstructionId, Terminator};
+use basic_block::Block;
+pub use basic_block::{BlockId, Builder as BlockBuilder};
+use function::Function;
+pub use function::{Builder as FunctionBuilder, FunctionIdx, Signature};
+use instruction::{Instruction, InstructionId, Terminator};
 pub use module::Module;
 pub use ty::{Storage as TyStorage, Ty, TyIdx};
 
@@ -28,7 +30,7 @@ pub enum Constant {
 }
 
 impl Constant {
-    pub fn display<'a>(&'a self, decls: &'a Declarations) -> DisplayConstant<'a> {
+    fn display<'a>(&'a self, decls: &'a Declarations) -> DisplayConstant<'a> {
         DisplayConstant {
             decls,
             const_: self,
@@ -109,6 +111,7 @@ impl Display for DisplayGlobal<'_> {
     }
 }
 
+#[allow(private_interfaces)]
 #[derive(Debug, Clone, Copy)]
 pub enum Value {
     Param {
@@ -131,10 +134,7 @@ impl Value {
         }
     }
 
-    pub(super) fn display<'a>(
-        &'a self,
-        instr_to_idx: &'a BTreeMap<InstructionId, usize>,
-    ) -> DisplayValue<'a> {
+    fn display<'a>(&'a self, instr_to_idx: &'a BTreeMap<InstructionId, usize>) -> DisplayValue<'a> {
         DisplayValue {
             instr_to_idx,
             value: self,

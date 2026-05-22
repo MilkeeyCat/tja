@@ -38,7 +38,7 @@ struct BlockNode {
     next: Option<BlockId>,
 }
 
-pub struct Function {
+pub(super) struct Function {
     pub(super) idx: FunctionIdx,
     instrs: SlotMap<InstructionId, InstructionNode>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
@@ -124,11 +124,11 @@ impl Function {
         self.instrs.get(instr)?.next
     }
 
-    pub fn blocks_iter<'a>(&'a self) -> BlocksIter<'a> {
+    pub(super) fn blocks_iter<'a>(&'a self) -> BlocksIter<'a> {
         BlocksIter::new(self, self.first_block)
     }
 
-    pub fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
+    pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
         InstrsIter::new(self, self.blocks[block].block.first_instr)
     }
 

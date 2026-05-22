@@ -4,10 +4,10 @@ use smallvec::SmallVec;
 use std::{collections::BTreeMap, fmt::Display};
 
 new_key_type! {
-    pub struct InstructionId;
+    pub(super) struct InstructionId;
 }
 
-pub enum Instruction {
+pub(super) enum Instruction {
     Const { const_: Constant },
 }
 
@@ -19,7 +19,7 @@ impl Instruction {
     }
 }
 
-pub enum Terminator {
+pub(super) enum Terminator {
     Return(SmallVec<[Value; 1]>),
 }
 
@@ -31,7 +31,7 @@ impl Terminator {
     }
 }
 
-pub struct InstrsIter<'a> {
+pub(super) struct InstrsIter<'a> {
     func: &'a Function,
     next: Option<InstructionId>,
 }
@@ -54,7 +54,7 @@ impl Iterator for InstrsIter<'_> {
     }
 }
 
-pub struct DisplayInstr<'a> {
+pub(super) struct DisplayInstr<'a> {
     decls: &'a Declarations,
     func: &'a Function,
     ty_storage: &'a TyStorage,
@@ -113,7 +113,7 @@ impl Display for DisplayInstr<'_> {
     }
 }
 
-pub struct DisplayTerminator<'a> {
+pub(super) struct DisplayTerminator<'a> {
     func: &'a Function,
     instr_to_idx: &'a BTreeMap<InstructionId, usize>,
     block: BlockId,

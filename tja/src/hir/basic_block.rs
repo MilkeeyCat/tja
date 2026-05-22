@@ -8,7 +8,7 @@ new_key_type! {
     pub struct BlockId;
 }
 
-pub struct Block {
+pub(super) struct Block {
     pub(super) params: Vec<Value>,
     pub(super) first_instr: Option<InstructionId>,
     pub(super) last_instr: Option<InstructionId>,
@@ -38,12 +38,13 @@ impl Block {
     }
 }
 
-pub trait InstructionInserter {
+pub(super) trait InstructionInserter {
     fn insert_instr(&mut self, func: &mut Function, instr: Instruction, ty: TyIdx)
     -> InstructionId;
     fn insert_terminator(&mut self, func: &mut Function, terminator: Terminator);
 }
 
+#[allow(private_bounds)]
 pub struct Builder<'a, I: InstructionInserter> {
     inserter: I,
     func: &'a mut Function,
@@ -51,6 +52,7 @@ pub struct Builder<'a, I: InstructionInserter> {
     ty_storage: &'a TyStorage,
 }
 
+#[allow(private_bounds)]
 impl<'a, I: InstructionInserter> Builder<'a, I> {
     pub(super) fn new(
         inserter: I,
@@ -280,7 +282,7 @@ impl InstructionInserter for AppendInstrInserter<'_> {
     }
 }
 
-pub struct BlocksIter<'a> {
+pub(super) struct BlocksIter<'a> {
     func: &'a Function,
     next: Option<BlockId>,
 }

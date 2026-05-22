@@ -19,7 +19,7 @@ pub(super) struct GlobalDeclaration {
 }
 
 #[derive(Default)]
-pub struct Declarations {
+pub(super) struct Declarations {
     names: HashSet<String>,
     funcs: IndexVec<FunctionIdx, FunctionDeclaration>,
     globals: IndexVec<GlobalIdx, GlobalDeclaration>,
