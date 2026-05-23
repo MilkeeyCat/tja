@@ -1,6 +1,5 @@
 use crate::hir::{BlockId, Constant, Function, TyStorage, Value, module::Declarations};
 use slotmap::new_key_type;
-use smallvec::SmallVec;
 use std::{collections::BTreeMap, fmt::Display};
 
 new_key_type! {
@@ -20,7 +19,7 @@ impl Instruction {
 }
 
 pub(super) enum Terminator {
-    Return(SmallVec<[Value; 1]>),
+    Return(Option<Value>),
 }
 
 impl Terminator {
@@ -140,15 +139,9 @@ impl Display for DisplayTerminator<'_> {
         write!(f, "{}", terminator.name())?;
 
         match terminator {
-            Terminator::Return(values) => {
-                let mut iter = values.iter().peekable();
-
-                while let Some(value) = iter.next() {
+            Terminator::Return(value) => {
+                if let Some(value) = value {
                     write!(f, " {}", value.display(self.instr_to_idx))?;
-
-                    if iter.peek().is_some() {
-                        write!(f, ", ")?;
-                    }
                 }
             }
         };

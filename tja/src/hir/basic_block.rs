@@ -80,13 +80,16 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         self.func.instr_results(instr)[0]
     }
 
-    pub fn ret(mut self, values: Vec<Value>) {
+    pub fn ret(mut self, value: Option<Value>) {
         let sig = &self.decls.function(self.func.idx).sig;
-        let tys: Vec<_> = values.iter().map(|value| value.ty()).collect();
 
-        assert_eq!(sig.returns, tys, "signatures are not equal");
+        assert_eq!(
+            sig.return_,
+            value.map(|value| value.ty()),
+            "signatures are not equal"
+        );
 
-        let terminator = Terminator::Return(values.into());
+        let terminator = Terminator::Return(value);
 
         self.inserter.insert_terminator(self.func, terminator);
     }

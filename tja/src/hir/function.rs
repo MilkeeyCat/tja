@@ -17,12 +17,12 @@ define_index_type! {
 
 pub struct Signature {
     pub(super) params: Vec<TyIdx>,
-    pub(super) returns: Vec<TyIdx>,
+    pub(super) return_: Option<TyIdx>,
 }
 
 impl Signature {
-    pub fn new(params: Vec<TyIdx>, returns: Vec<TyIdx>) -> Self {
-        Self { params, returns }
+    pub fn new(params: Vec<TyIdx>, return_: Option<TyIdx>) -> Self {
+        Self { params, return_ }
     }
 }
 
@@ -260,18 +260,8 @@ impl Display for DisplayFunction<'_> {
 
         write!(f, ")")?;
 
-        if !decl.sig.returns.is_empty() {
-            write!(f, " -> ")?;
-
-            let mut iter = decl.sig.returns.iter().peekable();
-
-            while let Some(ty) = iter.next() {
-                write!(f, "{}", ty.display(self.ty_storage))?;
-
-                if iter.peek().is_some() {
-                    write!(f, ", ")?;
-                }
-            }
+        if let Some(ty) = decl.sig.return_ {
+            write!(f, " -> {}", ty.display(self.ty_storage))?;
         }
 
         if let Some(func) = func {
