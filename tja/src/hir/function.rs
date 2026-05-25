@@ -16,8 +16,8 @@ define_index_type! {
 }
 
 pub struct Signature {
-    pub(super) params: Vec<TyIdx>,
-    pub(super) return_: Option<TyIdx>,
+    pub(crate) params: Vec<TyIdx>,
+    pub(crate) return_: Option<TyIdx>,
 }
 
 impl Signature {
