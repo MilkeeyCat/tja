@@ -17,7 +17,7 @@ use index_vec::define_index_type;
 use module::Declarations;
 use std::{collections::BTreeMap, fmt::Display};
 
-#[derive(From)]
+#[derive(From, Clone, Copy)]
 #[from(u8, i8, u16, i16, u32, i32, i64)]
 pub struct Immediate(i64);
 
@@ -35,6 +35,74 @@ impl Constant {
             decls,
             const_: self,
         }
+    }
+
+    pub(crate) fn scalar_iter<'a>(&'a self) -> ScalarIter<'a> {
+        ScalarIter::new(self)
+    }
+}
+
+pub(crate) enum ScalarConst {
+    Global(GlobalIdx),
+    Function(FunctionIdx),
+    Imm(Immediate),
+}
+
+enum ScalarIterNode<'a> {
+    Aggregate(&'a [Constant]),
+    Scalar(ScalarConst),
+}
+
+pub(crate) struct ScalarIter<'a> {
+    stack: Vec<ScalarIterNode<'a>>,
+}
+
+impl<'a> ScalarIter<'a> {
+    fn new(const_: &'a Constant) -> Self {
+        let mut iter = Self { stack: Vec::new() };
+
+        iter.push(const_);
+
+        iter
+    }
+
+    fn push(&mut self, const_: &'a Constant) {
+        match const_ {
+            Constant::Global(global) => self
+                .stack
+                .push(ScalarIterNode::Scalar(ScalarConst::Global(*global))),
+            Constant::Function(func) => self
+                .stack
+                .push(ScalarIterNode::Scalar(ScalarConst::Function(*func))),
+            Constant::Imm(imm) => self
+                .stack
+                .push(ScalarIterNode::Scalar(ScalarConst::Imm(*imm))),
+            Constant::Aggregate(values) => self.stack.push(ScalarIterNode::Aggregate(values)),
+        }
+    }
+}
+
+impl Iterator for ScalarIter<'_> {
+    type Item = ScalarConst;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(node) = self.stack.pop() {
+            match node {
+                ScalarIterNode::Aggregate(values) => match values {
+                    [const_, rest @ ..] => {
+                        if !rest.is_empty() {
+                            self.stack.push(ScalarIterNode::Aggregate(rest));
+                        }
+
+                        self.push(const_);
+                    }
+                    [] => continue,
+                },
+                ScalarIterNode::Scalar(scalar) => return Some(scalar),
+            }
+        }
+
+        None
     }
 }
 
