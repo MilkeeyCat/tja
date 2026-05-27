@@ -23,7 +23,7 @@ pub struct Immediate(i64);
 
 #[derive(From)]
 pub enum Constant {
-    Global(GlobalIdx),
+    GlobalVariable(GlobalVariableIdx),
     Function(FunctionIdx),
     Imm(Immediate),
     Aggregate(Vec<Self>),
@@ -43,7 +43,7 @@ impl Constant {
 }
 
 pub(crate) enum ScalarConst {
-    Global(GlobalIdx),
+    GlobalVariable(GlobalVariableIdx),
     Function(FunctionIdx),
     Imm(Immediate),
 }
@@ -68,9 +68,9 @@ impl<'a> ScalarIter<'a> {
 
     fn push(&mut self, const_: &'a Constant) {
         match const_ {
-            Constant::Global(global) => self
+            Constant::GlobalVariable(var) => self
                 .stack
-                .push(ScalarIterNode::Scalar(ScalarConst::Global(*global))),
+                .push(ScalarIterNode::Scalar(ScalarConst::GlobalVariable(*var))),
             Constant::Function(func) => self
                 .stack
                 .push(ScalarIterNode::Scalar(ScalarConst::Function(*func))),
@@ -114,7 +114,7 @@ pub struct DisplayConstant<'a> {
 impl Display for DisplayConstant<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.const_ {
-            Constant::Global(idx) => write!(f, "{}", self.decls.global(*idx).name),
+            Constant::GlobalVariable(idx) => write!(f, "{}", self.decls.global_var(*idx).name),
             Constant::Function(idx) => write!(f, "{}", self.decls.function(*idx).name),
             Constant::Imm(imm) => write!(f, "{}", imm.0),
             Constant::Aggregate(consts) => {
@@ -139,24 +139,24 @@ impl Display for DisplayConstant<'_> {
 }
 
 define_index_type! {
-    pub struct GlobalIdx = usize;
+    pub struct GlobalVariableIdx = usize;
 }
 
-pub enum Global {
+pub enum GlobalVariable {
     Zero,
     Const(Constant),
 }
 
-pub struct DisplayGlobal<'a> {
+pub struct DisplayGlobalVariable<'a> {
     module: &'a Module,
     ty_storage: &'a TyStorage,
-    global: GlobalIdx,
+    var: GlobalVariableIdx,
 }
 
-impl Display for DisplayGlobal<'_> {
+impl Display for DisplayGlobalVariable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let decl = self.module.decls.global(self.global);
-        let global = self.module.globals.get(&self.global);
+        let decl = self.module.decls.global_var(self.var);
+        let global = self.module.global_vars.get(&self.var);
 
         write!(f, "{} = ", decl.name)?;
 
@@ -166,12 +166,14 @@ impl Display for DisplayGlobal<'_> {
 
         write!(f, "global {}", decl.ty.display(self.ty_storage))?;
 
-        if let Some(global) = global {
+        if let Some(var) = global {
             write!(f, ", ")?;
 
-            match global {
-                Global::Zero => write!(f, "zero")?,
-                Global::Const(const_) => write!(f, "{}", const_.display(&self.module.decls))?,
+            match var {
+                GlobalVariable::Zero => write!(f, "zero")?,
+                GlobalVariable::Const(const_) => {
+                    write!(f, "{}", const_.display(&self.module.decls))?
+                }
             };
         }
 

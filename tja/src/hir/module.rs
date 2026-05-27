@@ -1,6 +1,6 @@
 use crate::hir::{
-    DisplayGlobal, Function, FunctionIdx, Global, GlobalIdx, Signature, TyIdx, TyStorage,
-    function::DisplayFunction,
+    DisplayGlobalVariable, Function, FunctionIdx, GlobalVariable, GlobalVariableIdx, Signature,
+    TyIdx, TyStorage, function::DisplayFunction,
 };
 use index_vec::IndexVec;
 use std::{
@@ -13,7 +13,7 @@ pub(super) struct FunctionDeclaration {
     pub(super) sig: Signature,
 }
 
-pub(super) struct GlobalDeclaration {
+pub(super) struct GlobalVariableDeclaration {
     pub(super) name: String,
     pub(super) ty: TyIdx,
 }
@@ -22,7 +22,7 @@ pub(super) struct GlobalDeclaration {
 pub(super) struct Declarations {
     names: HashSet<String>,
     funcs: IndexVec<FunctionIdx, FunctionDeclaration>,
-    globals: IndexVec<GlobalIdx, GlobalDeclaration>,
+    global_vars: IndexVec<GlobalVariableIdx, GlobalVariableDeclaration>,
 }
 
 impl Declarations {
@@ -43,14 +43,14 @@ impl Declarations {
         idx
     }
 
-    fn declare_global(&mut self, name: String, ty: TyIdx) -> GlobalIdx {
+    fn declare_global_var(&mut self, name: String, ty: TyIdx) -> GlobalVariableIdx {
         assert!(
             !self.names.contains(&name),
             "name '{}' is already declared",
             name,
         );
 
-        let idx = self.globals.push(GlobalDeclaration {
+        let idx = self.global_vars.push(GlobalVariableDeclaration {
             name: name.clone(),
             ty,
         });
@@ -64,8 +64,8 @@ impl Declarations {
         &self.funcs[func]
     }
 
-    pub(super) fn global(&self, global: GlobalIdx) -> &GlobalDeclaration {
-        &self.globals[global]
+    pub(super) fn global_var(&self, var: GlobalVariableIdx) -> &GlobalVariableDeclaration {
+        &self.global_vars[var]
     }
 }
 
@@ -73,7 +73,7 @@ impl Declarations {
 pub struct Module {
     pub(super) decls: Declarations,
     pub(super) funcs: HashMap<FunctionIdx, Function>,
-    pub(super) globals: HashMap<GlobalIdx, Global>,
+    pub(super) global_vars: HashMap<GlobalVariableIdx, GlobalVariable>,
 }
 
 impl Module {
@@ -92,14 +92,14 @@ impl Module {
         );
     }
 
-    pub fn declare_global(&mut self, name: String, ty: TyIdx) -> GlobalIdx {
-        self.decls.declare_global(name, ty)
+    pub fn declare_global_variable(&mut self, name: String, ty: TyIdx) -> GlobalVariableIdx {
+        self.decls.declare_global_var(name, ty)
     }
 
-    pub fn define_global(&mut self, idx: GlobalIdx, global: Global) {
+    pub fn define_global_variable(&mut self, idx: GlobalVariableIdx, var: GlobalVariable) {
         assert!(
-            self.globals.insert(idx, global).is_none(),
-            "global is already defined"
+            self.global_vars.insert(idx, var).is_none(),
+            "global variable is already defined"
         );
     }
 
@@ -118,15 +118,15 @@ impl Module {
         DisplayFunction::new(self, ty_storage, func)
     }
 
-    pub fn display_global<'a>(
+    pub fn display_global_var<'a>(
         &'a self,
         ty_storage: &'a TyStorage,
-        global: GlobalIdx,
-    ) -> DisplayGlobal<'a> {
-        DisplayGlobal {
+        var: GlobalVariableIdx,
+    ) -> DisplayGlobalVariable<'a> {
+        DisplayGlobalVariable {
             module: self,
             ty_storage,
-            global,
+            var,
         }
     }
 }
@@ -138,11 +138,15 @@ pub struct DisplayModule<'a> {
 
 impl Display for DisplayModule<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for idx in self.module.decls.globals.indices() {
-            writeln!(f, "{}", self.module.display_global(self.ty_storage, idx))?;
+        for idx in self.module.decls.global_vars.indices() {
+            writeln!(
+                f,
+                "{}",
+                self.module.display_global_var(self.ty_storage, idx)
+            )?;
         }
 
-        if !self.module.decls.globals.is_empty() {
+        if !self.module.decls.global_vars.is_empty() {
             writeln!(f)?;
         }
 

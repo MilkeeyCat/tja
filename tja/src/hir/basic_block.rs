@@ -171,7 +171,10 @@ fn validate_const(
             }
         }
         Ty::Ptr => {
-            if !matches!(const_, Constant::Global(..) | Constant::Function(..)) {
+            if !matches!(
+                const_,
+                Constant::GlobalVariable(..) | Constant::Function(..)
+            ) {
                 return Err(ValidateConstError::unexpected_value(projection, ty));
             }
         }
