@@ -75,10 +75,9 @@ impl ValueClass {
             ValueClass::Sse | ValueClass::SseUp => {
                 unimplemented!("SSE/SSEUP classes are unsupported yet!")
             }
-            ValueClass::Memory => lir::signature::Value {
-                ty: lir::Ty::PTR,
-                kind: lir::signature::ValueKind::StructArgument(abi.ty_size(ty_storage, ty)),
-            },
+            ValueClass::Memory => {
+                unreachable!("`ValueClass::Memory` should've been handled separately!")
+            }
         }
     }
 }
@@ -188,7 +187,16 @@ impl mir::CallingConvention for CallingConv {
 
                 classes
                     .into_iter()
-                    .map(|class| class.to_sig_value(abi, ty_storage, ty))
+                    .map(|class| {
+                        if class == ValueClass::Memory {
+                            lir::signature::Value {
+                                ty: lir::Ty::PTR,
+                                kind: lir::signature::ValueKind::Normal,
+                            }
+                        } else {
+                            class.to_sig_value(abi, ty_storage, ty)
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -202,11 +210,18 @@ impl mir::CallingConvention for CallingConv {
                 classes.resize_with(1, || ValueClass::Memory);
             }
 
-            params.extend(
-                classes
-                    .into_iter()
-                    .map(|class| class.to_sig_value(abi, ty_storage, ty)),
-            );
+            params.extend(classes.into_iter().map(|class| {
+                if class == ValueClass::Memory {
+                    lir::signature::Value {
+                        ty: lir::Ty::PTR,
+                        kind: lir::signature::ValueKind::StructArgument(
+                            abi.ty_size(ty_storage, ty),
+                        ),
+                    }
+                } else {
+                    class.to_sig_value(abi, ty_storage, ty)
+                }
+            }));
         }
 
         lir::signature::Signature { params, returns }
