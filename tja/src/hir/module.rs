@@ -22,7 +22,7 @@ pub(super) struct GlobalVariableDeclaration {
 pub(super) struct Declarations {
     names: HashSet<String>,
     funcs: IndexVec<FunctionIdx, FunctionDeclaration>,
-    global_vars: IndexVec<GlobalVariableIdx, GlobalVariableDeclaration>,
+    pub(super) global_vars: IndexVec<GlobalVariableIdx, GlobalVariableDeclaration>,
 }
 
 impl Declarations {

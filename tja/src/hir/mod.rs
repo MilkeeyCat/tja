@@ -1,25 +1,23 @@
 mod basic_block;
 mod function;
 mod instruction;
+mod lower;
 mod module;
 mod ty;
 
 use basic_block::Block;
 pub use basic_block::{BlockId, Builder as BlockBuilder};
 use function::Function;
-pub use function::{Builder as FunctionBuilder, FunctionIdx, Signature};
+pub use function::{Builder as FunctionBuilder, Signature};
 use instruction::{Instruction, InstructionId, Terminator};
+pub(crate) use lower::lower;
 pub use module::Module;
 pub use ty::{Storage as TyStorage, Ty, TyIdx};
 
+use crate::{FunctionIdx, GlobalVariableIdx, Immediate};
 use derive_more::From;
-use index_vec::define_index_type;
 use module::Declarations;
 use std::{collections::BTreeMap, fmt::Display};
-
-#[derive(From, Clone, Copy)]
-#[from(u8, i8, u16, i16, u32, i32, i64)]
-pub struct Immediate(i64);
 
 #[derive(From)]
 pub enum Constant {
@@ -136,10 +134,6 @@ impl Display for DisplayConstant<'_> {
             }
         }
     }
-}
-
-define_index_type! {
-    pub struct GlobalVariableIdx = usize;
 }
 
 pub enum GlobalVariable {

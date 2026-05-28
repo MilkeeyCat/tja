@@ -1,19 +1,17 @@
-use crate::hir::{
-    Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, TyIdx, TyStorage, Value,
-    basic_block::{AppendInstrInserter, BlocksIter},
-    instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
-    module::Declarations,
+use crate::{
+    FunctionIdx,
+    hir::{
+        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, TyIdx, TyStorage, Value,
+        basic_block::{AppendInstrInserter, BlocksIter},
+        instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
+        module::Declarations,
+    },
 };
-use index_vec::define_index_type;
 use slotmap::SlotMap;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
 };
-
-define_index_type! {
-    pub struct FunctionIdx = usize;
-}
 
 pub struct Signature {
     pub(crate) params: Vec<TyIdx>,
