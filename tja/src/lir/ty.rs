@@ -9,6 +9,14 @@ impl Ty {
     pub(crate) const I32: Ty = Ty(2);
     pub(crate) const I64: Ty = Ty(3);
     pub(crate) const PTR: Ty = Ty(4);
+
+    pub(crate) fn is_int(&self) -> bool {
+        match self {
+            &Self::I8 | &Self::I16 | &Self::I32 | &Self::I64 => true,
+            &Self::PTR => false,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Debug for Ty {

@@ -9,7 +9,7 @@ pub(crate) fn lower(
     ty_storage: &TyStorage,
     target: &dyn Target,
 ) -> lir::Module {
-    let decls = lower_decls(&hir_module.decls);
+    let decls = lower_decls(&hir_module.decls, ty_storage, target.abi());
     let mut lir_module = lir::Module::new(decls);
     let mut builder = ModuleBuilder::new(&mut lir_module);
 
@@ -18,7 +18,21 @@ pub(crate) fn lower(
     lir_module
 }
 
-fn lower_decls(hir_decls: &hir::module::Declarations) -> lir::module::Declarations {
+fn lower_decls(
+    hir_decls: &hir::module::Declarations,
+    ty_storage: &TyStorage,
+    abi: &dyn Abi,
+) -> lir::module::Declarations {
+    let funcs = hir_decls
+        .funcs
+        .iter()
+        .map(|decl| lir::FunctionDeclaration {
+            name: decl.name.clone(),
+            sig: abi
+                .calling_conv()
+                .lower_signature(abi, ty_storage, &decl.sig),
+        })
+        .collect();
     let global_vars = hir_decls
         .global_vars
         .iter()
@@ -27,7 +41,7 @@ fn lower_decls(hir_decls: &hir::module::Declarations) -> lir::module::Declaratio
         })
         .collect();
 
-    lir::module::Declarations { global_vars }
+    lir::module::Declarations { funcs, global_vars }
 }
 
 fn lower_global_vars(

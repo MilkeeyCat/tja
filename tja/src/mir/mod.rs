@@ -14,6 +14,8 @@ pub(crate) trait Abi {
     fn field_offset(&self, ty_storage: &TyStorage, fields: &[hir::TyIdx], idx: usize) -> usize;
     fn ty_size(&self, ty_storage: &TyStorage, ty: hir::TyIdx) -> usize;
     fn alignment(&self, ty_storage: &TyStorage, ty: hir::TyIdx) -> usize;
+
+    fn calling_conv(&self) -> &dyn CallingConvention;
 }
 
 pub(crate) trait CallingConvention {

@@ -1,4 +1,7 @@
-use crate::{FunctionIdx, GlobalVariableIdx, Immediate, lir::Ty};
+use crate::{
+    FunctionIdx, GlobalVariableIdx, Immediate,
+    lir::{Function, Ty, signature::Signature},
+};
 use index_vec::IndexVec;
 use std::collections::HashMap;
 
@@ -17,15 +20,22 @@ pub(crate) struct GlobalVariableDeclaration {
     pub(crate) name: String,
 }
 
+pub(crate) struct FunctionDeclaration {
+    pub(crate) name: String,
+    pub(crate) sig: Signature,
+}
+
 #[derive(Default)]
 pub(crate) struct Declarations {
+    pub(crate) funcs: IndexVec<FunctionIdx, FunctionDeclaration>,
     pub(crate) global_vars: IndexVec<GlobalVariableIdx, GlobalVariableDeclaration>,
 }
 
 #[derive(Default)]
 pub(crate) struct Module {
-    decls: Declarations,
+    pub(super) decls: Declarations,
     global_vars: HashMap<GlobalVariableIdx, GlobalVariable>,
+    pub(super) funcs: HashMap<FunctionIdx, Function>,
 }
 
 impl Module {
@@ -46,5 +56,9 @@ impl<'a> Builder<'a> {
 
     pub(crate) fn define_global_var(&mut self, idx: GlobalVariableIdx, var: GlobalVariable) {
         self.0.global_vars.insert(idx, var);
+    }
+
+    pub(crate) fn define_function(&mut self, func: FunctionIdx) {
+        self.0.funcs.insert(func, Function::new(func));
     }
 }

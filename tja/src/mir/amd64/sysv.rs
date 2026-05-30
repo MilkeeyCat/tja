@@ -3,7 +3,17 @@ use crate::{
     lir, mir,
 };
 
-pub(super) struct Abi;
+pub(super) struct Abi {
+    calling_conv: CallingConv,
+}
+
+impl Abi {
+    pub(super) fn new() -> Self {
+        Self {
+            calling_conv: CallingConv,
+        }
+    }
+}
 
 impl mir::Abi for Abi {
     fn field_offset(&self, ty_storage: &TyStorage, fields: &[hir::TyIdx], idx: usize) -> usize {
@@ -47,6 +57,10 @@ impl mir::Abi for Abi {
             hir::Ty::Array { ty, .. } => self.alignment(ty_storage, *ty),
             _ => self.ty_size(ty_storage, ty),
         }
+    }
+
+    fn calling_conv(&self) -> &dyn mir::CallingConvention {
+        &self.calling_conv
     }
 }
 
