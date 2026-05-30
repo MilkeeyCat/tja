@@ -2,7 +2,7 @@ pub mod amd64;
 
 use crate::{
     hir::{self, TyStorage},
-    lir,
+    lir::{self, ParamRanges},
 };
 
 #[allow(private_interfaces)]
@@ -24,5 +24,5 @@ pub(crate) trait CallingConvention {
         abi: &dyn Abi,
         ty_storage: &TyStorage,
         sig: &hir::Signature,
-    ) -> lir::signature::Signature;
+    ) -> (lir::Signature, ParamRanges);
 }

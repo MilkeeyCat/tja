@@ -13,6 +13,7 @@ pub(crate) use module::{
     Builder as ModuleBuilder, FunctionDeclaration, GlobalVariable, GlobalVariableDeclaration,
     GlobalVariableValue, Module,
 };
+pub(crate) use signature::{ParamRanges, Signature};
 pub(crate) use ty::Ty;
 
 use crate::{FunctionIdx, GlobalVariableIdx};

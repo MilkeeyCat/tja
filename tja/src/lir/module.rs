@@ -1,6 +1,6 @@
 use crate::{
     FunctionIdx, GlobalVariableIdx, Immediate,
-    lir::{Function, Ty, signature::Signature},
+    lir::{Function, Signature, Ty},
 };
 use index_vec::IndexVec;
 use std::collections::HashMap;

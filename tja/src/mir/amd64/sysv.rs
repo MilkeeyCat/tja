@@ -1,6 +1,7 @@
 use crate::{
     hir::{self, TyStorage},
-    lir, mir,
+    lir::{self, ParamRanges},
+    mir,
 };
 
 pub(super) struct Abi {
@@ -185,7 +186,7 @@ impl mir::CallingConvention for CallingConv {
         abi: &dyn mir::Abi,
         ty_storage: &TyStorage,
         sig: &hir::Signature,
-    ) -> lir::signature::Signature {
+    ) -> (lir::Signature, ParamRanges) {
         let mut params = vec![];
         let returns = sig
             .return_
@@ -215,6 +216,7 @@ impl mir::CallingConvention for CallingConv {
             })
             .unwrap_or_default();
 
+        let mut param_ranges = ParamRanges::new(sig.params.len());
         let mut param_regs = ParamRegs::new();
 
         for &ty in &sig.params {
@@ -224,6 +226,7 @@ impl mir::CallingConvention for CallingConv {
                 classes.resize_with(1, || ValueClass::Memory);
             }
 
+            param_ranges.add(params.len());
             params.extend(classes.into_iter().map(|class| {
                 if class == ValueClass::Memory {
                     lir::signature::Value {
@@ -238,7 +241,9 @@ impl mir::CallingConvention for CallingConv {
             }));
         }
 
-        lir::signature::Signature { params, returns }
+        param_ranges.finalize(params.len());
+
+        (lir::Signature { params, returns }, param_ranges)
     }
 }
 

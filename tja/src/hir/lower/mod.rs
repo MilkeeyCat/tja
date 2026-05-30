@@ -1,15 +1,17 @@
 use crate::{
+    FunctionIdx,
     hir::{self, ScalarConst, TyStorage},
-    lir::{self, ModuleBuilder},
+    lir::{self, ModuleBuilder, ParamRanges},
     mir::{Abi, Target},
 };
+use std::collections::HashMap;
 
 pub(crate) fn lower(
     hir_module: hir::Module,
     ty_storage: &TyStorage,
     target: &dyn Target,
 ) -> lir::Module {
-    let decls = lower_decls(&hir_module.decls, ty_storage, target.abi());
+    let (decls, _) = lower_decls(&hir_module.decls, ty_storage, target.abi());
     let mut lir_module = lir::Module::new(decls);
     let mut builder = ModuleBuilder::new(&mut lir_module);
 
@@ -22,17 +24,24 @@ fn lower_decls(
     hir_decls: &hir::module::Declarations,
     ty_storage: &TyStorage,
     abi: &dyn Abi,
-) -> lir::module::Declarations {
-    let funcs = hir_decls
+) -> (lir::module::Declarations, HashMap<FunctionIdx, ParamRanges>) {
+    let (funcs, param_ranges) = hir_decls
         .funcs
-        .iter()
-        .map(|decl| lir::FunctionDeclaration {
-            name: decl.name.clone(),
-            sig: abi
+        .iter_enumerated()
+        .map(|(idx, decl)| {
+            let (sig, ranges) = abi
                 .calling_conv()
-                .lower_signature(abi, ty_storage, &decl.sig),
+                .lower_signature(abi, ty_storage, &decl.sig);
+
+            (
+                lir::FunctionDeclaration {
+                    name: decl.name.clone(),
+                    sig,
+                },
+                (idx, ranges),
+            )
         })
-        .collect();
+        .unzip();
     let global_vars = hir_decls
         .global_vars
         .iter()
@@ -41,7 +50,10 @@ fn lower_decls(
         })
         .collect();
 
-    lir::module::Declarations { funcs, global_vars }
+    (
+        lir::module::Declarations { funcs, global_vars },
+        param_ranges,
+    )
 }
 
 fn lower_global_vars(
