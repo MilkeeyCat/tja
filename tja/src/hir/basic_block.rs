@@ -1,6 +1,9 @@
-use crate::hir::{
-    Constant, Function, Instruction, InstructionId, Terminator, Ty, TyIdx, TyStorage, Value,
-    module::Declarations,
+use crate::{
+    Immediate,
+    hir::{
+        Constant, Function, Instruction, InstructionId, Terminator, Ty, TyIdx, TyStorage, Value,
+        module::Declarations,
+    },
 };
 use slotmap::new_key_type;
 
@@ -70,7 +73,7 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
 
     pub fn const_(&mut self, const_: Constant, ty: TyIdx) -> Value {
         if let Err(err) = validate_const(&const_, ty, self.ty_storage, vec![]) {
-            panic!("{}", err.display(&const_, ty, self.decls, self.ty_storage));
+            panic!("{}", err.display(&const_, self.decls, self.ty_storage));
         }
 
         let instr = self
@@ -98,6 +101,7 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
 enum ValidateConstErrorKind {
     UnexpectedValue { expected_ty: TyIdx },
     SizeMismatch { expected: usize, actual: usize },
+    ImmediateOutOfRange { imm: Immediate, ty: TyIdx },
 }
 
 struct ValidateConstError {
@@ -106,13 +110,7 @@ struct ValidateConstError {
 }
 
 impl ValidateConstError {
-    fn display(
-        self,
-        const_: &Constant,
-        ty: TyIdx,
-        decls: &Declarations,
-        ty_storage: &TyStorage,
-    ) -> String {
+    fn display(self, const_: &Constant, decls: &Declarations, ty_storage: &TyStorage) -> String {
         let err = match self.kind {
             ValidateConstErrorKind::SizeMismatch { expected, actual } => {
                 format!("size mismatch, expected {}, got {}", expected, actual)
@@ -123,12 +121,18 @@ impl ValidateConstError {
                     expected_ty.display(ty_storage)
                 )
             }
+            ValidateConstErrorKind::ImmediateOutOfRange { imm, ty } => {
+                format!(
+                    "immediate {} out of range for {}",
+                    imm,
+                    ty.display(ty_storage)
+                )
+            }
         };
 
         return format!(
-            "const {} doesn't match {} type, projection {} - {}",
+            "const {}, projection {} - {}",
             const_.display(decls),
-            ty.display(ty_storage),
             format!(
                 "[{}]",
                 self.projection
@@ -156,6 +160,13 @@ impl ValidateConstError {
             kind: ValidateConstErrorKind::SizeMismatch { expected, actual },
         }
     }
+
+    fn imm_out_of_range(projection: Vec<usize>, imm: Immediate, ty: TyIdx) -> Self {
+        Self {
+            projection,
+            kind: ValidateConstErrorKind::ImmediateOutOfRange { imm, ty },
+        }
+    }
 }
 
 fn validate_const(
@@ -165,8 +176,12 @@ fn validate_const(
     projection: Vec<usize>,
 ) -> Result<(), ValidateConstError> {
     match ty_storage.get(ty) {
-        Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64 => {
-            if !matches!(const_, Constant::Imm(..)) {
+        int_ty @ (Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64) => {
+            if let &Constant::Imm(imm) = const_ {
+                if !imm_fits_in_ty(imm, int_ty) {
+                    return Err(ValidateConstError::imm_out_of_range(projection, imm, ty));
+                }
+            } else {
                 return Err(ValidateConstError::unexpected_value(projection, ty));
             }
         }
@@ -233,6 +248,16 @@ fn validate_const(
     }
 
     Ok(())
+}
+
+fn imm_fits_in_ty(imm: Immediate, ty: &Ty) -> bool {
+    match ty {
+        Ty::I8 => ((i8::MIN as i64)..=(i8::MAX as i64)).contains(&imm.0),
+        Ty::I16 => ((i16::MIN as i64)..=(i16::MAX as i64)).contains(&imm.0),
+        Ty::I32 => ((i32::MIN as i64)..=(i32::MAX as i64)).contains(&imm.0),
+        Ty::I64 => true,
+        _ => unreachable!(),
+    }
 }
 
 pub struct AppendInstrInserter<'a> {
