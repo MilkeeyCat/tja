@@ -16,6 +16,8 @@ pub(super) enum Instruction {
     Shl { value: Value, bits: Value },
     Lshr { value: Value, bits: Value },
     GlobalValuePtr { value: GlobalValueIdx },
+    Zext { value: Value },
+    Trunc { value: Value },
 }
 
 pub(super) enum Terminator {

@@ -124,6 +124,26 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
 
         self.func.instr_results(instr)[0]
     }
+
+    pub(crate) fn zext(&mut self, value: Value, ty: Ty) -> Value {
+        assert!(is_valid_cast(value.ty(), ty, false));
+
+        let instr = self
+            .inserter
+            .insert_instr(self.func, Instruction::Zext { value }, Some(ty));
+
+        self.func.instr_results(instr)[0]
+    }
+
+    pub(crate) fn trunc(&mut self, value: Value, ty: Ty) -> Value {
+        assert!(is_valid_cast(value.ty(), ty, true));
+
+        let instr = self
+            .inserter
+            .insert_instr(self.func, Instruction::Trunc { value }, Some(ty));
+
+        self.func.instr_results(instr)[0]
+    }
 }
 
 fn imm_fits_in_ty(imm: Immediate, ty: Ty) -> bool {
@@ -133,6 +153,18 @@ fn imm_fits_in_ty(imm: Immediate, ty: Ty) -> bool {
         Ty::I32 => ((i32::MIN as i64)..=(i32::MAX as i64)).contains(&imm.0),
         Ty::I64 => true,
         _ => unreachable!(),
+    }
+}
+
+fn is_valid_cast(from: Ty, to: Ty, is_trunc: bool) -> bool {
+    const CAST_ORDER: &'static [Ty] = &[Ty::I8, Ty::I16, Ty::I32, Ty::I64];
+    let from = CAST_ORDER.iter().position(|ty| *ty == from);
+    let to = CAST_ORDER.iter().position(|ty| *ty == to);
+
+    match (from, to) {
+        (Some(from), Some(to)) if from > to && is_trunc => true,
+        (Some(from), Some(to)) if from < to && !is_trunc => true,
+        _ => false,
     }
 }
 
@@ -161,6 +193,8 @@ impl InstructionInserter for AppendInstrInserter<'_> {
             Instruction::Shl { value, .. } => vec![value.ty()],
             Instruction::Lshr { value, .. } => vec![value.ty()],
             Instruction::GlobalValuePtr { .. } => vec![Ty::PTR],
+            Instruction::Zext { .. } => vec![ty.unwrap()],
+            Instruction::Trunc { .. } => vec![ty.unwrap()],
         };
         let instr = func.create_instr(instr);
 
