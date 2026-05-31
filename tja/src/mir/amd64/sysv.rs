@@ -153,7 +153,8 @@ impl CallingConv {
         {
             // 5.a
             if eightbytes.contains(&ValueClass::Memory) {
-                eightbytes.resize_with(1, || ValueClass::Memory);
+                eightbytes.clear();
+                eightbytes.push(ValueClass::Memory);
             }
 
             // 5.c
@@ -162,7 +163,8 @@ impl CallingConv {
                 && (first != &ValueClass::Sse
                     || !rest.iter().all(|class| class == &ValueClass::SseUp))
             {
-                eightbytes.resize_with(1, || ValueClass::Memory);
+                eightbytes.clear();
+                eightbytes.push(ValueClass::Memory);
             }
         }
 
@@ -223,7 +225,8 @@ impl mir::CallingConvention for CallingConv {
             let mut classes = Self::ty_class(ty, ty_storage, abi);
 
             if !classes.contains(&ValueClass::Memory) && !param_regs.try_alloc(&classes) {
-                classes.resize_with(1, || ValueClass::Memory);
+                classes.clear();
+                classes.push(ValueClass::Memory);
             }
 
             param_ranges.add(params.len());
