@@ -144,6 +144,22 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
 
         self.func.instr_results(instr)[0]
     }
+
+    pub(crate) fn ret(&mut self, values: Vec<Value>) {
+        let sig = &self.decls.funcs[self.func.idx].sig;
+
+        assert!(
+            sig.returns
+                .iter()
+                .map(|value| value.ty)
+                .eq(values.iter().map(|value| value.ty())),
+            "signatures are not equal"
+        );
+
+        let terminator = Terminator::Return(values.into());
+
+        self.inserter.insert_terminator(self.func, terminator);
+    }
 }
 
 fn imm_fits_in_ty(imm: Immediate, ty: Ty) -> bool {
