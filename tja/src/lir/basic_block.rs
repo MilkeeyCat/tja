@@ -85,14 +85,11 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         self.func.instr_results(instr)[0]
     }
 
-    pub(crate) fn store(&mut self, ptr: Value, value: Value) -> Value {
+    pub(crate) fn store(&mut self, ptr: Value, value: Value) {
         assert_eq!(ptr.ty(), Ty::PTR);
 
-        let instr = self
-            .inserter
+        self.inserter
             .insert_instr(self.func, Instruction::Store { ptr, value }, None);
-
-        self.func.instr_results(instr)[0]
     }
 
     pub(crate) fn shl(&mut self, value: Value, bits: Value) -> Value {
