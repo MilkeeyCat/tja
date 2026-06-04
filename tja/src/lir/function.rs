@@ -2,11 +2,17 @@ use crate::{
     FunctionIdx,
     lir::{
         Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, Ty, Value,
-        basic_block::AppendInstrInserter, module::Declarations,
+        basic_block::{AppendInstrInserter, BlocksIter},
+        instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
+        module::Declarations,
+        signature,
     },
 };
 use slotmap::SlotMap;
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+};
 
 struct InstructionNode {
     instr: Instruction,
@@ -98,8 +104,49 @@ impl Function {
             .unwrap_or(&[])
     }
 
+    pub(super) fn next_block(&self, block: BlockId) -> Option<BlockId> {
+        self.blocks.get(block)?.next
+    }
+
+    pub(super) fn next_instr(&self, instr: InstructionId) -> Option<InstructionId> {
+        self.instrs.get(instr)?.next
+    }
+
+    pub(super) fn blocks_iter<'a>(&'a self) -> BlocksIter<'a> {
+        BlocksIter::new(self, self.first_block)
+    }
+
+    pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
+        InstrsIter::new(self, self.blocks[block].block.first_instr)
+    }
+
+    pub(super) fn block(&self, block: BlockId) -> &Block {
+        &self.blocks[block].block
+    }
+
     pub(super) fn block_mut(&mut self, block: BlockId) -> &mut Block {
         &mut self.blocks[block].block
+    }
+
+    pub(super) fn instr(&self, instr: InstructionId) -> &Instruction {
+        &self.instrs[instr].instr
+    }
+
+    pub(super) fn display_instr<'a>(
+        &'a self,
+        instr: InstructionId,
+        decls: &'a Declarations,
+        instr_to_idx: &'a BTreeMap<InstructionId, usize>,
+    ) -> DisplayInstr<'a> {
+        DisplayInstr::new(decls, self, instr_to_idx, instr)
+    }
+
+    pub(super) fn display_terminator<'a>(
+        &'a self,
+        block: BlockId,
+        instr_to_idx: &'a BTreeMap<InstructionId, usize>,
+    ) -> DisplayTerminator<'a> {
+        DisplayTerminator::new(self, instr_to_idx, block)
     }
 }
 
@@ -153,5 +200,103 @@ impl<'a> Builder<'a> {
             self.func,
             self.decls,
         )
+    }
+}
+
+pub(crate) struct DisplayFunction<'a> {
+    module: &'a Module,
+    func: FunctionIdx,
+}
+
+impl<'a> DisplayFunction<'a> {
+    pub(super) fn new(module: &'a Module, func: FunctionIdx) -> Self {
+        Self { module, func }
+    }
+}
+
+impl Display for DisplayFunction<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let decl = &self.module.decls.funcs[self.func];
+        let func = self.module.funcs.get(&self.func);
+
+        if func.is_some() {
+            write!(f, "define")?;
+        } else {
+            write!(f, "declare")?;
+        }
+
+        write!(f, " {}(", decl.name)?;
+
+        let write_sig_values =
+            |f: &mut std::fmt::Formatter<'_>, values: &[signature::Value]| -> std::fmt::Result {
+                let mut iter = values.iter().peekable();
+
+                while let Some(value) = iter.next() {
+                    write!(f, "{} {}", value.ty, value.kind)?;
+
+                    if iter.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                Ok(())
+            };
+
+        write_sig_values(f, &decl.sig.params)?;
+
+        write!(f, ")")?;
+
+        if !decl.sig.returns.is_empty() {
+            write!(f, " -> ")?;
+        }
+
+        write_sig_values(f, &decl.sig.returns)?;
+
+        if let Some(func) = func {
+            writeln!(f, " {{")?;
+
+            let block_to_idx: BTreeMap<BlockId, usize> = func
+                .blocks
+                .keys()
+                .enumerate()
+                .map(|(idx, block)| (block, idx))
+                .collect();
+            let instr_to_idx: BTreeMap<_, _> = func
+                .instrs
+                .keys()
+                .enumerate()
+                .map(|(idx, instr)| (instr, idx))
+                .collect();
+
+            for block in func.blocks_iter() {
+                write!(f, "bb{}(", block_to_idx[&block])?;
+
+                let mut iter = func.block(block).params.iter().peekable();
+
+                while let Some(value) = iter.next() {
+                    write!(f, "{}: {}", value.display(&instr_to_idx), value.ty())?;
+
+                    if iter.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                writeln!(f, "):")?;
+
+                for instr in func.instrs_iter(block) {
+                    writeln!(
+                        f,
+                        "\t{}",
+                        func.display_instr(instr, &self.module.decls, &instr_to_idx)
+                    )?;
+                }
+
+                writeln!(f, "\t{}", func.display_terminator(block, &instr_to_idx))?;
+            }
+
+            writeln!(f, "}}")?;
+        }
+
+        Ok(())
     }
 }

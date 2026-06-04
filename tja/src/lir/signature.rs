@@ -1,8 +1,13 @@
 use crate::lir::Ty;
+use derive_more::Display;
 
+#[derive(Display)]
 pub(crate) enum ValueKind {
+    #[display("normal")]
     Normal,
+    #[display("sarg({})", _0)]
     StructArgument(usize),
+    #[display("sret")]
     StructReturn,
 }
 

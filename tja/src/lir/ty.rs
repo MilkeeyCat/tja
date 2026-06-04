@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct Ty(u8);
@@ -29,5 +29,11 @@ impl Debug for Ty {
             Self::PTR => write!(f, "ptr"),
             _ => unreachable!(),
         }
+    }
+}
+
+impl Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self, f)
     }
 }
