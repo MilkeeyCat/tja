@@ -19,6 +19,7 @@ pub(super) enum Instruction {
     GlobalValuePtr { value: GlobalValueIdx },
     Zext { value: Value },
     Trunc { value: Value },
+    PtrAdd { ptr: Value, offset: Value },
 }
 
 impl Instruction {
@@ -32,6 +33,7 @@ impl Instruction {
             Self::GlobalValuePtr { .. } => "global_value_ptr",
             Self::Zext { .. } => "zext",
             Self::Trunc { .. } => "trunc",
+            Self::PtrAdd { .. } => "ptr_add",
         }
     }
 }
@@ -156,6 +158,14 @@ impl Display for DisplayInstr<'_> {
                 let ty = self.func.instr_results(self.instr)[0].ty();
 
                 write!(f, " {}, {}", value.display(self.instr_to_idx), ty)?;
+            }
+            Instruction::PtrAdd { ptr, offset } => {
+                write!(
+                    f,
+                    " {}, {}",
+                    ptr.display(self.instr_to_idx),
+                    offset.display(self.instr_to_idx)
+                )?;
             }
         };
 

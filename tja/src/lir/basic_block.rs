@@ -146,6 +146,17 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         self.func.instr_results(instr)[0]
     }
 
+    pub(crate) fn ptr_add(&mut self, ptr: Value, offset: Value) -> Value {
+        assert_eq!(ptr.ty(), Ty::PTR);
+        assert!(offset.ty().is_int());
+
+        let instr =
+            self.inserter
+                .insert_instr(self.func, Instruction::PtrAdd { ptr, offset }, None);
+
+        self.func.instr_results(instr)[0]
+    }
+
     pub(crate) fn ret(&mut self, values: Vec<Value>) {
         let sig = &self.decls.funcs[self.func.idx].sig;
 
@@ -212,6 +223,7 @@ impl InstructionInserter for AppendInstrInserter<'_> {
             Instruction::GlobalValuePtr { .. } => vec![Ty::PTR],
             Instruction::Zext { .. } => vec![ty.unwrap()],
             Instruction::Trunc { .. } => vec![ty.unwrap()],
+            Instruction::PtrAdd { .. } => vec![Ty::PTR],
         };
         let instr = func.create_instr(instr);
 
