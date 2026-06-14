@@ -8,6 +8,7 @@ mod ty;
 pub(crate) use basic_block::Builder as BlockBuilder;
 use basic_block::{Block, BlockId};
 use derive_more::From;
+pub(crate) use function::Builder as FunctionBuilder;
 use function::Function;
 use instruction::{Instruction, InstructionId, Terminator};
 pub(crate) use module::{
@@ -20,7 +21,7 @@ use crate::{FunctionIdx, GlobalVariableIdx, Immediate};
 use std::{collections::BTreeMap, fmt::Display};
 
 #[allow(private_interfaces)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Value {
     Param {
         ty: Ty,

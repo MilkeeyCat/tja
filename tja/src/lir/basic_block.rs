@@ -8,7 +8,7 @@ use crate::{
 use slotmap::new_key_type;
 
 new_key_type! {
-    pub(super) struct BlockId;
+    pub(crate) struct BlockId;
 }
 
 pub(super) struct Block {
@@ -68,7 +68,9 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         }
     }
 
-    pub(crate) fn iconst(&mut self, imm: Immediate, ty: Ty) -> Value {
+    pub(crate) fn iconst<Imm: Into<Immediate>>(&mut self, imm: Imm, ty: Ty) -> Value {
+        let imm: Immediate = imm.into();
+
         assert!(ty.is_int());
         assert!(imm_fits_in_ty(imm, ty));
 
@@ -157,6 +159,36 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         self.func.instr_results(instr)[0]
     }
 
+    pub(crate) fn int_to_ptr(&mut self, int: Value) -> Value {
+        let instr = self
+            .inserter
+            .insert_instr(self.func, Instruction::IntToPtr { int }, None);
+
+        self.func.instr_results(instr)[0]
+    }
+
+    pub(crate) fn ptr_to_int(&mut self, ptr: Value, ty: Ty) -> Value {
+        assert!(ptr.ty() == Ty::PTR);
+        assert!(ty.is_int());
+
+        let instr = self
+            .inserter
+            .insert_instr(self.func, Instruction::PtrToInt { ptr }, Some(ty));
+
+        self.func.instr_results(instr)[0]
+    }
+
+    pub(crate) fn or(&mut self, lhs: Value, rhs: Value) -> Value {
+        assert!(lhs.ty().is_int());
+        assert!(lhs.ty() == rhs.ty());
+
+        let instr = self
+            .inserter
+            .insert_instr(self.func, Instruction::Or { lhs, rhs }, None);
+
+        self.func.instr_results(instr)[0]
+    }
+
     pub(crate) fn ret(&mut self, values: Vec<Value>) {
         let sig = &self.decls.funcs[self.func.idx].sig;
 
@@ -196,7 +228,7 @@ fn is_valid_cast(from: Ty, to: Ty, is_trunc: bool) -> bool {
     }
 }
 
-pub(super) struct AppendInstrInserter<'a> {
+pub(crate) struct AppendInstrInserter<'a> {
     decls: &'a Declarations,
     block: BlockId,
 }
@@ -224,6 +256,9 @@ impl InstructionInserter for AppendInstrInserter<'_> {
             Instruction::Zext { .. } => vec![ty.unwrap()],
             Instruction::Trunc { .. } => vec![ty.unwrap()],
             Instruction::PtrAdd { .. } => vec![Ty::PTR],
+            Instruction::IntToPtr { .. } => vec![Ty::PTR],
+            Instruction::PtrToInt { .. } => vec![ty.unwrap()],
+            Instruction::Or { lhs, .. } => vec![lhs.ty()],
         };
         let instr = func.create_instr(instr);
 

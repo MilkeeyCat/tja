@@ -1,7 +1,7 @@
 use crate::lir::Ty;
 use derive_more::Display;
 
-#[derive(Display)]
+#[derive(Debug, Clone, PartialEq, Display)]
 pub(crate) enum ValueKind {
     #[display("normal")]
     Normal,
@@ -11,11 +11,13 @@ pub(crate) enum ValueKind {
     StructReturn,
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct Value {
     pub(crate) ty: Ty,
     pub(crate) kind: ValueKind,
 }
 
+#[derive(Debug)]
 pub(crate) struct Signature {
     pub(crate) params: Vec<Value>,
     pub(crate) returns: Vec<Value>,

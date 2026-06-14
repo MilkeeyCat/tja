@@ -312,7 +312,7 @@ impl Iterator for OffsetIter<'_> {
                     });
                     self.push(
                         ty,
-                        base_offset + self.abi.ty_size(self.ty_storage, ty) * cur_len,
+                        base_offset + self.abi.hir_ty_size(self.ty_storage, ty) * cur_len,
                     );
                 }
                 OffsetIterNode::Scalar(offset) => return Some(offset),

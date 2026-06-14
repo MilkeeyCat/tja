@@ -1,7 +1,8 @@
 use crate::{
     FunctionIdx,
     hir::{
-        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, TyIdx, TyStorage, Value,
+        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, Terminator, TyIdx,
+        TyStorage, Value,
         basic_block::{AppendInstrInserter, BlocksIter},
         instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
         module::Declarations,
@@ -114,6 +115,10 @@ impl Function {
             .unwrap_or(&[])
     }
 
+    pub(super) fn block_params(&self, block: BlockId) -> &[Value] {
+        &self.block(block).params
+    }
+
     pub(super) fn next_block(&self, block: BlockId) -> Option<BlockId> {
         self.blocks.get(block)?.next
     }
@@ -140,6 +145,10 @@ impl Function {
 
     pub(super) fn instr(&self, instr: InstructionId) -> &Instruction {
         &self.instrs[instr].instr
+    }
+
+    pub(super) fn terminator(&self, block: BlockId) -> &Terminator {
+        self.block(block).terminator()
     }
 
     pub(super) fn display_instr<'a>(
@@ -195,7 +204,7 @@ impl<'a> Builder<'a> {
     }
 
     pub fn block_params(&self, block: BlockId) -> &[Value] {
-        &self.func.block(block).params
+        self.func.block_params(block)
     }
 
     pub fn select_block(&mut self, block: BlockId) {

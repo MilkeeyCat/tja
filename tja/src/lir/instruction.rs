@@ -20,6 +20,9 @@ pub(super) enum Instruction {
     Zext { value: Value },
     Trunc { value: Value },
     PtrAdd { ptr: Value, offset: Value },
+    IntToPtr { int: Value },
+    PtrToInt { ptr: Value },
+    Or { lhs: Value, rhs: Value },
 }
 
 impl Instruction {
@@ -34,6 +37,9 @@ impl Instruction {
             Self::Zext { .. } => "zext",
             Self::Trunc { .. } => "trunc",
             Self::PtrAdd { .. } => "ptr_add",
+            Self::IntToPtr { .. } => "int_to_ptr",
+            Self::PtrToInt { .. } => "ptr_to_int",
+            Self::Or { .. } => "or",
         }
     }
 }
@@ -165,6 +171,22 @@ impl Display for DisplayInstr<'_> {
                     " {}, {}",
                     ptr.display(self.instr_to_idx),
                     offset.display(self.instr_to_idx)
+                )?;
+            }
+            Instruction::IntToPtr { int } => {
+                write!(f, " {}", int.display(self.instr_to_idx))?;
+            }
+            Instruction::PtrToInt { ptr } => {
+                let ty = self.func.instr_results(self.instr)[0].ty();
+
+                write!(f, " {}, {}", ptr.display(self.instr_to_idx), ty)?;
+            }
+            Instruction::Or { lhs, rhs } => {
+                write!(
+                    f,
+                    " {}, {}",
+                    lhs.display(self.instr_to_idx),
+                    rhs.display(self.instr_to_idx),
                 )?;
             }
         };

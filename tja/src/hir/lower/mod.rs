@@ -1,7 +1,11 @@
+mod function;
+
+pub(crate) use function::LoweringCtx as FuncLoweringCtx;
+
 use crate::{
     FunctionIdx,
     hir::{self, ScalarConst, TyStorage},
-    lir::{self, ModuleBuilder, ParamRanges},
+    lir::{self, FunctionBuilder, ModuleBuilder, ParamRanges},
     mir::{Abi, Target},
 };
 use std::collections::HashMap;
@@ -11,11 +15,22 @@ pub(crate) fn lower(
     ty_storage: &TyStorage,
     target: &dyn Target,
 ) -> lir::Module {
-    let (decls, _) = lower_decls(&hir_module.decls, ty_storage, target.abi());
+    let (decls, param_ranges) = lower_decls(&hir_module.decls, ty_storage, target.abi());
     let mut lir_module = lir::Module::new(decls);
     let mut builder = ModuleBuilder::new(&mut lir_module);
 
     lower_global_vars(&hir_module, &mut builder, ty_storage, target.abi());
+
+    for (&idx, func) in &hir_module.funcs {
+        builder.define_function(idx);
+        function::lower(
+            func,
+            ty_storage,
+            &param_ranges,
+            target.abi(),
+            FunctionBuilder::new(builder.0, idx),
+        );
+    }
 
     lir_module
 }
@@ -66,7 +81,7 @@ fn lower_global_vars(
         let ty = module.decls.global_vars[idx].ty;
         let var = match var {
             hir::GlobalVariable::Zero => {
-                let ty_size = abi.ty_size(ty_storage, ty);
+                let ty_size = abi.hir_ty_size(ty_storage, ty);
 
                 lir::GlobalVariable::Zero(ty_size)
             }

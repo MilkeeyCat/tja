@@ -10,7 +10,7 @@ pub use basic_block::{BlockId, Builder as BlockBuilder};
 use function::Function;
 pub use function::{Builder as FunctionBuilder, Signature};
 use instruction::{Instruction, InstructionId, Terminator};
-pub(crate) use lower::lower;
+pub(crate) use lower::{FuncLoweringCtx, lower};
 pub use module::Module;
 pub use ty::{Storage as TyStorage, Ty, TyIdx};
 
@@ -176,7 +176,7 @@ impl Display for DisplayGlobalVariable<'_> {
 }
 
 #[allow(private_interfaces)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Value {
     Param {
         ty: TyIdx,

@@ -55,7 +55,7 @@ impl Module {
     }
 }
 
-pub(crate) struct Builder<'a>(&'a mut Module);
+pub(crate) struct Builder<'a>(pub(crate) &'a mut Module);
 
 impl<'a> Builder<'a> {
     pub(crate) fn new(module: &'a mut Module) -> Self {

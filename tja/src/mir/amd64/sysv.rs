@@ -1,6 +1,6 @@
 use crate::{
-    hir::{self, TyStorage},
-    lir::{self, ParamRanges},
+    hir::{self, FuncLoweringCtx, TyStorage},
+    lir::{self, ParamRanges, Ty},
     mir,
 };
 
@@ -22,12 +22,12 @@ impl mir::Abi for Abi {
             .iter()
             .fold(0usize, |offset, ty| {
                 offset.next_multiple_of(self.alignment(ty_storage, *ty))
-                    + self.ty_size(ty_storage, *ty)
+                    + self.hir_ty_size(ty_storage, *ty)
             })
             .next_multiple_of(self.alignment(ty_storage, fields[idx]))
     }
 
-    fn ty_size(&self, ty_storage: &TyStorage, ty: hir::TyIdx) -> usize {
+    fn hir_ty_size(&self, ty_storage: &TyStorage, ty: hir::TyIdx) -> usize {
         match ty_storage.get(ty) {
             hir::Ty::I8 => 1,
             hir::Ty::I16 => 2,
@@ -40,11 +40,21 @@ impl mir::Abi for Abi {
                     let last = fields.len() - 1;
 
                     (self.field_offset(ty_storage, fields, last)
-                        + self.ty_size(ty_storage, fields[last]))
+                        + self.hir_ty_size(ty_storage, fields[last]))
                     .next_multiple_of(self.alignment(ty_storage, ty))
                 }
             }
-            hir::Ty::Array { ty, len } => self.ty_size(ty_storage, *ty) * len,
+            hir::Ty::Array { ty, len } => self.hir_ty_size(ty_storage, *ty) * len,
+        }
+    }
+
+    fn lir_ty_size(&self, ty: lir::Ty) -> usize {
+        match ty {
+            lir::Ty::I8 => 1,
+            lir::Ty::I16 => 2,
+            lir::Ty::I32 => 4,
+            lir::Ty::I64 | lir::Ty::PTR => 8,
+            _ => unreachable!(),
         }
     }
 
@@ -56,7 +66,7 @@ impl mir::Abi for Abi {
                 .max()
                 .unwrap_or(1),
             hir::Ty::Array { ty, .. } => self.alignment(ty_storage, *ty),
-            _ => self.ty_size(ty_storage, ty),
+            _ => self.hir_ty_size(ty_storage, ty),
         }
     }
 
@@ -74,14 +84,9 @@ enum ValueClass {
     Memory,
 }
 
-impl ValueClass {
-    fn to_sig_value(
-        &self,
-        abi: &dyn mir::Abi,
-        ty_storage: &TyStorage,
-        ty: hir::TyIdx,
-    ) -> lir::signature::Value {
-        match self {
+impl From<ValueClass> for lir::signature::Value {
+    fn from(class: ValueClass) -> Self {
+        match class {
             ValueClass::NoClass => unreachable!(),
             ValueClass::Integer => lir::signature::Value {
                 ty: lir::Ty::I64,
@@ -131,7 +136,7 @@ impl CallingConv {
                         ty,
                         ty_storage,
                         abi,
-                        offset + abi.ty_size(ty_storage, ty) * idx,
+                        offset + abi.hir_ty_size(ty_storage, ty) * idx,
                     );
                 }
             }
@@ -139,7 +144,7 @@ impl CallingConv {
     }
 
     fn ty_class(ty: hir::TyIdx, ty_storage: &TyStorage, abi: &dyn mir::Abi) -> Vec<ValueClass> {
-        let size = abi.ty_size(ty_storage, ty);
+        let size = abi.hir_ty_size(ty_storage, ty);
 
         if size > 64 {
             return vec![ValueClass::Memory];
@@ -211,7 +216,7 @@ impl mir::CallingConvention for CallingConv {
                                 kind: lir::signature::ValueKind::Normal,
                             }
                         } else {
-                            class.to_sig_value(abi, ty_storage, ty)
+                            class.into()
                         }
                     })
                     .collect()
@@ -235,11 +240,11 @@ impl mir::CallingConvention for CallingConv {
                     lir::signature::Value {
                         ty: lir::Ty::PTR,
                         kind: lir::signature::ValueKind::StructArgument(
-                            abi.ty_size(ty_storage, ty),
+                            abi.hir_ty_size(ty_storage, ty),
                         ),
                     }
                 } else {
-                    class.to_sig_value(abi, ty_storage, ty)
+                    class.into()
                 }
             }));
         }
@@ -247,6 +252,172 @@ impl mir::CallingConvention for CallingConv {
         param_ranges.finalize(params.len());
 
         (lir::Signature { params, returns }, param_ranges)
+    }
+
+    fn lower_entry_block_params(
+        &self,
+        ctx: &mut FuncLoweringCtx,
+        hir_params: &[hir::Value],
+        lir_params: &[(lir::signature::Value, lir::Value)],
+        param_ranges: &ParamRanges,
+    ) {
+        for (hir_param, lir_params) in hir_params
+            .iter()
+            .zip((0..hir_params.len()).map(|idx| &lir_params[param_ranges.get(idx)]))
+        {
+            let ty = hir_param.ty();
+            let mut param_values = Vec::new();
+
+            match lir_params {
+                [
+                    (
+                        lir::signature::Value {
+                            kind: lir::signature::ValueKind::StructArgument(size),
+                            ..
+                        },
+                        value,
+                    ),
+                ] => {
+                    assert_eq!(ctx.abi.hir_ty_size(ctx.ty_storage, ty), *size);
+
+                    let mut builder = ctx.lir_func_builder.block_builder();
+
+                    for (offset, ty) in ty
+                        .offset_iter(ctx.ty_storage, ctx.abi)
+                        .zip(ty.lir_ty_iter(ctx.ty_storage))
+                    {
+                        let offset = builder.iconst(i64::try_from(offset).unwrap(), Ty::I64);
+                        let ptr = builder.ptr_add(*value, offset);
+
+                        param_values.push(builder.load(ptr, ty));
+                    }
+                }
+                values
+                    if values
+                        .iter()
+                        .all(|(value, _)| value.kind == lir::signature::ValueKind::Normal) =>
+                {
+                    let size = ctx.abi.lir_ty_size(values[0].1.ty());
+
+                    for (offset, ty) in ty
+                        .offset_iter(ctx.ty_storage, ctx.abi)
+                        .zip(ty.lir_ty_iter(ctx.ty_storage))
+                    {
+                        let (_, value) = &values[offset / size];
+                        let relative_offset = offset % size;
+                        let value = if ctx.abi.lir_ty_size(ty) == size {
+                            if ty == Ty::PTR {
+                                ctx.lir_func_builder.block_builder().int_to_ptr(*value)
+                            } else {
+                                assert_eq!(ty, value.ty());
+
+                                *value
+                            }
+                        } else {
+                            let mut builder = ctx.lir_func_builder.block_builder();
+                            let shift_amount =
+                                builder.iconst(u8::try_from(relative_offset * 8).unwrap(), Ty::I8);
+                            let shifted = builder.lshr(*value, shift_amount);
+
+                            builder.trunc(shifted, ty)
+                        };
+
+                        param_values.push(value);
+                    }
+                }
+                _ => unreachable!(),
+            }
+
+            ctx.lower_param(*hir_param, param_values);
+        }
+    }
+
+    fn lower_ret(
+        &self,
+        ctx: &mut FuncLoweringCtx,
+        value: Option<(hir::Value, &[lir::signature::Value])>,
+    ) {
+        let values = if let Some((value, sig_values)) = value {
+            let ty = value.ty();
+            let values = ctx.lowered_value(value).to_vec();
+
+            if ctx.lir_func_builder.decls.funcs[ctx.lir_func_builder.func.idx]
+                .sig
+                .params[0]
+                .kind
+                == lir::signature::ValueKind::StructReturn
+            {
+                let base = ctx
+                    .lir_func_builder
+                    .func
+                    .block_params(ctx.lir_func_builder.func.entry_block().unwrap())[0];
+                let mut builder = ctx.lir_func_builder.block_builder();
+
+                for (offset, value) in ty.offset_iter(ctx.ty_storage, ctx.abi).zip(values) {
+                    let offset = builder.iconst(i64::try_from(offset).unwrap(), Ty::I64);
+                    let ptr = builder.ptr_add(base, offset);
+
+                    builder.store(ptr, value);
+                }
+
+                vec![base]
+            } else {
+                let ret_ty = sig_values[0].ty;
+                let size = ctx.abi.lir_ty_size(ret_ty);
+                let mut ret_values = Vec::new();
+                let mut ret_value: Option<lir::Value> = None;
+                let mut iter = values
+                    .into_iter()
+                    .zip(ty.offset_iter(ctx.ty_storage, ctx.abi))
+                    .zip(ty.lir_ty_iter(ctx.ty_storage))
+                    .peekable();
+
+                while let Some(((value, offset), ty)) = iter.next() {
+                    let value = if ctx.abi.lir_ty_size(ty) == size {
+                        if ty == Ty::PTR {
+                            ctx.lir_func_builder
+                                .block_builder()
+                                .ptr_to_int(value, Ty::I64)
+                        } else {
+                            assert_eq!(ty, value.ty());
+
+                            value
+                        }
+                    } else {
+                        let relative_offset = offset % size;
+                        let mut builder = ctx.lir_func_builder.block_builder();
+                        let extended = builder.zext(value, ret_ty);
+                        let shift_amount =
+                            builder.iconst(u8::try_from(relative_offset * 8).unwrap(), Ty::I8);
+
+                        builder.shl(extended, shift_amount)
+                    };
+                    let value = ret_value.map_or(value, |ret_value| {
+                        ctx.lir_func_builder.block_builder().or(ret_value, value)
+                    });
+                    let next_offset = iter.peek().map(|&((_, offset), _)| offset);
+
+                    if let Some(next_offset) = next_offset
+                        && offset / size != next_offset / size
+                    {
+                        ret_values.push(value);
+                        ret_value = None;
+                    } else {
+                        ret_value = Some(value);
+                    }
+                }
+
+                if let Some(ret_value) = ret_value {
+                    ret_values.push(ret_value);
+                }
+
+                ret_values
+            }
+        } else {
+            Vec::new()
+        };
+
+        ctx.lir_func_builder.block_builder().ret(values);
     }
 }
 

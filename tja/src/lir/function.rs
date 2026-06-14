@@ -26,8 +26,8 @@ struct BlockNode {
     next: Option<BlockId>,
 }
 
-pub(super) struct Function {
-    pub(super) idx: FunctionIdx,
+pub(crate) struct Function {
+    pub(crate) idx: FunctionIdx,
     instrs: SlotMap<InstructionId, InstructionNode>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
     blocks: SlotMap<BlockId, BlockNode>,
@@ -104,6 +104,10 @@ impl Function {
             .unwrap_or(&[])
     }
 
+    pub(crate) fn block_params(&self, block: BlockId) -> &[Value] {
+        &self.block(block).params
+    }
+
     pub(super) fn next_block(&self, block: BlockId) -> Option<BlockId> {
         self.blocks.get(block)?.next
     }
@@ -118,6 +122,10 @@ impl Function {
 
     pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
         InstrsIter::new(self, self.blocks[block].block.first_instr)
+    }
+
+    pub(crate) fn entry_block(&self) -> Option<BlockId> {
+        self.first_block
     }
 
     pub(super) fn block(&self, block: BlockId) -> &Block {
@@ -151,8 +159,8 @@ impl Function {
 }
 
 pub(crate) struct Builder<'a> {
-    func: &'a mut Function,
-    decls: &'a Declarations,
+    pub(crate) func: &'a mut Function,
+    pub(crate) decls: &'a Declarations,
     current_block: Option<BlockId>,
 }
 
