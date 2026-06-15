@@ -1,6 +1,8 @@
-pub mod hir;
-mod lir;
+mod generic_ir;
 pub mod mir;
+
+pub use generic_ir::hir;
+pub(crate) use generic_ir::lir;
 
 use crate::{
     hir::{Module, TyStorage, lower},
