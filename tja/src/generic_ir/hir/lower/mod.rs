@@ -4,7 +4,7 @@ pub(crate) use function::LoweringCtx as FuncLoweringCtx;
 
 use crate::{
     FunctionIdx,
-    hir::{self, ScalarConst, TyStorage},
+    hir::{self, TyStorage, constant::ScalarConst},
     lir::{self, FunctionBuilder, ModuleBuilder, ParamRanges},
     mir::{Abi, Target},
 };

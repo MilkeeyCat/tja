@@ -1,4 +1,5 @@
 mod basic_block;
+pub(crate) mod constant;
 mod function;
 mod instruction;
 mod lower;
@@ -7,134 +8,17 @@ mod ty;
 
 use basic_block::Block;
 pub use basic_block::{BlockId, Builder as BlockBuilder};
+pub use constant::Constant;
 use function::Function;
 pub use function::{Builder as FunctionBuilder, Signature};
 use instruction::{Instruction, InstructionId, Terminator};
 pub(crate) use lower::{FuncLoweringCtx, lower};
-pub use module::Module;
+pub use module::{Builder as ModuleBuilder, Module};
 pub use ty::{Storage as TyStorage, Ty, TyIdx};
 
-use crate::{FunctionIdx, GlobalVariableIdx, Immediate};
-use derive_more::From;
+use crate::{FunctionIdx, GlobalVariableIdx};
 use module::Declarations;
 use std::{collections::BTreeMap, fmt::Display};
-
-#[derive(From)]
-pub enum Constant {
-    GlobalVariable(GlobalVariableIdx),
-    Function(FunctionIdx),
-    Imm(Immediate),
-    Aggregate(Vec<Self>),
-}
-
-impl Constant {
-    fn display<'a>(&'a self, decls: &'a Declarations) -> DisplayConstant<'a> {
-        DisplayConstant {
-            decls,
-            const_: self,
-        }
-    }
-
-    pub(crate) fn scalar_iter<'a>(&'a self) -> ScalarIter<'a> {
-        ScalarIter::new(self)
-    }
-}
-
-pub(crate) enum ScalarConst {
-    GlobalVariable(GlobalVariableIdx),
-    Function(FunctionIdx),
-    Imm(Immediate),
-}
-
-enum ScalarIterNode<'a> {
-    Aggregate(&'a [Constant]),
-    Scalar(ScalarConst),
-}
-
-pub(crate) struct ScalarIter<'a> {
-    stack: Vec<ScalarIterNode<'a>>,
-}
-
-impl<'a> ScalarIter<'a> {
-    fn new(const_: &'a Constant) -> Self {
-        let mut iter = Self { stack: Vec::new() };
-
-        iter.push(const_);
-
-        iter
-    }
-
-    fn push(&mut self, const_: &'a Constant) {
-        match const_ {
-            Constant::GlobalVariable(var) => self
-                .stack
-                .push(ScalarIterNode::Scalar(ScalarConst::GlobalVariable(*var))),
-            Constant::Function(func) => self
-                .stack
-                .push(ScalarIterNode::Scalar(ScalarConst::Function(*func))),
-            Constant::Imm(imm) => self
-                .stack
-                .push(ScalarIterNode::Scalar(ScalarConst::Imm(*imm))),
-            Constant::Aggregate(values) => self.stack.push(ScalarIterNode::Aggregate(values)),
-        }
-    }
-}
-
-impl Iterator for ScalarIter<'_> {
-    type Item = ScalarConst;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(node) = self.stack.pop() {
-            match node {
-                ScalarIterNode::Aggregate(values) => match values {
-                    [const_, rest @ ..] => {
-                        if !rest.is_empty() {
-                            self.stack.push(ScalarIterNode::Aggregate(rest));
-                        }
-
-                        self.push(const_);
-                    }
-                    [] => continue,
-                },
-                ScalarIterNode::Scalar(scalar) => return Some(scalar),
-            }
-        }
-
-        None
-    }
-}
-
-pub struct DisplayConstant<'a> {
-    decls: &'a Declarations,
-    const_: &'a Constant,
-}
-
-impl Display for DisplayConstant<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.const_ {
-            Constant::GlobalVariable(idx) => write!(f, "{}", self.decls.global_var(*idx).name),
-            Constant::Function(idx) => write!(f, "{}", self.decls.function(*idx).name),
-            Constant::Imm(imm) => write!(f, "{}", imm.0),
-            Constant::Aggregate(consts) => {
-                write!(f, "{{")?;
-
-                let mut iter = consts.iter().peekable();
-
-                while let Some(const_) = iter.next() {
-                    write!(f, "{}", const_.display(self.decls))?;
-
-                    if iter.peek().is_some() {
-                        write!(f, ", ")?;
-                    }
-                }
-
-                write!(f, "}}")?;
-
-                Ok(())
-            }
-        }
-    }
-}
 
 pub enum GlobalVariable {
     Zero,

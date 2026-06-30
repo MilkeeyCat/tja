@@ -1,9 +1,6 @@
-use crate::{
-    Immediate,
-    hir::{
-        Constant, Function, Instruction, InstructionId, Terminator, Ty, TyIdx, TyStorage, Value,
-        module::Declarations,
-    },
+use crate::hir::{
+    Constant, Function, Instruction, InstructionId, Terminator, TyIdx, TyStorage, Value,
+    module::Declarations,
 };
 use slotmap::new_key_type;
 
@@ -72,7 +69,7 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
     }
 
     pub fn const_(&mut self, const_: Constant, ty: TyIdx) -> Value {
-        if let Err(err) = validate_const(&const_, ty, self.ty_storage, vec![]) {
+        if let Err(err) = const_.validate(ty, self.ty_storage) {
             panic!("{}", err.display(&const_, self.decls, self.ty_storage));
         }
 
@@ -95,168 +92,6 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
         let terminator = Terminator::Return(value);
 
         self.inserter.insert_terminator(self.func, terminator);
-    }
-}
-
-enum ValidateConstErrorKind {
-    UnexpectedValue { expected_ty: TyIdx },
-    SizeMismatch { expected: usize, actual: usize },
-    ImmediateOutOfRange { imm: Immediate, ty: TyIdx },
-}
-
-struct ValidateConstError {
-    projection: Vec<usize>,
-    kind: ValidateConstErrorKind,
-}
-
-impl ValidateConstError {
-    fn display(self, const_: &Constant, decls: &Declarations, ty_storage: &TyStorage) -> String {
-        let err = match self.kind {
-            ValidateConstErrorKind::SizeMismatch { expected, actual } => {
-                format!("size mismatch, expected {}, got {}", expected, actual)
-            }
-            ValidateConstErrorKind::UnexpectedValue { expected_ty } => {
-                format!(
-                    "unexpected type, expected {}",
-                    expected_ty.display(ty_storage)
-                )
-            }
-            ValidateConstErrorKind::ImmediateOutOfRange { imm, ty } => {
-                format!(
-                    "immediate {} out of range for {}",
-                    imm,
-                    ty.display(ty_storage)
-                )
-            }
-        };
-
-        return format!(
-            "const {}, projection {} - {}",
-            const_.display(decls),
-            format!(
-                "[{}]",
-                self.projection
-                    .into_iter()
-                    .map(|idx| idx.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            err
-        );
-    }
-}
-
-impl ValidateConstError {
-    fn unexpected_value(projection: Vec<usize>, expected_ty: TyIdx) -> Self {
-        Self {
-            projection,
-            kind: ValidateConstErrorKind::UnexpectedValue { expected_ty },
-        }
-    }
-
-    fn size_mismatch(projection: Vec<usize>, expected: usize, actual: usize) -> Self {
-        Self {
-            projection,
-            kind: ValidateConstErrorKind::SizeMismatch { expected, actual },
-        }
-    }
-
-    fn imm_out_of_range(projection: Vec<usize>, imm: Immediate, ty: TyIdx) -> Self {
-        Self {
-            projection,
-            kind: ValidateConstErrorKind::ImmediateOutOfRange { imm, ty },
-        }
-    }
-}
-
-fn validate_const(
-    const_: &Constant,
-    ty: TyIdx,
-    ty_storage: &TyStorage,
-    projection: Vec<usize>,
-) -> Result<(), ValidateConstError> {
-    match ty_storage.get(ty) {
-        int_ty @ (Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64) => {
-            if let &Constant::Imm(imm) = const_ {
-                if !imm_fits_in_ty(imm, int_ty) {
-                    return Err(ValidateConstError::imm_out_of_range(projection, imm, ty));
-                }
-            } else {
-                return Err(ValidateConstError::unexpected_value(projection, ty));
-            }
-        }
-        Ty::Ptr => {
-            if !matches!(
-                const_,
-                Constant::GlobalVariable(..) | Constant::Function(..)
-            ) {
-                return Err(ValidateConstError::unexpected_value(projection, ty));
-            }
-        }
-        Ty::Struct(tys) => {
-            let Constant::Aggregate(consts) = const_ else {
-                return Err(ValidateConstError::unexpected_value(projection, ty));
-            };
-
-            if tys.len() != consts.len() {
-                return Err(ValidateConstError::size_mismatch(
-                    projection,
-                    tys.len(),
-                    consts.len(),
-                ));
-            }
-
-            for ((idx, &ty), const_) in tys.iter().enumerate().zip(consts) {
-                validate_const(
-                    const_,
-                    ty,
-                    ty_storage,
-                    projection
-                        .clone()
-                        .into_iter()
-                        .chain(std::iter::once(idx))
-                        .collect(),
-                )?;
-            }
-        }
-        &Ty::Array { ty: elem_ty, len } => {
-            let Constant::Aggregate(consts) = const_ else {
-                return Err(ValidateConstError::unexpected_value(projection, ty));
-            };
-
-            if len != consts.len() {
-                return Err(ValidateConstError::size_mismatch(
-                    projection,
-                    len,
-                    consts.len(),
-                ));
-            }
-
-            for (idx, const_) in (0..len).into_iter().zip(consts) {
-                validate_const(
-                    const_,
-                    elem_ty,
-                    ty_storage,
-                    projection
-                        .clone()
-                        .into_iter()
-                        .chain(std::iter::once(idx))
-                        .collect(),
-                )?;
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn imm_fits_in_ty(imm: Immediate, ty: &Ty) -> bool {
-    match ty {
-        Ty::I8 => ((i8::MIN as i64)..=(i8::MAX as i64)).contains(&imm.0),
-        Ty::I16 => ((i16::MIN as i64)..=(i16::MAX as i64)).contains(&imm.0),
-        Ty::I32 => ((i32::MIN as i64)..=(i32::MAX as i64)).contains(&imm.0),
-        Ty::I64 => true,
-        _ => unreachable!(),
     }
 }
 

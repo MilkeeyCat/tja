@@ -1,6 +1,6 @@
 use crate::{
     FunctionIdx,
-    hir::{self, Function, ScalarConst, TyStorage},
+    hir::{self, Function, TyStorage, constant::ScalarConst},
     lir::{self, FunctionBuilder, ParamRanges},
     mir::Abi,
 };

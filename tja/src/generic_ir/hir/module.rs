@@ -81,28 +81,6 @@ impl Module {
         Default::default()
     }
 
-    pub fn declare_function(&mut self, name: String, sig: Signature) -> FunctionIdx {
-        self.decls.declare_function(name, sig)
-    }
-
-    pub fn define_function(&mut self, func: FunctionIdx) {
-        assert!(
-            self.funcs.insert(func, Function::new(func)).is_none(),
-            "function is already defined"
-        );
-    }
-
-    pub fn declare_global_variable(&mut self, name: String, ty: TyIdx) -> GlobalVariableIdx {
-        self.decls.declare_global_var(name, ty)
-    }
-
-    pub fn define_global_variable(&mut self, idx: GlobalVariableIdx, var: GlobalVariable) {
-        assert!(
-            self.global_vars.insert(idx, var).is_none(),
-            "global variable is already defined"
-        );
-    }
-
     pub fn display<'a>(&'a self, ty_storage: &'a TyStorage) -> DisplayModule<'a> {
         DisplayModule {
             module: self,
@@ -128,6 +106,52 @@ impl Module {
             ty_storage,
             var,
         }
+    }
+}
+
+pub struct Builder<'a> {
+    module: &'a mut Module,
+    ty_storage: &'a TyStorage,
+}
+
+impl<'a> Builder<'a> {
+    pub fn new(module: &'a mut Module, ty_storage: &'a TyStorage) -> Self {
+        Self { module, ty_storage }
+    }
+
+    pub fn declare_function(&mut self, name: String, sig: Signature) -> FunctionIdx {
+        self.module.decls.declare_function(name, sig)
+    }
+
+    pub fn define_function(&mut self, func: FunctionIdx) {
+        assert!(
+            self.module
+                .funcs
+                .insert(func, Function::new(func))
+                .is_none(),
+            "function is already defined"
+        );
+    }
+
+    pub fn declare_global_variable(&mut self, name: String, ty: TyIdx) -> GlobalVariableIdx {
+        self.module.decls.declare_global_var(name, ty)
+    }
+
+    pub fn define_global_variable(&mut self, idx: GlobalVariableIdx, var: GlobalVariable) {
+        if let GlobalVariable::Const(const_) = &var {
+            if let Err(err) = const_.validate(self.module.decls.global_var(idx).ty, self.ty_storage)
+            {
+                panic!(
+                    "{}",
+                    err.display(const_, &self.module.decls, self.ty_storage)
+                );
+            }
+        }
+
+        assert!(
+            self.module.global_vars.insert(idx, var).is_none(),
+            "global variable is already defined"
+        );
     }
 }
 
