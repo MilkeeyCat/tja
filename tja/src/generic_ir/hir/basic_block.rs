@@ -39,8 +39,12 @@ impl Block {
 }
 
 pub(super) trait InstructionInserter {
-    fn insert_instr(&mut self, func: &mut Function, instr: Instruction, ty: TyIdx)
-    -> InstructionId;
+    fn insert_instr(
+        &mut self,
+        func: &mut Function,
+        instr: Instruction,
+        ty: Option<TyIdx>,
+    ) -> InstructionId;
     fn insert_terminator(&mut self, func: &mut Function, terminator: Terminator);
 }
 
@@ -75,7 +79,7 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
 
         let instr = self
             .inserter
-            .insert_instr(self.func, Instruction::Const { const_ }, ty);
+            .insert_instr(self.func, Instruction::Const { const_ }, Some(ty));
 
         self.func.instr_results(instr)[0]
     }
@@ -116,10 +120,10 @@ impl InstructionInserter for AppendInstrInserter<'_> {
         &mut self,
         func: &mut Function,
         instr: Instruction,
-        ty: TyIdx,
+        ty: Option<TyIdx>,
     ) -> InstructionId {
         let results = match &instr {
-            Instruction::Const { .. } => vec![ty],
+            Instruction::Const { .. } => vec![ty.unwrap()],
         };
         let instr = func.create_instr(instr);
 
