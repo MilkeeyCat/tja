@@ -1,6 +1,6 @@
 use crate::hir::{
-    Constant, Function, Instruction, InstructionId, Terminator, TyIdx, TyStorage, Value,
-    module::Declarations,
+    Constant, Function, Instruction, InstructionId, TargetInstruction, Terminator, TyIdx,
+    TyStorage, Value, module::Declarations,
 };
 use slotmap::new_key_type;
 
@@ -38,31 +38,32 @@ impl Block {
     }
 }
 
-pub(super) trait InstructionInserter {
+pub(crate) trait InstructionInserter<TI: TargetInstruction> {
     fn insert_instr(
         &mut self,
-        func: &mut Function,
-        instr: Instruction,
+        func: &mut Function<TI>,
+        ty_storage: &mut TyStorage,
+        instr: Instruction<TI>,
         ty: Option<TyIdx>,
     ) -> InstructionId;
-    fn insert_terminator(&mut self, func: &mut Function, terminator: Terminator);
+    fn insert_terminator(&mut self, func: &mut Function<TI>, terminator: Terminator);
 }
 
 #[allow(private_bounds)]
-pub struct Builder<'a, I: InstructionInserter> {
-    inserter: I,
-    func: &'a mut Function,
+pub struct Builder<'a, TI: TargetInstruction, I: InstructionInserter<TI>> {
+    pub(crate) inserter: I,
+    pub(crate) func: &'a mut Function<TI>,
     decls: &'a Declarations,
-    ty_storage: &'a TyStorage,
+    pub(crate) ty_storage: &'a mut TyStorage,
 }
 
 #[allow(private_bounds)]
-impl<'a, I: InstructionInserter> Builder<'a, I> {
+impl<'a, TI: TargetInstruction, I: InstructionInserter<TI>> Builder<'a, TI, I> {
     pub(super) fn new(
         inserter: I,
-        func: &'a mut Function,
+        func: &'a mut Function<TI>,
         decls: &'a Declarations,
-        ty_storage: &'a TyStorage,
+        ty_storage: &'a mut TyStorage,
     ) -> Self {
         Self {
             inserter,
@@ -77,9 +78,12 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
             panic!("{}", err.display(&const_, self.decls, self.ty_storage));
         }
 
-        let instr = self
-            .inserter
-            .insert_instr(self.func, Instruction::Const { const_ }, Some(ty));
+        let instr = self.inserter.insert_instr(
+            self.func,
+            self.ty_storage,
+            Instruction::Const { const_ },
+            Some(ty),
+        );
 
         self.func.instr_results(instr)[0]
     }
@@ -101,29 +105,26 @@ impl<'a, I: InstructionInserter> Builder<'a, I> {
 
 pub struct AppendInstrInserter<'a> {
     decls: &'a Declarations,
-    ty_storage: &'a TyStorage,
     block: BlockId,
 }
 
 impl<'a> AppendInstrInserter<'a> {
-    pub(super) fn new(decls: &'a Declarations, ty_storage: &'a TyStorage, block: BlockId) -> Self {
-        Self {
-            decls,
-            ty_storage,
-            block,
-        }
+    pub(super) fn new(decls: &'a Declarations, block: BlockId) -> Self {
+        Self { decls, block }
     }
 }
 
-impl InstructionInserter for AppendInstrInserter<'_> {
+impl<TI: TargetInstruction> InstructionInserter<TI> for AppendInstrInserter<'_> {
     fn insert_instr(
         &mut self,
-        func: &mut Function,
-        instr: Instruction,
+        func: &mut Function<TI>,
+        ty_storage: &mut TyStorage,
+        instr: Instruction<TI>,
         ty: Option<TyIdx>,
     ) -> InstructionId {
         let results = match &instr {
             Instruction::Const { .. } => vec![ty.unwrap()],
+            Instruction::Target(instr) => instr.result_tys(ty_storage, ty),
         };
         let instr = func.create_instr(instr);
 
@@ -147,23 +148,23 @@ impl InstructionInserter for AppendInstrInserter<'_> {
         instr
     }
 
-    fn insert_terminator(&mut self, func: &mut Function, terminator: Terminator) {
+    fn insert_terminator(&mut self, func: &mut Function<TI>, terminator: Terminator) {
         func.block_mut(self.block).set_terminator(terminator);
     }
 }
 
-pub(super) struct BlocksIter<'a> {
-    func: &'a Function,
+pub(super) struct BlocksIter<'a, TI: TargetInstruction> {
+    func: &'a Function<TI>,
     next: Option<BlockId>,
 }
 
-impl<'a> BlocksIter<'a> {
-    pub(super) fn new(func: &'a Function, start: Option<BlockId>) -> Self {
+impl<'a, TI: TargetInstruction> BlocksIter<'a, TI> {
+    pub(super) fn new(func: &'a Function<TI>, start: Option<BlockId>) -> Self {
         Self { func, next: start }
     }
 }
 
-impl Iterator for BlocksIter<'_> {
+impl<TI: TargetInstruction> Iterator for BlocksIter<'_, TI> {
     type Item = BlockId;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -7,18 +7,18 @@ use crate::{
 use smallvec::SmallVec;
 use std::collections::HashMap;
 
-pub(crate) struct LoweringCtx<'a> {
-    pub(crate) lir_func_builder: FunctionBuilder<'a>,
+pub(crate) struct LoweringCtx<'a, TI: hir::TargetInstruction> {
+    pub(crate) lir_func_builder: FunctionBuilder<'a, TI::LirTargetInstr>,
     pub(crate) ty_storage: &'a TyStorage,
-    pub(crate) abi: &'a dyn Abi,
+    pub(crate) abi: &'a dyn Abi<TargetInstruction = TI>,
+    pub(crate) hir_func: &'a Function<TI>,
 
-    hir_func: &'a Function,
     param_ranges: &'a HashMap<FunctionIdx, ParamRanges>,
     values: HashMap<hir::Value, SmallVec<[lir::Value; 1]>>,
 }
 
-impl LoweringCtx<'_> {
-    fn lower_value(&mut self, value: hir::Value, values: Vec<lir::Value>) {
+impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
+    pub(crate) fn lower_value(&mut self, value: hir::Value, values: Vec<lir::Value>) {
         assert!(self.values.insert(value, values.into()).is_none());
     }
 
@@ -91,6 +91,7 @@ impl LoweringCtx<'_> {
 
                 self.lower_value(value, values);
             }
+            hir::Instruction::Target(target_instr) => target_instr.lower(self, instr),
         }
     }
 
@@ -114,12 +115,12 @@ impl LoweringCtx<'_> {
     }
 }
 
-pub(super) fn lower(
-    func: &Function,
+pub(super) fn lower<TI: hir::TargetInstruction>(
+    func: &Function<TI>,
     ty_storage: &TyStorage,
     param_ranges: &HashMap<FunctionIdx, ParamRanges>,
-    abi: &dyn Abi,
-    builder: FunctionBuilder,
+    abi: &dyn Abi<TargetInstruction = TI>,
+    builder: FunctionBuilder<TI::LirTargetInstr>,
 ) {
     let mut ctx = LoweringCtx {
         hir_func: func,

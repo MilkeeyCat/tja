@@ -1,8 +1,8 @@
 use crate::{
     FunctionIdx,
     hir::{
-        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, Terminator, TyIdx,
-        TyStorage, Value,
+        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, TargetInstruction,
+        Terminator, TyIdx, TyStorage, Value,
         basic_block::{AppendInstrInserter, BlocksIter},
         instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
         module::Declarations,
@@ -25,8 +25,8 @@ impl Signature {
     }
 }
 
-struct InstructionNode {
-    instr: Instruction,
+struct InstructionNode<TI: TargetInstruction> {
+    instr: Instruction<TI>,
     prev: Option<InstructionId>,
     next: Option<InstructionId>,
 }
@@ -37,16 +37,16 @@ struct BlockNode {
     next: Option<BlockId>,
 }
 
-pub(super) struct Function {
+pub(crate) struct Function<TI: TargetInstruction> {
     pub(super) idx: FunctionIdx,
-    instrs: SlotMap<InstructionId, InstructionNode>,
+    instrs: SlotMap<InstructionId, InstructionNode<TI>>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
     blocks: SlotMap<BlockId, BlockNode>,
     first_block: Option<BlockId>,
     last_block: Option<BlockId>,
 }
 
-impl Function {
+impl<TI: TargetInstruction> Function<TI> {
     pub(super) fn new(idx: FunctionIdx) -> Self {
         Self {
             idx,
@@ -58,7 +58,7 @@ impl Function {
         }
     }
 
-    pub(super) fn create_instr(&mut self, instr: Instruction) -> InstructionId {
+    pub(super) fn create_instr(&mut self, instr: Instruction<TI>) -> InstructionId {
         self.instrs.insert(InstructionNode {
             instr,
             prev: None,
@@ -108,7 +108,7 @@ impl Function {
         );
     }
 
-    pub(super) fn instr_results(&self, instr: InstructionId) -> &[Value] {
+    pub(crate) fn instr_results(&self, instr: InstructionId) -> &[Value] {
         self.instr_results
             .get(&instr)
             .map(|values| values.as_ref())
@@ -127,11 +127,11 @@ impl Function {
         self.instrs.get(instr)?.next
     }
 
-    pub(super) fn blocks_iter<'a>(&'a self) -> BlocksIter<'a> {
+    pub(super) fn blocks_iter<'a>(&'a self) -> BlocksIter<'a, TI> {
         BlocksIter::new(self, self.first_block)
     }
 
-    pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
+    pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a, TI> {
         InstrsIter::new(self, self.blocks[block].block.first_instr)
     }
 
@@ -143,7 +143,7 @@ impl Function {
         &mut self.blocks[block].block
     }
 
-    pub(super) fn instr(&self, instr: InstructionId) -> &Instruction {
+    pub(super) fn instr(&self, instr: InstructionId) -> &Instruction<TI> {
         &self.instrs[instr].instr
     }
 
@@ -157,7 +157,7 @@ impl Function {
         decls: &'a Declarations,
         ty_storage: &'a TyStorage,
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
-    ) -> DisplayInstr<'a> {
+    ) -> DisplayInstr<'a, TI> {
         DisplayInstr::new(decls, self, ty_storage, instr_to_idx, instr)
     }
 
@@ -165,20 +165,24 @@ impl Function {
         &'a self,
         block: BlockId,
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
-    ) -> DisplayTerminator<'a> {
+    ) -> DisplayTerminator<'a, TI> {
         DisplayTerminator::new(self, instr_to_idx, block)
     }
 }
 
-pub struct Builder<'a> {
-    func: &'a mut Function,
+pub struct Builder<'a, TI: TargetInstruction> {
+    func: &'a mut Function<TI>,
     decls: &'a Declarations,
-    ty_storage: &'a TyStorage,
+    ty_storage: &'a mut TyStorage,
     current_block: Option<BlockId>,
 }
 
-impl<'a> Builder<'a> {
-    pub fn new(module: &'a mut Module, func: FunctionIdx, ty_storage: &'a TyStorage) -> Self {
+impl<'a, TI: TargetInstruction> Builder<'a, TI> {
+    pub fn new(
+        module: &'a mut Module<TI>,
+        func: FunctionIdx,
+        ty_storage: &'a mut TyStorage,
+    ) -> Self {
         Self {
             func: module.funcs.get_mut(&func).unwrap(),
             decls: &module.decls,
@@ -211,11 +215,10 @@ impl<'a> Builder<'a> {
         self.current_block = Some(block);
     }
 
-    pub fn block_builder<'s>(&'s mut self) -> BlockBuilder<'s, AppendInstrInserter<'s>> {
+    pub fn block_builder<'s>(&'s mut self) -> BlockBuilder<'s, TI, AppendInstrInserter<'s>> {
         BlockBuilder::new(
             AppendInstrInserter::new(
                 self.decls,
-                self.ty_storage,
                 self.current_block
                     .expect("basic block must be selected, consider calling `select_block` first"),
             ),
@@ -226,14 +229,18 @@ impl<'a> Builder<'a> {
     }
 }
 
-pub struct DisplayFunction<'a> {
-    module: &'a Module,
+pub struct DisplayFunction<'a, TI: TargetInstruction> {
+    module: &'a Module<TI>,
     ty_storage: &'a TyStorage,
     func: FunctionIdx,
 }
 
-impl<'a> DisplayFunction<'a> {
-    pub(super) fn new(module: &'a Module, ty_storage: &'a TyStorage, func: FunctionIdx) -> Self {
+impl<'a, TI: TargetInstruction> DisplayFunction<'a, TI> {
+    pub(super) fn new(
+        module: &'a Module<TI>,
+        ty_storage: &'a TyStorage,
+        func: FunctionIdx,
+    ) -> Self {
         Self {
             module,
             ty_storage,
@@ -242,7 +249,7 @@ impl<'a> DisplayFunction<'a> {
     }
 }
 
-impl Display for DisplayFunction<'_> {
+impl<TI: TargetInstruction> Display for DisplayFunction<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let decl = self.module.decls.function(self.func);
         let func = self.module.funcs.get(&self.func);

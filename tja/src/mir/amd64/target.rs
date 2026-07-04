@@ -1,4 +1,7 @@
-use crate::mir::{self, Abi, amd64::SysvAbi};
+use crate::{
+    generic_ir::target_instrs::Amd64Instruction,
+    mir::{self, Abi, amd64::SysvAbi},
+};
 
 pub struct Target {
     abi: SysvAbi,
@@ -14,7 +17,9 @@ impl Target {
 
 #[allow(private_interfaces)]
 impl mir::Target for Target {
-    fn abi(&self) -> &dyn Abi {
+    type TargetInstruction = Amd64Instruction;
+
+    fn abi(&self) -> &dyn Abi<TargetInstruction = Self::TargetInstruction> {
         &self.abi
     }
 }

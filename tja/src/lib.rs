@@ -3,6 +3,7 @@ pub mod mir;
 
 pub use generic_ir::hir;
 pub(crate) use generic_ir::lir;
+pub use generic_ir::target_instrs::*;
 
 use crate::{
     hir::{Module, TyStorage, lower},
@@ -23,6 +24,10 @@ define_index_type! {
 #[from(u8, i8, u16, i16, u32, i32, i64)]
 pub struct Immediate(i64);
 
-pub fn compile(module: Module, ty_storage: &TyStorage, target: &dyn Target) {
+pub fn compile<TI: hir::TargetInstruction, T: Target<TargetInstruction = TI>>(
+    module: Module<TI>,
+    ty_storage: &TyStorage,
+    target: &T,
+) {
     lower(module, ty_storage, target);
 }
