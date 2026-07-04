@@ -1,7 +1,7 @@
-mod basic_block;
+pub(crate) mod basic_block;
 pub(crate) mod constant;
 mod function;
-mod instruction;
+pub(crate) mod instruction;
 mod lower;
 mod module;
 mod ty;
@@ -11,27 +11,37 @@ pub use basic_block::{BlockId, Builder as BlockBuilder};
 pub use constant::Constant;
 use function::Function;
 pub use function::{Builder as FunctionBuilder, Signature};
-use instruction::{Instruction, InstructionId, Terminator};
+pub(crate) use instruction::{Instruction, InstructionId, Terminator};
 pub(crate) use lower::{FuncLoweringCtx, lower};
 pub use module::{Builder as ModuleBuilder, Module};
 pub use ty::{Storage as TyStorage, Ty, TyIdx};
 
-use crate::{FunctionIdx, GlobalVariableIdx};
+use crate::{FunctionIdx, GlobalVariableIdx, generic_ir::target_instrs, lir};
+use instruction::DisplayInstr;
 use module::Declarations;
 use std::{collections::BTreeMap, fmt::Display};
+
+#[allow(private_bounds, private_interfaces)]
+pub trait TargetInstruction: target_instrs::InstrName + Sized {
+    type LirTargetInstr: lir::TargetInstruction;
+
+    fn fmt(&self, ctx: &DisplayInstr<Self>, f: &mut std::fmt::Formatter<'_>);
+    fn result_tys(&self, ty_storage: &mut TyStorage, ty: Option<TyIdx>) -> Vec<TyIdx>;
+    fn lower(&self, ctx: &mut FuncLoweringCtx<'_, Self>, instr: InstructionId);
+}
 
 pub enum GlobalVariable {
     Zero,
     Const(Constant),
 }
 
-pub struct DisplayGlobalVariable<'a> {
-    module: &'a Module,
+pub struct DisplayGlobalVariable<'a, TI: TargetInstruction> {
+    module: &'a Module<TI>,
     ty_storage: &'a TyStorage,
     var: GlobalVariableIdx,
 }
 
-impl Display for DisplayGlobalVariable<'_> {
+impl<TI: TargetInstruction> Display for DisplayGlobalVariable<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let decl = self.module.decls.global_var(self.var);
         let global = self.module.global_vars.get(&self.var);

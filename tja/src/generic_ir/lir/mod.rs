@@ -1,6 +1,6 @@
-mod basic_block;
+pub(crate) mod basic_block;
 mod function;
-mod instruction;
+pub(crate) mod instruction;
 pub(crate) mod module;
 pub(crate) mod signature;
 mod ty;
@@ -10,17 +10,22 @@ use basic_block::{Block, BlockId};
 use derive_more::From;
 pub(crate) use function::Builder as FunctionBuilder;
 use function::Function;
-use instruction::{Instruction, InstructionId, Terminator};
+pub(crate) use instruction::{Instruction, InstructionId, Terminator};
 pub(crate) use module::{
     Builder as ModuleBuilder, FunctionDeclaration, GlobalVariableDeclaration, Module,
 };
 pub(crate) use signature::{ParamRanges, Signature};
 pub(crate) use ty::Ty;
 
-use crate::{FunctionIdx, GlobalVariableIdx, Immediate};
+use crate::{FunctionIdx, GlobalVariableIdx, Immediate, generic_ir::target_instrs};
+use instruction::DisplayInstr;
 use std::{collections::BTreeMap, fmt::Display};
 
-#[allow(private_interfaces)]
+pub(crate) trait TargetInstruction: target_instrs::InstrName + Sized {
+    fn fmt(&self, ctx: &DisplayInstr<Self>, f: &mut std::fmt::Formatter<'_>);
+    fn result_tys(&self, ty: Option<Ty>) -> Vec<Ty>;
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Value {
     Param {
@@ -78,12 +83,12 @@ pub(crate) enum GlobalVariable {
     Value(Vec<(usize, GlobalVariableValue)>),
 }
 
-pub(crate) struct DisplayGlobalVariable<'a> {
-    module: &'a Module,
+pub(crate) struct DisplayGlobalVariable<'a, TI: TargetInstruction> {
+    module: &'a Module<TI>,
     var: GlobalVariableIdx,
 }
 
-impl Display for DisplayGlobalVariable<'_> {
+impl<TI: TargetInstruction> Display for DisplayGlobalVariable<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let decl = &self.module.decls.global_vars[self.var];
         let global = self.module.global_vars.get(&self.var);

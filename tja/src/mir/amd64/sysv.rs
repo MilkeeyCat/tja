@@ -1,4 +1,5 @@
 use crate::{
+    generic_ir::target_instrs::Amd64Instruction,
     hir::{self, FuncLoweringCtx, TyStorage},
     lir::{self, ParamRanges, Ty},
     mir,
@@ -17,6 +18,8 @@ impl Abi {
 }
 
 impl mir::Abi for Abi {
+    type TargetInstruction = Amd64Instruction;
+
     fn field_offset(&self, ty_storage: &TyStorage, fields: &[hir::TyIdx], idx: usize) -> usize {
         fields[0..idx]
             .iter()
@@ -70,7 +73,9 @@ impl mir::Abi for Abi {
         }
     }
 
-    fn calling_conv(&self) -> &dyn mir::CallingConvention {
+    fn calling_conv(
+        &self,
+    ) -> &dyn mir::CallingConvention<TargetInstruction = Self::TargetInstruction> {
         &self.calling_conv
     }
 }
@@ -109,7 +114,7 @@ impl CallingConv {
         eightbytes: &mut [ValueClass],
         ty: hir::TyIdx,
         ty_storage: &TyStorage,
-        abi: &dyn mir::Abi,
+        abi: &dyn mir::Abi<TargetInstruction = <Self as mir::CallingConvention>::TargetInstruction>,
         offset: usize,
     ) {
         match ty_storage.get(ty) {
@@ -143,7 +148,11 @@ impl CallingConv {
         }
     }
 
-    fn ty_class(ty: hir::TyIdx, ty_storage: &TyStorage, abi: &dyn mir::Abi) -> Vec<ValueClass> {
+    fn ty_class(
+        ty: hir::TyIdx,
+        ty_storage: &TyStorage,
+        abi: &dyn mir::Abi<TargetInstruction = <Self as mir::CallingConvention>::TargetInstruction>,
+    ) -> Vec<ValueClass> {
         let size = abi.hir_ty_size(ty_storage, ty);
 
         if size > 64 {
@@ -188,9 +197,11 @@ impl CallingConv {
 }
 
 impl mir::CallingConvention for CallingConv {
+    type TargetInstruction = Amd64Instruction;
+
     fn lower_signature(
         &self,
-        abi: &dyn mir::Abi,
+        abi: &dyn mir::Abi<TargetInstruction = Self::TargetInstruction>,
         ty_storage: &TyStorage,
         sig: &hir::Signature,
     ) -> (lir::Signature, ParamRanges) {
@@ -256,7 +267,7 @@ impl mir::CallingConvention for CallingConv {
 
     fn lower_entry_block_params(
         &self,
-        ctx: &mut FuncLoweringCtx,
+        ctx: &mut FuncLoweringCtx<'_, Self::TargetInstruction>,
         hir_params: &[hir::Value],
         lir_params: &[(lir::signature::Value, lir::Value)],
         param_ranges: &ParamRanges,
@@ -334,7 +345,7 @@ impl mir::CallingConvention for CallingConv {
 
     fn lower_ret(
         &self,
-        ctx: &mut FuncLoweringCtx,
+        ctx: &mut FuncLoweringCtx<Self::TargetInstruction>,
         value: Option<(hir::Value, &[lir::signature::Value])>,
     ) {
         let values = if let Some((value, sig_values)) = value {

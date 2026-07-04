@@ -1,6 +1,9 @@
 use crate::{
     FunctionIdx, GlobalVariableIdx,
-    lir::{DisplayGlobalVariable, Function, GlobalVariable, Signature, function::DisplayFunction},
+    lir::{
+        DisplayGlobalVariable, Function, GlobalVariable, Signature, TargetInstruction,
+        function::DisplayFunction,
+    },
 };
 use index_vec::IndexVec;
 use std::{collections::HashMap, fmt::Display};
@@ -21,17 +24,18 @@ pub(crate) struct Declarations {
 }
 
 #[derive(Default)]
-pub(crate) struct Module {
+pub(crate) struct Module<TI: TargetInstruction> {
     pub(super) decls: Declarations,
     pub(super) global_vars: HashMap<GlobalVariableIdx, GlobalVariable>,
-    pub(super) funcs: HashMap<FunctionIdx, Function>,
+    pub(super) funcs: HashMap<FunctionIdx, Function<TI>>,
 }
 
-impl Module {
+impl<TI: TargetInstruction> Module<TI> {
     pub(crate) fn new(decls: Declarations) -> Self {
         Self {
             decls,
-            ..Default::default()
+            global_vars: HashMap::new(),
+            funcs: HashMap::new(),
         }
     }
 
@@ -39,26 +43,26 @@ impl Module {
         unused,
         reason = "not publicly exported but useful for debugging purposes"
     )]
-    pub(crate) fn display<'a>(&'a self) -> DisplayModule<'a> {
+    pub(crate) fn display<'a>(&'a self) -> DisplayModule<'a, TI> {
         DisplayModule(self)
     }
 
-    pub(crate) fn display_function<'a>(&'a self, func: FunctionIdx) -> DisplayFunction<'a> {
+    pub(crate) fn display_function<'a>(&'a self, func: FunctionIdx) -> DisplayFunction<'a, TI> {
         DisplayFunction::new(self, func)
     }
 
     pub(crate) fn display_global_var<'a>(
         &'a self,
         var: GlobalVariableIdx,
-    ) -> DisplayGlobalVariable<'a> {
+    ) -> DisplayGlobalVariable<'a, TI> {
         DisplayGlobalVariable { module: self, var }
     }
 }
 
-pub(crate) struct Builder<'a>(pub(crate) &'a mut Module);
+pub(crate) struct Builder<'a, TI: TargetInstruction>(pub(crate) &'a mut Module<TI>);
 
-impl<'a> Builder<'a> {
-    pub(crate) fn new(module: &'a mut Module) -> Self {
+impl<'a, TI: TargetInstruction> Builder<'a, TI> {
+    pub(crate) fn new(module: &'a mut Module<TI>) -> Self {
         Self(module)
     }
 
@@ -71,9 +75,9 @@ impl<'a> Builder<'a> {
     }
 }
 
-pub(crate) struct DisplayModule<'a>(&'a Module);
+pub(crate) struct DisplayModule<'a, TI: TargetInstruction>(&'a Module<TI>);
 
-impl Display for DisplayModule<'_> {
+impl<TI: TargetInstruction> Display for DisplayModule<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for idx in self.0.decls.global_vars.indices() {
             write!(f, "{}", self.0.display_global_var(idx))?;

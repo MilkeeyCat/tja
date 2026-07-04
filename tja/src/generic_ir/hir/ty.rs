@@ -1,4 +1,4 @@
-use crate::{lir, mir::Abi};
+use crate::{hir::TargetInstruction, lir, mir::Abi};
 use index_vec::{IndexVec, define_index_type};
 use std::{
     collections::{HashMap, hash_map::Entry},
@@ -21,11 +21,11 @@ impl TyIdx {
         LirTyIter::new(*self, ty_storage)
     }
 
-    pub(crate) fn offset_iter<'a>(
+    pub(crate) fn offset_iter<'a, TI: TargetInstruction>(
         &self,
         ty_storage: &'a Storage,
-        abi: &'a dyn Abi,
-    ) -> OffsetIter<'a> {
+        abi: &'a dyn Abi<TargetInstruction = TI>,
+    ) -> OffsetIter<'a, TI> {
         OffsetIter::new(*self, ty_storage, abi)
     }
 }
@@ -230,14 +230,14 @@ enum OffsetIterNode<'a> {
     Scalar(usize),
 }
 
-pub(crate) struct OffsetIter<'a> {
+pub(crate) struct OffsetIter<'a, TI: TargetInstruction> {
     ty_storage: &'a Storage,
-    abi: &'a dyn Abi,
+    abi: &'a dyn Abi<TargetInstruction = TI>,
     stack: Vec<OffsetIterNode<'a>>,
 }
 
-impl<'a> OffsetIter<'a> {
-    fn new(ty: TyIdx, ty_storage: &'a Storage, abi: &'a dyn Abi) -> Self {
+impl<'a, TI: TargetInstruction> OffsetIter<'a, TI> {
+    fn new(ty: TyIdx, ty_storage: &'a Storage, abi: &'a dyn Abi<TargetInstruction = TI>) -> Self {
         let mut iter = Self {
             ty_storage,
             abi,
@@ -269,7 +269,7 @@ impl<'a> OffsetIter<'a> {
     }
 }
 
-impl Iterator for OffsetIter<'_> {
+impl<TI: TargetInstruction> Iterator for OffsetIter<'_, TI> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {

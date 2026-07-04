@@ -1,6 +1,6 @@
 use crate::hir::{
     DisplayGlobalVariable, Function, FunctionIdx, GlobalVariable, GlobalVariableIdx, Signature,
-    TyIdx, TyStorage, function::DisplayFunction,
+    TargetInstruction, TyIdx, TyStorage, function::DisplayFunction,
 };
 use index_vec::IndexVec;
 use std::{
@@ -70,18 +70,22 @@ impl Declarations {
 }
 
 #[derive(Default)]
-pub struct Module {
+pub struct Module<TI: TargetInstruction> {
     pub(super) decls: Declarations,
-    pub(super) funcs: HashMap<FunctionIdx, Function>,
+    pub(super) funcs: HashMap<FunctionIdx, Function<TI>>,
     pub(super) global_vars: HashMap<GlobalVariableIdx, GlobalVariable>,
 }
 
-impl Module {
+impl<TI: TargetInstruction> Module<TI> {
     pub fn new() -> Self {
-        Default::default()
+        Self {
+            decls: Declarations::default(),
+            funcs: HashMap::new(),
+            global_vars: HashMap::new(),
+        }
     }
 
-    pub fn display<'a>(&'a self, ty_storage: &'a TyStorage) -> DisplayModule<'a> {
+    pub fn display<'a>(&'a self, ty_storage: &'a TyStorage) -> DisplayModule<'a, TI> {
         DisplayModule {
             module: self,
             ty_storage: ty_storage,
@@ -92,7 +96,7 @@ impl Module {
         &'a self,
         ty_storage: &'a TyStorage,
         func: FunctionIdx,
-    ) -> DisplayFunction<'a> {
+    ) -> DisplayFunction<'a, TI> {
         DisplayFunction::new(self, ty_storage, func)
     }
 
@@ -100,7 +104,7 @@ impl Module {
         &'a self,
         ty_storage: &'a TyStorage,
         var: GlobalVariableIdx,
-    ) -> DisplayGlobalVariable<'a> {
+    ) -> DisplayGlobalVariable<'a, TI> {
         DisplayGlobalVariable {
             module: self,
             ty_storage,
@@ -109,13 +113,13 @@ impl Module {
     }
 }
 
-pub struct Builder<'a> {
-    module: &'a mut Module,
+pub struct Builder<'a, TI: TargetInstruction> {
+    module: &'a mut Module<TI>,
     ty_storage: &'a TyStorage,
 }
 
-impl<'a> Builder<'a> {
-    pub fn new(module: &'a mut Module, ty_storage: &'a TyStorage) -> Self {
+impl<'a, TI: TargetInstruction> Builder<'a, TI> {
+    pub fn new(module: &'a mut Module<TI>, ty_storage: &'a TyStorage) -> Self {
         Self { module, ty_storage }
     }
 
@@ -155,12 +159,12 @@ impl<'a> Builder<'a> {
     }
 }
 
-pub struct DisplayModule<'a> {
-    module: &'a Module,
+pub struct DisplayModule<'a, TI: TargetInstruction> {
+    module: &'a Module<TI>,
     ty_storage: &'a TyStorage,
 }
 
-impl Display for DisplayModule<'_> {
+impl<TI: TargetInstruction> Display for DisplayModule<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for idx in self.module.decls.global_vars.indices() {
             writeln!(

@@ -10,11 +10,11 @@ use crate::{
 };
 use std::collections::HashMap;
 
-pub(crate) fn lower(
-    hir_module: hir::Module,
+pub(crate) fn lower<TI: hir::TargetInstruction>(
+    hir_module: hir::Module<TI>,
     ty_storage: &TyStorage,
-    target: &dyn Target,
-) -> lir::Module {
+    target: &dyn Target<TargetInstruction = TI>,
+) -> lir::Module<TI::LirTargetInstr> {
     let (decls, param_ranges) = lower_decls(&hir_module.decls, ty_storage, target.abi());
     let mut lir_module = lir::Module::new(decls);
     let mut builder = ModuleBuilder::new(&mut lir_module);
@@ -35,10 +35,10 @@ pub(crate) fn lower(
     lir_module
 }
 
-fn lower_decls(
+fn lower_decls<TI: hir::TargetInstruction>(
     hir_decls: &hir::module::Declarations,
     ty_storage: &TyStorage,
-    abi: &dyn Abi,
+    abi: &dyn Abi<TargetInstruction = TI>,
 ) -> (lir::module::Declarations, HashMap<FunctionIdx, ParamRanges>) {
     let (funcs, param_ranges) = hir_decls
         .funcs
@@ -71,11 +71,11 @@ fn lower_decls(
     )
 }
 
-fn lower_global_vars(
-    module: &hir::Module,
-    builder: &mut ModuleBuilder,
+fn lower_global_vars<TI: hir::TargetInstruction>(
+    module: &hir::Module<TI>,
+    builder: &mut ModuleBuilder<TI::LirTargetInstr>,
     ty_storage: &TyStorage,
-    abi: &dyn Abi,
+    abi: &dyn Abi<TargetInstruction = TI>,
 ) {
     for (&idx, var) in &module.global_vars {
         let ty = module.decls.global_vars[idx].ty;

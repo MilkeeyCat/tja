@@ -1,16 +1,16 @@
 use crate::{
     Immediate,
-    lir::{BlockId, Function, GlobalValueIdx, Value, module::Declarations},
+    lir::{BlockId, Function, GlobalValueIdx, TargetInstruction, Value, module::Declarations},
 };
 use slotmap::new_key_type;
 use smallvec::SmallVec;
 use std::{collections::BTreeMap, fmt::Display};
 
 new_key_type! {
-    pub(super) struct InstructionId;
+    pub(crate) struct InstructionId;
 }
 
-pub(super) enum Instruction {
+pub(crate) enum Instruction<TI: TargetInstruction> {
     Iconst { imm: Immediate },
     Load { ptr: Value },
     Store { ptr: Value, value: Value },
@@ -23,9 +23,10 @@ pub(super) enum Instruction {
     IntToPtr { int: Value },
     PtrToInt { ptr: Value },
     Or { lhs: Value, rhs: Value },
+    Target(TI),
 }
 
-impl Instruction {
+impl<TI: TargetInstruction> Instruction<TI> {
     fn name(&self) -> &'static str {
         match self {
             Self::Iconst { .. } => "iconst",
@@ -40,11 +41,12 @@ impl Instruction {
             Self::IntToPtr { .. } => "int_to_ptr",
             Self::PtrToInt { .. } => "ptr_to_int",
             Self::Or { .. } => "or",
+            Self::Target(instr) => instr.name(),
         }
     }
 }
 
-pub(super) enum Terminator {
+pub(crate) enum Terminator {
     Return(SmallVec<[Value; 1]>),
 }
 
@@ -56,18 +58,18 @@ impl Terminator {
     }
 }
 
-pub(super) struct InstrsIter<'a> {
-    func: &'a Function,
+pub(super) struct InstrsIter<'a, TI: TargetInstruction> {
+    func: &'a Function<TI>,
     next: Option<InstructionId>,
 }
 
-impl<'a> InstrsIter<'a> {
-    pub(super) fn new(func: &'a Function, start: Option<InstructionId>) -> Self {
+impl<'a, TI: TargetInstruction> InstrsIter<'a, TI> {
+    pub(super) fn new(func: &'a Function<TI>, start: Option<InstructionId>) -> Self {
         Self { func, next: start }
     }
 }
 
-impl Iterator for InstrsIter<'_> {
+impl<TI: TargetInstruction> Iterator for InstrsIter<'_, TI> {
     type Item = InstructionId;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -79,17 +81,17 @@ impl Iterator for InstrsIter<'_> {
     }
 }
 
-pub(super) struct DisplayInstr<'a> {
+pub(crate) struct DisplayInstr<'a, TI: TargetInstruction> {
     decls: &'a Declarations,
-    func: &'a Function,
+    func: &'a Function<TI>,
     instr_to_idx: &'a BTreeMap<InstructionId, usize>,
     instr: InstructionId,
 }
 
-impl<'a> DisplayInstr<'a> {
+impl<'a, TI: TargetInstruction> DisplayInstr<'a, TI> {
     pub(super) fn new(
         decls: &'a Declarations,
-        func: &'a Function,
+        func: &'a Function<TI>,
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
         instr: InstructionId,
     ) -> Self {
@@ -102,7 +104,7 @@ impl<'a> DisplayInstr<'a> {
     }
 }
 
-impl Display for DisplayInstr<'_> {
+impl<TI: TargetInstruction> Display for DisplayInstr<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut iter = self.func.instr_results(self.instr).iter().peekable();
         let has_results = iter.peek().is_some();
@@ -189,21 +191,22 @@ impl Display for DisplayInstr<'_> {
                     rhs.display(self.instr_to_idx),
                 )?;
             }
+            Instruction::Target(instr) => instr.fmt(self, f),
         };
 
         Ok(())
     }
 }
 
-pub(super) struct DisplayTerminator<'a> {
-    func: &'a Function,
+pub(super) struct DisplayTerminator<'a, TI: TargetInstruction> {
+    func: &'a Function<TI>,
     instr_to_idx: &'a BTreeMap<InstructionId, usize>,
     block: BlockId,
 }
 
-impl<'a> DisplayTerminator<'a> {
+impl<'a, TI: TargetInstruction> DisplayTerminator<'a, TI> {
     pub(super) fn new(
-        func: &'a Function,
+        func: &'a Function<TI>,
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
         block: BlockId,
     ) -> Self {
@@ -215,7 +218,7 @@ impl<'a> DisplayTerminator<'a> {
     }
 }
 
-impl Display for DisplayTerminator<'_> {
+impl<TI: TargetInstruction> Display for DisplayTerminator<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let terminator = self.func.block(self.block).terminator();
 

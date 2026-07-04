@@ -1,7 +1,8 @@
 use crate::{
     FunctionIdx,
     lir::{
-        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, Ty, Value,
+        Block, BlockBuilder, BlockId, Instruction, InstructionId, Module, TargetInstruction, Ty,
+        Value,
         basic_block::{AppendInstrInserter, BlocksIter},
         instruction::{DisplayInstr, DisplayTerminator, InstrsIter},
         module::Declarations,
@@ -14,8 +15,8 @@ use std::{
     fmt::Display,
 };
 
-struct InstructionNode {
-    instr: Instruction,
+struct InstructionNode<TI: TargetInstruction> {
+    instr: Instruction<TI>,
     prev: Option<InstructionId>,
     next: Option<InstructionId>,
 }
@@ -26,16 +27,16 @@ struct BlockNode {
     next: Option<BlockId>,
 }
 
-pub(crate) struct Function {
+pub(crate) struct Function<TI: TargetInstruction> {
     pub(crate) idx: FunctionIdx,
-    instrs: SlotMap<InstructionId, InstructionNode>,
+    instrs: SlotMap<InstructionId, InstructionNode<TI>>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
     blocks: SlotMap<BlockId, BlockNode>,
     first_block: Option<BlockId>,
     last_block: Option<BlockId>,
 }
 
-impl Function {
+impl<TI: TargetInstruction> Function<TI> {
     pub(super) fn new(idx: FunctionIdx) -> Self {
         Self {
             idx,
@@ -47,7 +48,7 @@ impl Function {
         }
     }
 
-    pub(super) fn create_instr(&mut self, instr: Instruction) -> InstructionId {
+    pub(super) fn create_instr(&mut self, instr: Instruction<TI>) -> InstructionId {
         self.instrs.insert(InstructionNode {
             instr,
             prev: None,
@@ -97,7 +98,7 @@ impl Function {
         );
     }
 
-    pub(super) fn instr_results(&self, instr: InstructionId) -> &[Value] {
+    pub(crate) fn instr_results(&self, instr: InstructionId) -> &[Value] {
         self.instr_results
             .get(&instr)
             .map(|values| values.as_ref())
@@ -116,11 +117,11 @@ impl Function {
         self.instrs.get(instr)?.next
     }
 
-    pub(super) fn blocks_iter<'a>(&'a self) -> BlocksIter<'a> {
+    pub(super) fn blocks_iter<'a>(&'a self) -> BlocksIter<'a, TI> {
         BlocksIter::new(self, self.first_block)
     }
 
-    pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a> {
+    pub(super) fn instrs_iter<'a>(&'a self, block: BlockId) -> InstrsIter<'a, TI> {
         InstrsIter::new(self, self.blocks[block].block.first_instr)
     }
 
@@ -136,7 +137,7 @@ impl Function {
         &mut self.blocks[block].block
     }
 
-    pub(super) fn instr(&self, instr: InstructionId) -> &Instruction {
+    pub(super) fn instr(&self, instr: InstructionId) -> &Instruction<TI> {
         &self.instrs[instr].instr
     }
 
@@ -145,7 +146,7 @@ impl Function {
         instr: InstructionId,
         decls: &'a Declarations,
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
-    ) -> DisplayInstr<'a> {
+    ) -> DisplayInstr<'a, TI> {
         DisplayInstr::new(decls, self, instr_to_idx, instr)
     }
 
@@ -153,19 +154,19 @@ impl Function {
         &'a self,
         block: BlockId,
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
-    ) -> DisplayTerminator<'a> {
+    ) -> DisplayTerminator<'a, TI> {
         DisplayTerminator::new(self, instr_to_idx, block)
     }
 }
 
-pub(crate) struct Builder<'a> {
-    pub(crate) func: &'a mut Function,
+pub(crate) struct Builder<'a, TI: TargetInstruction> {
+    pub(crate) func: &'a mut Function<TI>,
     pub(crate) decls: &'a Declarations,
     current_block: Option<BlockId>,
 }
 
-impl<'a> Builder<'a> {
-    pub(crate) fn new(module: &'a mut Module, func: FunctionIdx) -> Self {
+impl<'a, TI: TargetInstruction> Builder<'a, TI> {
+    pub(crate) fn new(module: &'a mut Module<TI>, func: FunctionIdx) -> Self {
         Self {
             func: module.funcs.get_mut(&func).unwrap(),
             decls: &module.decls,
@@ -198,7 +199,7 @@ impl<'a> Builder<'a> {
         self.current_block = Some(block);
     }
 
-    pub(crate) fn block_builder<'s>(&'s mut self) -> BlockBuilder<'s, AppendInstrInserter<'s>> {
+    pub(crate) fn block_builder<'s>(&'s mut self) -> BlockBuilder<'s, TI, AppendInstrInserter<'s>> {
         BlockBuilder::new(
             AppendInstrInserter::new(
                 self.decls,
@@ -211,18 +212,18 @@ impl<'a> Builder<'a> {
     }
 }
 
-pub(crate) struct DisplayFunction<'a> {
-    module: &'a Module,
+pub(crate) struct DisplayFunction<'a, TI: TargetInstruction> {
+    module: &'a Module<TI>,
     func: FunctionIdx,
 }
 
-impl<'a> DisplayFunction<'a> {
-    pub(super) fn new(module: &'a Module, func: FunctionIdx) -> Self {
+impl<'a, TI: TargetInstruction> DisplayFunction<'a, TI> {
+    pub(super) fn new(module: &'a Module<TI>, func: FunctionIdx) -> Self {
         Self { module, func }
     }
 }
 
-impl Display for DisplayFunction<'_> {
+impl<TI: TargetInstruction> Display for DisplayFunction<'_, TI> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let decl = &self.module.decls.funcs[self.func];
         let func = self.module.funcs.get(&self.func);
