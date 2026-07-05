@@ -1,3 +1,5 @@
+mod register;
+mod register_class;
 mod sysv;
 mod target;
 

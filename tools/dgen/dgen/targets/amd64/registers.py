@@ -1,4 +1,4 @@
-from dgen.base.register import Register
+from dgen.register import Register
 
 AL = Register("al", 8, [])
 AH = Register("ah", 8, [])

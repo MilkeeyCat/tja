@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import IntFlag
 
-from dgen.base.register import Register as PhysicalRegister
+from dgen.register import Register as PhysicalRegister
 
 
 class Generic:

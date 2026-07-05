@@ -1,4 +1,4 @@
-from dgen.base.register_class import RegisterClass
+from dgen.register_class import RegisterClass
 
 from .registers import *
 
