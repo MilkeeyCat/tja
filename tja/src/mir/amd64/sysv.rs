@@ -339,7 +339,7 @@ impl mir::CallingConvention for CallingConv {
                 _ => unreachable!(),
             }
 
-            ctx.lower_param(*hir_param, param_values);
+            ctx.lower_value(*hir_param, param_values);
         }
     }
 

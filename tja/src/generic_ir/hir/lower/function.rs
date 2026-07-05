@@ -22,12 +22,6 @@ impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
         assert!(self.values.insert(value, values.into()).is_none());
     }
 
-    pub(crate) fn lower_param(&mut self, value: hir::Value, values: Vec<lir::Value>) {
-        assert!(matches!(value, hir::Value::Param { .. }));
-
-        self.lower_value(value, values);
-    }
-
     pub(crate) fn lowered_value(&self, value: hir::Value) -> &[lir::Value] {
         &self.values[&value]
     }
