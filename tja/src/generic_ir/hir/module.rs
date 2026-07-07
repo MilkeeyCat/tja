@@ -1,6 +1,9 @@
-use crate::hir::{
-    DisplayGlobalVariable, Function, FunctionIdx, GlobalVariable, GlobalVariableIdx, Signature,
-    TargetInstruction, TyIdx, TyStorage, function::DisplayFunction,
+use crate::{
+    Amd64Instruction, DefaultInstruction,
+    hir::{
+        DisplayGlobalVariable, Function, FunctionIdx, GlobalVariable, GlobalVariableIdx, Signature,
+        TargetInstruction, TyIdx, TyStorage, function::DisplayFunction,
+    },
 };
 use index_vec::IndexVec;
 use std::{
@@ -111,6 +114,40 @@ impl<TI: TargetInstruction> Module<TI> {
             var,
         }
     }
+
+    fn convert<TI2: TargetInstruction + From<TI>>(self) -> Module<TI2> {
+        Module {
+            decls: self.decls,
+            funcs: self
+                .funcs
+                .into_iter()
+                .map(|(idx, func)| (idx, func.convert()))
+                .collect(),
+            global_vars: self.global_vars,
+        }
+    }
+}
+
+macro_rules! impl_from_default_instr {
+    ($($ty:ty),+ $(,)*) => {
+        $(
+            impl From<DefaultInstruction> for $ty {
+                fn from(_instr: DefaultInstruction) -> Self {
+                    unreachable!();
+                }
+            }
+
+            impl From<Module<DefaultInstruction>> for Module<$ty> {
+                fn from(module: Module<DefaultInstruction>) -> Self {
+                    module.convert()
+                }
+            }
+        )+
+    };
+}
+
+impl_from_default_instr! {
+    Amd64Instruction,
 }
 
 pub struct Builder<'a, TI: TargetInstruction> {

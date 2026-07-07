@@ -24,10 +24,10 @@ define_index_type! {
 #[from(u8, i8, u16, i16, u32, i32, i64)]
 pub struct Immediate(i64);
 
-pub fn compile<TI: hir::TargetInstruction, T: Target<TargetInstruction = TI>>(
-    module: Module<TI>,
+pub fn compile<T: Target, M: Into<Module<T::TargetInstruction>>>(
+    module: M,
     ty_storage: &TyStorage,
     target: &T,
 ) {
-    lower(module, ty_storage, target);
+    lower(module.into(), ty_storage, target);
 }

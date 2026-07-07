@@ -10,11 +10,11 @@ use crate::{
 };
 use std::collections::HashMap;
 
-pub(crate) fn lower<TI: hir::TargetInstruction>(
-    hir_module: hir::Module<TI>,
+pub(crate) fn lower<T: Target>(
+    hir_module: hir::Module<T::TargetInstruction>,
     ty_storage: &TyStorage,
-    target: &dyn Target<TargetInstruction = TI>,
-) -> lir::Module<TI::LirTargetInstr> {
+    target: &T,
+) -> lir::Module<<T::TargetInstruction as hir::TargetInstruction>::LirTargetInstr> {
     let (decls, param_ranges) = lower_decls(&hir_module.decls, ty_storage, target.abi());
     let mut lir_module = lir::Module::new(decls);
     let mut builder = ModuleBuilder::new(&mut lir_module);

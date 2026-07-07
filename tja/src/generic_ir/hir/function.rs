@@ -8,7 +8,7 @@ use crate::{
         module::Declarations,
     },
 };
-use slotmap::SlotMap;
+use slotmap::{SecondaryMap, SlotMap};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
@@ -39,7 +39,14 @@ struct BlockNode {
 
 pub(crate) struct Function<TI: TargetInstruction> {
     pub(super) idx: FunctionIdx,
-    instrs: SlotMap<InstructionId, InstructionNode<TI>>,
+    // NOTE: it's not an elegant solution, but there has to be separate
+    // `SlotMap` & `SecondaryMap`. `SlotMap` doesn't support mapping values
+    // while preserving keys, so it's pain in the ass to implement
+    // `Function::convert`. To make everything easier `Function::instr_ids` is
+    // used only for generating keys, and `Function::instrs` acts as a map, this
+    // way it's possible to keep using already generated keys
+    instr_ids: SlotMap<InstructionId, ()>,
+    instrs: SecondaryMap<InstructionId, InstructionNode<TI>>,
     instr_results: HashMap<InstructionId, Vec<Value>>,
     blocks: SlotMap<BlockId, BlockNode>,
     first_block: Option<BlockId>,
@@ -50,7 +57,8 @@ impl<TI: TargetInstruction> Function<TI> {
     pub(super) fn new(idx: FunctionIdx) -> Self {
         Self {
             idx,
-            instrs: SlotMap::with_key(),
+            instr_ids: SlotMap::with_key(),
+            instrs: SecondaryMap::new(),
             instr_results: HashMap::new(),
             blocks: SlotMap::with_key(),
             first_block: None,
@@ -59,11 +67,22 @@ impl<TI: TargetInstruction> Function<TI> {
     }
 
     pub(super) fn create_instr(&mut self, instr: Instruction<TI>) -> InstructionId {
-        self.instrs.insert(InstructionNode {
-            instr,
-            prev: None,
-            next: None,
-        })
+        let id = self.instr_ids.insert(());
+
+        assert!(
+            self.instrs
+                .insert(
+                    id,
+                    InstructionNode {
+                        instr,
+                        prev: None,
+                        next: None,
+                    },
+                )
+                .is_none()
+        );
+
+        id
     }
 
     pub(super) fn create_block(&mut self, params: Vec<TyIdx>) -> BlockId {
@@ -167,6 +186,36 @@ impl<TI: TargetInstruction> Function<TI> {
         instr_to_idx: &'a BTreeMap<InstructionId, usize>,
     ) -> DisplayTerminator<'a, TI> {
         DisplayTerminator::new(self, instr_to_idx, block)
+    }
+
+    pub(super) fn convert<TI2: TargetInstruction + From<TI>>(self) -> Function<TI2> {
+        let instrs = self
+            .instrs
+            .into_iter()
+            .map(|(id, InstructionNode { instr, prev, next })| {
+                (
+                    id,
+                    InstructionNode {
+                        instr: match instr {
+                            Instruction::Const { const_ } => Instruction::Const { const_ },
+                            Instruction::Target(instr) => Instruction::Target(instr.into()),
+                        },
+                        prev,
+                        next,
+                    },
+                )
+            })
+            .collect();
+
+        Function {
+            idx: self.idx,
+            instr_ids: self.instr_ids,
+            instrs,
+            instr_results: self.instr_results,
+            blocks: self.blocks,
+            first_block: self.first_block,
+            last_block: self.last_block,
+        }
     }
 }
 
