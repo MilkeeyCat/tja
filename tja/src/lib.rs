@@ -6,7 +6,7 @@ pub(crate) use generic_ir::lir;
 pub use generic_ir::target_instrs::*;
 
 use crate::{
-    hir::{Module, TyStorage, lower},
+    hir::{Module, TyStorage},
     mir::Target,
 };
 use derive_more::{Display, From};
@@ -29,5 +29,7 @@ pub fn compile<T: Target, M: Into<Module<T::TargetInstruction>>>(
     ty_storage: &TyStorage,
     target: &T,
 ) {
-    lower(module.into(), ty_storage, target);
+    let module = hir::lower(module.into(), ty_storage, target);
+
+    lir::lower(target, module);
 }
