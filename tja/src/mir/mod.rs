@@ -1,13 +1,25 @@
 pub mod amd64;
+mod basic_block;
+mod function;
+mod instruction;
+mod module;
+
+use basic_block::{Block, BlockId};
+use function::Function;
+pub(crate) use instruction::Instruction;
+use instruction::InstructionId;
+pub(crate) use module::Module;
 
 use crate::{
     hir::{self, FuncLoweringCtx, TargetInstruction, TyStorage},
     lir::{self, ParamRanges},
 };
+use index_vec::define_index_type;
 
-#[allow(private_interfaces)]
+#[allow(private_interfaces, private_bounds)]
 pub trait Target {
     type TargetInstruction: TargetInstruction;
+    type Instr: Instruction;
 
     fn abi(&self) -> &dyn Abi<TargetInstruction = Self::TargetInstruction>;
 }
@@ -44,4 +56,15 @@ pub(crate) trait CallingConvention {
         ctx: &mut FuncLoweringCtx<'_, Self::TargetInstruction>,
         value: Option<(hir::Value, &[lir::signature::Value])>,
     );
+}
+
+define_index_type! {
+    struct VregIdx = usize;
+}
+
+pub(crate) trait PhysicalRegister: std::fmt::Display {}
+
+pub(crate) enum Register<PR: PhysicalRegister> {
+    Physical(PR),
+    Virtual(VregIdx),
 }

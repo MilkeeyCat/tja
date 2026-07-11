@@ -1,6 +1,7 @@
 pub(crate) mod basic_block;
 mod function;
 pub(crate) mod instruction;
+mod lower;
 pub(crate) mod module;
 pub(crate) mod signature;
 mod ty;
@@ -11,6 +12,7 @@ use derive_more::From;
 pub(crate) use function::Builder as FunctionBuilder;
 use function::Function;
 pub(crate) use instruction::{Instruction, InstructionId, Terminator};
+pub(crate) use lower::lower;
 pub(crate) use module::{
     Builder as ModuleBuilder, FunctionDeclaration, GlobalVariableDeclaration, Module,
 };
