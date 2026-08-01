@@ -291,7 +291,7 @@ impl mir::CallingConvention for CallingConv {
                 ] => {
                     assert_eq!(ctx.abi.hir_ty_size(ctx.ty_storage, ty), *size);
 
-                    let mut builder = ctx.lir_func_builder.block_builder();
+                    let mut builder = ctx.lir_func_cursor.block_builder();
 
                     for (offset, ty) in ty
                         .offset_iter(ctx.ty_storage, ctx.abi)
@@ -318,14 +318,14 @@ impl mir::CallingConvention for CallingConv {
                         let relative_offset = offset % size;
                         let value = if ctx.abi.lir_ty_size(ty) == size {
                             if ty == Ty::PTR {
-                                ctx.lir_func_builder.block_builder().int_to_ptr(*value)
+                                ctx.lir_func_cursor.block_builder().int_to_ptr(*value)
                             } else {
                                 assert_eq!(ty, value.ty());
 
                                 *value
                             }
                         } else {
-                            let mut builder = ctx.lir_func_builder.block_builder();
+                            let mut builder = ctx.lir_func_cursor.block_builder();
                             let shift_amount =
                                 builder.iconst(u8::try_from(relative_offset * 8).unwrap(), Ty::I8);
                             let shifted = builder.lshr(*value, shift_amount);
@@ -352,17 +352,17 @@ impl mir::CallingConvention for CallingConv {
             let ty = value.ty();
             let values = ctx.lowered_value(value).to_vec();
 
-            if ctx.lir_func_builder.decls.funcs[ctx.lir_func_builder.func.idx]
+            if ctx.lir_func_cursor.decls.funcs[ctx.lir_func_cursor.func.idx]
                 .sig
                 .params[0]
                 .kind
                 == lir::signature::ValueKind::StructReturn
             {
                 let base = ctx
-                    .lir_func_builder
+                    .lir_func_cursor
                     .func
-                    .block_params(ctx.lir_func_builder.func.entry_block().unwrap())[0];
-                let mut builder = ctx.lir_func_builder.block_builder();
+                    .block_params(ctx.lir_func_cursor.func.entry_block().unwrap())[0];
+                let mut builder = ctx.lir_func_cursor.block_builder();
 
                 for (offset, value) in ty.offset_iter(ctx.ty_storage, ctx.abi).zip(values) {
                     let offset = builder.iconst(i64::try_from(offset).unwrap(), Ty::I64);
@@ -386,7 +386,7 @@ impl mir::CallingConvention for CallingConv {
                 while let Some(((value, offset), ty)) = iter.next() {
                     let value = if ctx.abi.lir_ty_size(ty) == size {
                         if ty == Ty::PTR {
-                            ctx.lir_func_builder
+                            ctx.lir_func_cursor
                                 .block_builder()
                                 .ptr_to_int(value, Ty::I64)
                         } else {
@@ -396,7 +396,7 @@ impl mir::CallingConvention for CallingConv {
                         }
                     } else {
                         let relative_offset = offset % size;
-                        let mut builder = ctx.lir_func_builder.block_builder();
+                        let mut builder = ctx.lir_func_cursor.block_builder();
                         let extended = builder.zext(value, ret_ty);
                         let shift_amount =
                             builder.iconst(u8::try_from(relative_offset * 8).unwrap(), Ty::I8);
@@ -404,7 +404,7 @@ impl mir::CallingConvention for CallingConv {
                         builder.shl(extended, shift_amount)
                     };
                     let value = ret_value.map_or(value, |ret_value| {
-                        ctx.lir_func_builder.block_builder().or(ret_value, value)
+                        ctx.lir_func_cursor.block_builder().or(ret_value, value)
                     });
                     let next_offset = iter.peek().map(|&((_, offset), _)| offset);
 
@@ -428,7 +428,7 @@ impl mir::CallingConvention for CallingConv {
             Vec::new()
         };
 
-        ctx.lir_func_builder.block_builder().ret(values);
+        ctx.lir_func_cursor.block_builder().ret(values);
     }
 }
 

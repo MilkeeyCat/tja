@@ -8,7 +8,7 @@ mod ty;
 pub(crate) use basic_block::Builder as BlockBuilder;
 use basic_block::{Block, BlockId};
 use derive_more::From;
-pub(crate) use function::Builder as FunctionBuilder;
+pub(crate) use function::Cursor as FunctionCursor;
 use function::Function;
 pub(crate) use instruction::{Instruction, InstructionId, Terminator};
 pub(crate) use module::{

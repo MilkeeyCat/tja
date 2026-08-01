@@ -1,14 +1,14 @@
 use crate::{
     FunctionIdx,
     hir::{self, Function, TyStorage, constant::ScalarConst},
-    lir::{self, FunctionBuilder, ParamRanges},
+    lir::{self, FunctionCursor, ParamRanges},
     mir::Abi,
 };
 use smallvec::SmallVec;
 use std::collections::HashMap;
 
 pub(crate) struct LoweringCtx<'a, TI: hir::TargetInstruction> {
-    pub(crate) lir_func_builder: FunctionBuilder<'a, TI::LirTargetInstr>,
+    pub(crate) lir_func_cursor: FunctionCursor<'a, TI::LirTargetInstr>,
     pub(crate) ty_storage: &'a TyStorage,
     pub(crate) abi: &'a dyn Abi<TargetInstruction = TI>,
     pub(crate) hir_func: &'a Function<TI>,
@@ -28,9 +28,9 @@ impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
 
     fn lower_block(&mut self, block: hir::BlockId) {
         let func_idx = self.hir_func.idx;
-        let is_entry_block = self.lir_func_builder.func.entry_block().is_none();
+        let is_entry_block = self.lir_func_cursor.func.entry_block().is_none();
         let params = if is_entry_block {
-            self.lir_func_builder.decls.funcs[func_idx]
+            self.lir_func_cursor.decls.funcs[func_idx]
                 .sig
                 .params
                 .iter()
@@ -44,20 +44,20 @@ impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
                 .flatten()
                 .collect()
         };
-        let lir_block = self.lir_func_builder.create_block(params);
+        let lir_block = self.lir_func_cursor.create_block(params);
 
-        self.lir_func_builder.select_block(lir_block);
+        self.lir_func_cursor.select_block(lir_block);
 
         if is_entry_block {
             self.abi.calling_conv().lower_entry_block_params(
                 self,
                 self.hir_func.block_params(block),
-                &self.lir_func_builder.decls.funcs[func_idx]
+                &self.lir_func_cursor.decls.funcs[func_idx]
                     .sig
                     .params
                     .clone()
                     .into_iter()
-                    .zip(self.lir_func_builder.func.block_params(lir_block).to_vec())
+                    .zip(self.lir_func_cursor.func.block_params(lir_block).to_vec())
                     .collect::<Vec<_>>(),
                 &self.param_ranges[&func_idx],
             );
@@ -68,7 +68,7 @@ impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
         match self.hir_func.instr(instr) {
             hir::Instruction::Const { const_ } => {
                 let value = self.hir_func.instr_results(instr)[0];
-                let mut builder = self.lir_func_builder.block_builder();
+                let mut builder = self.lir_func_cursor.block_builder();
                 let values = const_
                     .scalar_iter()
                     .zip(value.ty().lir_ty_iter(self.ty_storage))
@@ -97,7 +97,7 @@ impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
                     value.map(|value| {
                         (
                             value,
-                            self.lir_func_builder.decls.funcs[self.hir_func.idx]
+                            self.lir_func_cursor.decls.funcs[self.hir_func.idx]
                                 .sig
                                 .returns
                                 .as_slice(),
@@ -114,14 +114,14 @@ pub(super) fn lower<TI: hir::TargetInstruction>(
     ty_storage: &TyStorage,
     param_ranges: &HashMap<FunctionIdx, ParamRanges>,
     abi: &dyn Abi<TargetInstruction = TI>,
-    builder: FunctionBuilder<TI::LirTargetInstr>,
+    cursor: FunctionCursor<TI::LirTargetInstr>,
 ) {
     let mut ctx = LoweringCtx {
         hir_func: func,
         ty_storage,
         param_ranges,
         abi,
-        lir_func_builder: builder,
+        lir_func_cursor: cursor,
         values: HashMap::new(),
     };
 

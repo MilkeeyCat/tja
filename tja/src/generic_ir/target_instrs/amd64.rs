@@ -37,7 +37,7 @@ impl hir::TargetInstruction for Instruction {
         match self {
             Self::Rdtsc => {
                 let value = ctx.hir_func.instr_results(instr)[0];
-                let results = ctx.lir_func_builder.block_builder().rdtsc();
+                let results = ctx.lir_func_cursor.block_builder().rdtsc();
 
                 ctx.lower_value(value, results.to_vec())
             }

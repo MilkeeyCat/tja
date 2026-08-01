@@ -219,14 +219,14 @@ impl<TI: TargetInstruction> Function<TI> {
     }
 }
 
-pub struct Builder<'a, TI: TargetInstruction> {
+pub struct Cursor<'a, TI: TargetInstruction> {
     func: &'a mut Function<TI>,
     decls: &'a Declarations,
     ty_storage: &'a mut TyStorage,
     current_block: Option<BlockId>,
 }
 
-impl<'a, TI: TargetInstruction> Builder<'a, TI> {
+impl<'a, TI: TargetInstruction> Cursor<'a, TI> {
     pub fn new(
         module: &'a mut Module<TI>,
         func: FunctionIdx,

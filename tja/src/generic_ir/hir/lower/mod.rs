@@ -5,7 +5,7 @@ pub(crate) use function::LoweringCtx as FuncLoweringCtx;
 use crate::{
     FunctionIdx,
     hir::{self, TyStorage, constant::ScalarConst},
-    lir::{self, FunctionBuilder, ModuleBuilder, ParamRanges},
+    lir::{self, FunctionCursor, ModuleBuilder, ParamRanges},
     mir::{Abi, Target},
 };
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ pub(crate) fn lower<T: Target>(
             ty_storage,
             &param_ranges,
             target.abi(),
-            FunctionBuilder::new(builder.0, idx),
+            FunctionCursor::new(builder.0, idx),
         );
     }
 

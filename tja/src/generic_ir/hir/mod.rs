@@ -10,7 +10,7 @@ use basic_block::Block;
 pub use basic_block::{BlockId, Builder as BlockBuilder};
 pub use constant::Constant;
 use function::Function;
-pub use function::{Builder as FunctionBuilder, Signature};
+pub use function::{Cursor as FunctionCursor, Signature};
 pub(crate) use instruction::{Instruction, InstructionId, Terminator};
 pub(crate) use lower::{FuncLoweringCtx, lower};
 pub use module::{Builder as ModuleBuilder, Module};

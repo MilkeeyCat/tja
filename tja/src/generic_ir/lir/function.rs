@@ -159,13 +159,13 @@ impl<TI: TargetInstruction> Function<TI> {
     }
 }
 
-pub(crate) struct Builder<'a, TI: TargetInstruction> {
+pub(crate) struct Cursor<'a, TI: TargetInstruction> {
     pub(crate) func: &'a mut Function<TI>,
     pub(crate) decls: &'a Declarations,
     current_block: Option<BlockId>,
 }
 
-impl<'a, TI: TargetInstruction> Builder<'a, TI> {
+impl<'a, TI: TargetInstruction> Cursor<'a, TI> {
     pub(crate) fn new(module: &'a mut Module<TI>, func: FunctionIdx) -> Self {
         Self {
             func: module.funcs.get_mut(&func).unwrap(),
