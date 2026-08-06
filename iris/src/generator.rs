@@ -5,18 +5,18 @@ use crate::{
 use indexmap::{IndexSet, indexset};
 use std::fmt::{Arguments, Write};
 
-macro_rules! write_indended {
+macro_rules! write_indented {
     ($dst:expr, $($arg:tt)*) => {
-        $dst.write_indended(format_args!($($arg)*))
+        $dst.write_indented(format_args!($($arg)*))
     };
 }
 
-macro_rules! writeln_indended {
+macro_rules! writeln_indented {
     ($dst:expr $(,)?) => {
-        write_indended!($dst, "\n")
+        write_indented!($dst, "\n")
     };
     ($dst:expr, $($arg:tt)*) => {
-        $dst.write_indended_nl(format_args!($($arg)*))
+        $dst.write_indented_nl(format_args!($($arg)*))
     };
 }
 
@@ -32,13 +32,13 @@ impl<'a, W: Write> IndentBuffer<W> {
 }
 
 impl<W: Write> IndentBuffer<W> {
-    fn write_indended(&mut self, args: Arguments<'_>) -> std::fmt::Result {
+    fn write_indented(&mut self, args: Arguments<'_>) -> std::fmt::Result {
         write!(self.buf, "{}", " ".repeat(self.indent))?;
 
         self.buf.write_fmt(args)
     }
 
-    fn write_indended_nl(&mut self, args: Arguments<'_>) -> std::fmt::Result {
+    fn write_indented_nl(&mut self, args: Arguments<'_>) -> std::fmt::Result {
         write!(self.buf, "{}", " ".repeat(self.indent))?;
         self.buf.write_fmt(args)?;
 
@@ -99,7 +99,7 @@ impl<'a, W: Write> ModuleGenerator<'a, W> {
                         generator.ty_name(decl.ret_ty)
                     };
 
-                    writeln_indended!(
+                    writeln_indented!(
                         generator.buf,
                         "fn {}(&mut self, {}) -> {};",
                         ctor.name,
@@ -124,7 +124,7 @@ impl<'a, W: Write> ModuleGenerator<'a, W> {
                         ret_tys = format!("Option<{}>", ret_tys);
                     }
 
-                    writeln_indended!(
+                    writeln_indented!(
                         generator.buf,
                         "fn {}(&mut self, p: {}) -> {};",
                         etor.name,
@@ -169,7 +169,7 @@ impl<'a, W: Write> ModuleGenerator<'a, W> {
 
             if !all_paths_return_value(&ruleset.tree) {
                 writeln!(generator.buf)?;
-                writeln_indended!(generator.buf, "unreachable!();")?;
+                writeln_indented!(generator.buf, "unreachable!();")?;
             }
 
             Ok(())
@@ -216,7 +216,7 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
 
         match exprs.next() {
             Some(expr) => {
-                write_indended!(self.buf, "let v{} = ", expr.index())?;
+                write_indented!(self.buf, "let v{} = ", expr.index())?;
                 self.generate_expr(expr)?;
                 writeln!(self.buf, ";")?;
 
@@ -274,16 +274,16 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
                 .collect();
 
                 self.generate_lets(&exprs, |generator| {
-                    write_indended!(generator.buf, "return ")?;
+                    write_indented!(generator.buf, "return ")?;
                     generator.generate_expr(*expr)?;
                     writeln!(generator.buf, ";")
                 })
             }
             Decision::Fail => {
                 if self.module.decls[self.ruleset.decl].partial {
-                    writeln_indended!(self.buf, "return None;")
+                    writeln_indented!(self.buf, "return None;")
                 } else {
-                    writeln_indended!(self.buf, "panic!(\"no rule matched\");")
+                    writeln_indented!(self.buf, "panic!(\"no rule matched\");")
                 }
             }
             Decision::If {
@@ -291,7 +291,7 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
                 then,
                 otherwise,
             } => self.generate_lets(&condition.decompose(self), |generator| {
-                write_indended!(generator.buf, "if ")?;
+                write_indented!(generator.buf, "if ")?;
 
                 let exprs_to_bind: &IndexSet<ExprIdx> = match condition {
                     Condition::Eq(lhs, rhs) => {
@@ -320,11 +320,11 @@ impl<'a, W: Write> RuleSetGenerator<'a, W> {
                 })?;
 
                 if let Some(otherwise) = otherwise {
-                    writeln_indended!(generator.buf, "}} else {{")?;
+                    writeln_indented!(generator.buf, "}} else {{")?;
                     generator.with_indent(|generator| generator.generate_decision(otherwise))?;
                 }
 
-                writeln_indended!(generator.buf, "}}")
+                writeln_indented!(generator.buf, "}}")
             }),
             Decision::Let { expr, decision } => {
                 let exprs = std::iter::chain(
