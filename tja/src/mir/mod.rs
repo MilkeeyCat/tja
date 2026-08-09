@@ -5,11 +5,19 @@ use crate::{
     lir::{self, ParamRanges},
 };
 
-#[allow(private_interfaces)]
-pub trait Target {
-    type TargetInstruction: TargetInstruction;
+pub(crate) trait InternalTarget {
+    type GenericInstr: TargetInstruction;
 
-    fn abi(&self) -> &dyn Abi<TargetInstruction = Self::TargetInstruction>;
+    fn abi(&self) -> &dyn Abi<TargetInstruction = Self::GenericInstr>;
+}
+
+#[allow(private_bounds)]
+pub trait Target: InternalTarget<GenericInstr = Self::TargetInstruction> {
+    type TargetInstruction: TargetInstruction;
+}
+
+impl<TI: TargetInstruction, IT: InternalTarget<GenericInstr = TI>> Target for IT {
+    type TargetInstruction = TI;
 }
 
 pub(crate) trait Abi {

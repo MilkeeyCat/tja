@@ -38,7 +38,7 @@ impl Block {
     }
 }
 
-pub(crate) trait InstructionInserter<TI: TargetInstruction> {
+pub(crate) trait InternalInstructionInserter<TI: TargetInstruction> {
     fn insert_instr(
         &mut self,
         func: &mut Function<TI>,
@@ -50,6 +50,10 @@ pub(crate) trait InstructionInserter<TI: TargetInstruction> {
 }
 
 #[allow(private_bounds)]
+pub trait InstructionInserter<TI: TargetInstruction>: InternalInstructionInserter<TI> {}
+
+impl<TI: TargetInstruction, I: InternalInstructionInserter<TI>> InstructionInserter<TI> for I {}
+
 pub struct Builder<'a, TI: TargetInstruction, I: InstructionInserter<TI>> {
     pub(crate) inserter: I,
     pub(crate) func: &'a mut Function<TI>,
@@ -57,7 +61,6 @@ pub struct Builder<'a, TI: TargetInstruction, I: InstructionInserter<TI>> {
     pub(crate) ty_storage: &'a mut TyStorage,
 }
 
-#[allow(private_bounds)]
 impl<'a, TI: TargetInstruction, I: InstructionInserter<TI>> Builder<'a, TI, I> {
     pub(super) fn new(
         inserter: I,
@@ -114,7 +117,7 @@ impl<'a> AppendInstrInserter<'a> {
     }
 }
 
-impl<TI: TargetInstruction> InstructionInserter<TI> for AppendInstrInserter<'_> {
+impl<TI: TargetInstruction> InternalInstructionInserter<TI> for AppendInstrInserter<'_> {
     fn insert_instr(
         &mut self,
         func: &mut Function<TI>,

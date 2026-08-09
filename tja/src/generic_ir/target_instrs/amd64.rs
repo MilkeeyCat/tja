@@ -15,8 +15,7 @@ impl super::InstrName for Instruction {
     }
 }
 
-#[allow(private_interfaces)]
-impl hir::TargetInstruction for Instruction {
+impl hir::InternalTargetInstruction for Instruction {
     type LirTargetInstr = Self;
 
     fn fmt(&self, _ctx: &hir::instruction::DisplayInstr<Self>, _f: &mut std::fmt::Formatter<'_>) {
@@ -61,7 +60,6 @@ impl lir::TargetInstruction for Instruction {
     }
 }
 
-#[allow(private_bounds)]
 impl<I: hir::basic_block::InstructionInserter<Instruction>> hir::BlockBuilder<'_, Instruction, I> {
     pub fn rdtsc(&mut self) -> hir::Value {
         let instr = self.inserter.insert_instr(

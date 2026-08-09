@@ -14,7 +14,7 @@ pub(crate) fn lower<T: Target>(
     hir_module: hir::Module<T::TargetInstruction>,
     ty_storage: &TyStorage,
     target: &T,
-) -> lir::Module<<T::TargetInstruction as hir::TargetInstruction>::LirTargetInstr> {
+) -> lir::Module<<T::TargetInstruction as hir::InternalTargetInstruction>::LirTargetInstr> {
     let (decls, param_ranges) = lower_decls(&hir_module.decls, ty_storage, target.abi());
     let mut lir_module = lir::Module::new(decls);
     let mut builder = ModuleBuilder::new(&mut lir_module);

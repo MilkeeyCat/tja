@@ -7,7 +7,7 @@ mod module;
 mod ty;
 
 use basic_block::Block;
-pub use basic_block::{BlockId, Builder as BlockBuilder};
+pub use basic_block::{BlockId, Builder as BlockBuilder, InstructionInserter};
 pub use constant::Constant;
 use function::Function;
 pub use function::{Cursor as FunctionCursor, Signature};
@@ -21,14 +21,18 @@ use instruction::DisplayInstr;
 use module::Declarations;
 use std::{collections::BTreeMap, fmt::Display};
 
-#[allow(private_bounds, private_interfaces)]
-pub trait TargetInstruction: target_instrs::InstrName + Sized {
+pub(crate) trait InternalTargetInstruction: target_instrs::InstrName + Sized {
     type LirTargetInstr: lir::TargetInstruction;
 
     fn fmt(&self, ctx: &DisplayInstr<Self>, f: &mut std::fmt::Formatter<'_>);
     fn result_tys(&self, ty_storage: &mut TyStorage, ty: Option<TyIdx>) -> Vec<TyIdx>;
     fn lower(&self, ctx: &mut FuncLoweringCtx<'_, Self>, instr: InstructionId);
 }
+
+#[allow(private_bounds)]
+pub trait TargetInstruction: InternalTargetInstruction {}
+
+impl<ITI: InternalTargetInstruction> TargetInstruction for ITI {}
 
 pub enum GlobalVariable {
     Zero,

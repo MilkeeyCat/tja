@@ -11,8 +11,7 @@ impl super::InstrName for Instruction {
     }
 }
 
-#[allow(private_interfaces)]
-impl hir::TargetInstruction for Instruction {
+impl hir::InternalTargetInstruction for Instruction {
     type LirTargetInstr = Self;
 
     fn fmt(&self, _ctx: &hir::instruction::DisplayInstr<Self>, _f: &mut std::fmt::Formatter<'_>) {
