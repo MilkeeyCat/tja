@@ -1,4 +1,14 @@
 pub mod amd64;
+mod basic_block;
+mod function;
+mod instruction;
+mod module;
+mod register;
+
+use basic_block::{Block, BlockId};
+use function::Function;
+use instruction::{Instruction, InstructionId};
+use register::VregIdx;
 
 use crate::{
     hir::{self, FuncLoweringCtx, TargetInstruction, TyStorage},
@@ -7,6 +17,7 @@ use crate::{
 
 pub(crate) trait InternalTarget {
     type GenericInstr: TargetInstruction;
+    type TargetInstr: Instruction;
 
     fn abi(&self) -> &dyn Abi<TargetInstruction = Self::GenericInstr>;
 }

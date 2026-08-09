@@ -1,6 +1,9 @@
 use crate::{
     generic_ir::target_instrs::Amd64Instruction,
-    mir::{Abi, InternalTarget, amd64::SysvAbi},
+    mir::{
+        Abi, InternalTarget,
+        amd64::{Instruction, SysvAbi},
+    },
 };
 
 pub struct Target {
@@ -17,6 +20,7 @@ impl Target {
 
 impl InternalTarget for Target {
     type GenericInstr = Amd64Instruction;
+    type TargetInstr = Instruction;
 
     fn abi(&self) -> &dyn Abi<TargetInstruction = Self::GenericInstr> {
         &self.abi
