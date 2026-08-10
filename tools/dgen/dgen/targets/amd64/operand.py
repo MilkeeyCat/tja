@@ -1,19 +1,46 @@
 from abc import ABC, abstractmethod
 from enum import IntFlag
 
-from dgen.register import Register as PhysicalRegister
+from dgen.register import Register
+from dgen.register_class import RegisterClass
 
 
-class Generic:
-    name: str
-    trait_bound: str
+class Operand(ABC):
+    pass
 
-    def __init__(self, name: str, trait_bound: str):
-        self.name = name
-        self.trait_bound = trait_bound
+    @abstractmethod
+    def type(self) -> str:
+        pass
 
 
-REGISTER = Generic("R", "Register")
+class ImmediateOperand(Operand):
+    bits: int
+
+    def __init__(self, bits: int) -> None:
+        self.bits = bits
+
+    def type(self) -> str:
+        return "Immediate"
+
+
+class MemoryOperand(Operand):
+    bits: int
+
+    def __init__(self, bits: int) -> None:
+        self.bits = bits
+
+    def type(self) -> str:
+        return "Memory"
+
+
+class EffectiveAddressOperand(Operand):
+    def type(self) -> str:
+        return "EffectiveAddress"
+
+
+class BlockOperand(Operand):
+    def type(self) -> str:
+        return "BlockId"
 
 
 class AccessType(IntFlag):
@@ -22,76 +49,35 @@ class AccessType(IntFlag):
     ReadWrite = Read | Write
 
 
-class Operand(ABC):
-    generics: list[Generic]
-
-    def __init__(self, generics: list[Generic]) -> None:
-        self.generics = generics
-
-    @abstractmethod
-    def print(self, access_type: AccessType) -> str:
-        pass
-
-
-class Explicit(Operand):
-    type_name: str
-    generics: list[Generic]
-
-    def __init__(self, type_name: str, generics: list[Generic] | None = None) -> None:
-        super().__init__(generics or [])
-
-        self.type_name = type_name
-
-    def print(self, access_type: AccessType) -> str:
-        return self.type_name
-
-
-class Register(Explicit):
-    def __init__(self) -> None:
-        super().__init__("R", [REGISTER])
-
-    def print(self, access_type: AccessType) -> str:
-        if access_type == AccessType.ReadWrite:
-            return "ReadWrite<" + self.type_name + ">"
-        else:
-            return self.type_name
-
-
-class Implicit(Operand):
-    reg: PhysicalRegister
-
-    def __init__(self, reg: PhysicalRegister) -> None:
-        super().__init__([REGISTER])
-
-        self.reg = reg
-
-    def print(self, access_type: AccessType) -> str:
-        if access_type == AccessType.ReadWrite:
-            return "ReadWrite<R>"
-        else:
-            return "R"
-
-
-class InstructionOperand:
-    operand: Operand
+class RegisterOperand(Operand):
+    reg_or_rc: Register | RegisterClass
     access_type: AccessType
+    implicit: bool
 
-    def __init__(self, operand: Operand, access_type: AccessType):
-        self.operand = operand
+    def __init__(
+        self, reg_or_rc: Register | RegisterClass, access_type: AccessType
+    ) -> None:
+        self.reg_or_rc = reg_or_rc
         self.access_type = access_type
+        self.implicit = False
+
+    def type(self) -> str:
+        return "Register"
 
 
-def implicit(reg: PhysicalRegister) -> Implicit:
-    return Implicit(reg)
+def implicit(reg_op: RegisterOperand) -> RegisterOperand:
+    reg_op.implicit = True
+
+    return reg_op
 
 
-def r(operand: Operand) -> InstructionOperand:
-    return InstructionOperand(operand, AccessType.Read)
+def r(reg_or_rc: Register | RegisterClass) -> RegisterOperand:
+    return RegisterOperand(reg_or_rc, AccessType.Read)
 
 
-def w(operand: Operand) -> InstructionOperand:
-    return InstructionOperand(operand, AccessType.Write)
+def w(reg_or_rc: Register | RegisterClass) -> RegisterOperand:
+    return RegisterOperand(reg_or_rc, AccessType.Write)
 
 
-def rw(operand: Operand) -> InstructionOperand:
-    return InstructionOperand(operand, AccessType.ReadWrite)
+def rw(reg_or_rc: Register | RegisterClass) -> RegisterOperand:
+    return RegisterOperand(reg_or_rc, AccessType.ReadWrite)

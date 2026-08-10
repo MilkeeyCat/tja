@@ -8,7 +8,7 @@ mod register;
 use basic_block::{Block, BlockId};
 use function::Function;
 use instruction::{Instruction, InstructionId};
-use register::VregIdx;
+use register::{PhysicalRegister, Register, VregIdx};
 
 use crate::{
     hir::{self, FuncLoweringCtx, TargetInstruction, TyStorage},

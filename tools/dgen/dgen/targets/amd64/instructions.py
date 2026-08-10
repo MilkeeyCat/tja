@@ -1,54 +1,41 @@
+from .register_classes import GPR16, GPR32, GPR64, GPR8
 from .registers import AH, AL, AX, DX, EAX, EDX, RAX, RBP, RDX
 from .instruction import Instruction
-from .operand import Operand, r, w, rw, implicit
+from .operand import r, w, rw, implicit
 from .operands import *
-
-
-def get_operand(variant: str, size: int) -> Operand:
-    name = {
-        "r": f"R{size}",
-        "m": f"MEM{size}",
-        "i": f"IMM{size}",
-    }[variant]
-
-    operand = globals()[name]
-
-    if not isinstance(operand, Operand):
-        assert False, "operand not found"
-
-    return operand
-
 
 # ==============================================================================
 # MOV
 # ==============================================================================
 
 
-# rm, r
-for size in [8, 16, 32, 64]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("mov_rr8", "mov", [w(GPR8), r(GPR8)])
+Instruction("mov_mr8", "mov", [MEM8, w(GPR8)])
 
-        Instruction(
-            f"Mov{size}{variant}r", "mov", [w(operand), r(get_operand("r", size))]
-        )
+Instruction("mov_rr16", "mov", [w(GPR16), r(GPR16)])
+Instruction("mov_mr16", "mov", [MEM16, w(GPR16)])
 
-# r, m
-for size in [8, 16, 32, 64]:
-    operand = get_operand("r", size)
+Instruction("mov_rr32", "mov", [w(GPR32), r(GPR32)])
+Instruction("mov_mr32", "mov", [MEM32, w(GPR32)])
 
-    Instruction(f"Mov{size}rm", "mov", [w(operand), r(get_operand("m", size))])
+Instruction("mov_rr64", "mov", [w(GPR64), r(GPR64)])
+Instruction("mov_mr64", "mov", [MEM64, w(GPR64)])
 
-# rm, i
-for size in [8, 16, 32]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("mov_rm8", "mov", [w(GPR8), MEM8])
+Instruction("mov_rm16", "mov", [w(GPR16), MEM16])
+Instruction("mov_rm32", "mov", [w(GPR32), MEM32])
+Instruction("mov_rm64", "mov", [w(GPR64), MEM64])
 
-        Instruction(
-            f"Mov{size}{variant}i", "mov", [w(operand), r(get_operand("i", size))]
-        )
+Instruction("mov_ri8", "mov", [w(GPR8), IMM8])
+Instruction("mov_mi8", "mov", [MEM8, IMM8])
 
-Instruction(f"Mov64ri", "mov", [w(R64), r(IMM64)])
+Instruction("mov_ri16", "mov", [w(GPR16), IMM16])
+Instruction("mov_mi16", "mov", [MEM16, IMM16])
+
+Instruction("mov_ri32", "mov", [w(GPR32), IMM32])
+Instruction("mov_mi32", "mov", [MEM32, IMM32])
+
+Instruction("mov_ri64", "mov", [w(GPR64), IMM64])
 
 
 # ==============================================================================
@@ -56,14 +43,20 @@ Instruction(f"Mov64ri", "mov", [w(R64), r(IMM64)])
 # ==============================================================================
 
 
-# r, rm
-for from_, to in [(8, 16), (8, 32), (8, 64), (16, 32), (16, 64)]:
-    for variant in ["r", "m"]:
-        Instruction(
-            f"Movsx{to}r{variant}{from_}",
-            "movsx",
-            [w(get_operand("r", to)), r(get_operand(variant, from_))],
-        )
+Instruction("movsx_r16r8", "movsx", [w(GPR16), r(GPR8)])
+Instruction("movsx_r16m8", "movsx", [w(GPR16), MEM8])
+
+Instruction("movsx_r32r8", "movsx", [w(GPR32), r(GPR8)])
+Instruction("movsx_r32m8", "movsx", [w(GPR32), MEM8])
+
+Instruction("movsx_r64r8", "movsx", [w(GPR64), r(GPR8)])
+Instruction("movsx_r64m8", "movsx", [w(GPR64), MEM8])
+
+Instruction("movsx_r32r16", "movsx", [w(GPR32), r(GPR16)])
+Instruction("movsx_r32m16", "movsx", [w(GPR32), MEM16])
+
+Instruction("movsx_r64r16", "movsx", [w(GPR64), r(GPR16)])
+Instruction("movsx_r64m16", "movsx", [w(GPR64), MEM16])
 
 
 # ==============================================================================
@@ -71,25 +64,31 @@ for from_, to in [(8, 16), (8, 32), (8, 64), (16, 32), (16, 64)]:
 # ==============================================================================
 
 
-# rm, i
-for size in [8, 16, 32]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("add_ri8", "add", [rw(GPR8), IMM8])
+Instruction("add_mi8", "add", [MEM8, IMM8])
 
-        Instruction(
-            f"Add{size}{variant}i", "add", [rw(operand), r(get_operand("i", size))]
-        )
+Instruction("add_ri16", "add", [rw(GPR16), IMM16])
+Instruction("add_mi16", "add", [MEM16, IMM16])
 
-# rm, r
-for size in [8, 16, 32, 64]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("add_ri32", "add", [rw(GPR32), IMM32])
+Instruction("add_mi32", "add", [MEM32, IMM32])
 
-        Instruction(
-            f"Add{size}{variant}r", "add", [rw(operand), r(get_operand("r", size))]
-        )
+Instruction("add_ri64", "add", [rw(GPR64), IMM64])
+Instruction("add_mi64", "add", [MEM64, IMM64])
 
-Instruction(f"Add64ri32", "add", [rw(R64), r(IMM32)])
+Instruction("add_rr8", "add", [rw(GPR8), r(GPR8)])
+Instruction("add_mr8", "add", [MEM8, r(GPR8)])
+
+Instruction("add_rr16", "add", [rw(GPR16), r(GPR16)])
+Instruction("add_mr16", "add", [MEM16, r(GPR16)])
+
+Instruction("add_rr32", "add", [rw(GPR32), r(GPR32)])
+Instruction("add_mr32", "add", [MEM32, r(GPR32)])
+
+Instruction("add_rr64", "add", [rw(GPR64), r(GPR64)])
+Instruction("add_mr64", "add", [MEM64, r(GPR64)])
+
+Instruction("add_r64i32", "add", [rw(GPR64), IMM32])
 
 
 # ==============================================================================
@@ -97,25 +96,31 @@ Instruction(f"Add64ri32", "add", [rw(R64), r(IMM32)])
 # ==============================================================================
 
 
-# rm, i
-for size in [8, 16, 32]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("sub_ri8", "sub", [rw(GPR8), IMM8])
+Instruction("sub_mi8", "sub", [MEM8, IMM8])
 
-        Instruction(
-            f"Sub{size}{variant}i", "sub", [rw(operand), r(get_operand("i", size))]
-        )
+Instruction("sub_ri16", "sub", [rw(GPR16), IMM16])
+Instruction("sub_mi16", "sub", [MEM16, IMM16])
 
-# rm, r
-for size in [8, 16, 32, 64]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("sub_ri32", "sub", [rw(GPR32), IMM32])
+Instruction("sub_mi32", "sub", [MEM32, IMM32])
 
-        Instruction(
-            f"Sub{size}{variant}r", "sub", [rw(operand), r(get_operand("r", size))]
-        )
+Instruction("sub_ri64", "sub", [rw(GPR64), IMM64])
+Instruction("sub_mi64", "sub", [MEM64, IMM64])
 
-Instruction(f"Sub64ri32", "sub", [rw(R64), r(IMM32)])
+Instruction("sub_rr8", "sub", [rw(GPR8), r(GPR8)])
+Instruction("sub_mr8", "sub", [MEM8, r(GPR8)])
+
+Instruction("sub_rr16", "sub", [rw(GPR16), r(GPR16)])
+Instruction("sub_mr16", "sub", [MEM16, r(GPR16)])
+
+Instruction("sub_rr32", "sub", [rw(GPR32), r(GPR32)])
+Instruction("sub_mr32", "sub", [MEM32, r(GPR32)])
+
+Instruction("sub_rr64", "sub", [rw(GPR64), r(GPR64)])
+Instruction("sub_mr64", "sub", [MEM64, r(GPR64)])
+
+Instruction("sub_r64i32", "sub", [rw(GPR64), IMM32])
 
 
 # ==============================================================================
@@ -123,10 +128,10 @@ Instruction(f"Sub64ri32", "sub", [rw(R64), r(IMM32)])
 # ==============================================================================
 
 
-Instruction("IMul8r", "imul", [w(implicit(AX)), r(implicit(AL)), r(R8)])
-Instruction("IMul16r", "imul", [rw(implicit(AX)), w(implicit(DX)), r(R16)])
-Instruction("IMul32r", "imul", [rw(implicit(EAX)), w(implicit(EDX)), r(R32)])
-Instruction("IMul64r", "imul", [rw(implicit(RAX)), w(implicit(RDX)), r(R64)])
+Instruction("imul_r8", "imul", [implicit(w(AX)), implicit(r(AL)), r(GPR8)])
+Instruction("imul_r16", "imul", [implicit(rw(AX)), implicit(w(DX)), r(GPR16)])
+Instruction("imul_r32", "imul", [implicit(rw(EAX)), implicit(w(EDX)), r(GPR32)])
+Instruction("imul_r64", "imul", [implicit(rw(RAX)), implicit(w(RDX)), r(GPR64)])
 
 
 # ==============================================================================
@@ -135,11 +140,11 @@ Instruction("IMul64r", "imul", [rw(implicit(RAX)), w(implicit(RDX)), r(R64)])
 
 
 Instruction(
-    "IDiv8r", "idiv", [w(implicit(AL)), w(implicit(AH)), r(implicit(AX)), r(R8)]
+    "idiv_r8", "idiv", [implicit(w(AL)), implicit(w(AH)), implicit(r(AX)), r(GPR8)]
 )
-Instruction("IDiv16r", "idiv", [rw(implicit(AX)), rw(implicit(DX)), r(R16)])
-Instruction("IDiv32r", "idiv", [rw(implicit(EAX)), rw(implicit(EDX)), r(R32)])
-Instruction("IDiv64r", "idiv", [rw(implicit(RAX)), rw(implicit(RDX)), r(R64)])
+Instruction("idiv_r16", "idiv", [implicit(rw(AX)), implicit(rw(DX)), r(GPR16)])
+Instruction("idiv_r32", "idiv", [implicit(rw(EAX)), implicit(rw(EDX)), r(GPR32)])
+Instruction("idiv_r64", "idiv", [implicit(rw(RAX)), implicit(rw(RDX)), r(GPR64)])
 
 
 # ==============================================================================
@@ -147,15 +152,19 @@ Instruction("IDiv64r", "idiv", [rw(implicit(RAX)), rw(implicit(RDX)), r(R64)])
 # ==============================================================================
 
 
-for size in [8, 16, 32, 64]:
-    for variant in ["r", "m"]:
-        operand = get_operand(variant, size)
+Instruction("cmp_rr8", "cmp", [r(GPR8), r(GPR8)])
+Instruction("cmp_mr8", "cmp", [MEM8, r(GPR8)])
 
-        Instruction(
-            f"Cmp{size}{variant}r", "cmp", [r(operand), r(get_operand("r", size))]
-        )
+Instruction("cmp_rr16", "cmp", [r(GPR16), r(GPR16)])
+Instruction("cmp_mr16", "cmp", [MEM16, r(GPR16)])
 
-Instruction(f"Cmp8ri", "cmp", [r(R8), r(IMM8)])
+Instruction("cmp_rr32", "cmp", [r(GPR32), r(GPR32)])
+Instruction("cmp_mr32", "cmp", [MEM32, r(GPR32)])
+
+Instruction("cmp_rr64", "cmp", [r(GPR64), r(GPR64)])
+Instruction("cmp_mr64", "cmp", [MEM64, r(GPR64)])
+
+Instruction("cmp_ri8", "cmp", [r(GPR8), IMM8])
 
 
 # ==============================================================================
@@ -163,10 +172,10 @@ Instruction(f"Cmp8ri", "cmp", [r(R8), r(IMM8)])
 # ==============================================================================
 
 
-for size in [8, 16, 32, 64]:
-    operand = get_operand("r", size)
-
-    Instruction(f"Xor{size}rr", "xor", [rw(operand), r(operand)])
+Instruction("xor_rr8", "xor", [rw(GPR8), r(GPR8)])
+Instruction("xor_rr16", "xor", [rw(GPR16), r(GPR16)])
+Instruction("xor_rr32", "xor", [rw(GPR32), r(GPR32)])
+Instruction("xor_rr64", "xor", [rw(GPR64), r(GPR64)])
 
 
 # ==============================================================================
@@ -174,7 +183,7 @@ for size in [8, 16, 32, 64]:
 # ==============================================================================
 
 
-Instruction("Lea64", "lea", [w(R64), r(ADDR)])
+Instruction("lea_r32m", "lea", [w(GPR64), ADDR])
 
 
 # ==============================================================================
@@ -182,7 +191,7 @@ Instruction("Lea64", "lea", [w(R64), r(ADDR)])
 # ==============================================================================
 
 
-Instruction("Shl64r8i", "shl", [rw(R64), r(IMM8)])
+Instruction("shl_r64i8", "shl", [rw(GPR64), IMM8])
 
 
 # ==============================================================================
@@ -190,7 +199,7 @@ Instruction("Shl64r8i", "shl", [rw(R64), r(IMM8)])
 # ==============================================================================
 
 
-Instruction("Shr64r8i", "shr", [rw(R64), r(IMM8)])
+Instruction("shr_r64i8", "shr", [rw(GPR64), IMM8])
 
 
 # ==============================================================================
@@ -198,7 +207,7 @@ Instruction("Shr64r8i", "shr", [rw(R64), r(IMM8)])
 # ==============================================================================
 
 
-Instruction("Push64r", "push", [r(R64)])
+Instruction("push_r64", "push", [r(GPR64)])
 
 
 # ==============================================================================
@@ -206,7 +215,7 @@ Instruction("Push64r", "push", [r(R64)])
 # ==============================================================================
 
 
-Instruction("Pop64r", "pop", [w(R64)])
+Instruction("pop_r64", "pop", [w(GPR64)])
 
 
 # ==============================================================================
@@ -214,7 +223,7 @@ Instruction("Pop64r", "pop", [w(R64)])
 # ==============================================================================
 
 
-Instruction("Call64r", "call", [r(R64)])
+Instruction("call_r64", "call", [r(GPR64)])
 
 
 # ==============================================================================
@@ -222,7 +231,7 @@ Instruction("Call64r", "call", [r(R64)])
 # ==============================================================================
 
 
-Instruction("Jmp", "jmp", [r(BLOCK_IDX)])
+Instruction("jmp", "jmp", [BLOCK])
 
 
 # ==============================================================================
@@ -231,7 +240,7 @@ Instruction("Jmp", "jmp", [r(BLOCK_IDX)])
 
 
 # TODO: add more variants
-Instruction("Ja", "ja", [r(BLOCK_IDX)])
+Instruction("ja", "ja", [BLOCK])
 
 
 # ==============================================================================
@@ -240,8 +249,8 @@ Instruction("Ja", "ja", [r(BLOCK_IDX)])
 
 
 # TODO: add more variants
-Instruction("Setar", "seta", [w(R8)])
-Instruction("Setam", "seta", [w(MEM8)])
+Instruction("seta_r8", "seta", [w(GPR8)])
+Instruction("seta_m8", "seta", [MEM8])
 
 
 # ==============================================================================
@@ -249,7 +258,7 @@ Instruction("Setam", "seta", [w(MEM8)])
 # ==============================================================================
 
 
-Instruction("Leave64", "leave", [rw(implicit(RBP))])
+Instruction("leave_64", "leave", [implicit(rw(RBP))])
 
 
 # ==============================================================================
@@ -257,7 +266,7 @@ Instruction("Leave64", "leave", [rw(implicit(RBP))])
 # ==============================================================================
 
 
-Instruction("Ret", "ret", [])
+Instruction("ret", "ret", [])
 
 
 # ==============================================================================
@@ -265,6 +274,6 @@ Instruction("Ret", "ret", [])
 # ==============================================================================
 
 
-Instruction("Cwd", "cwd", [w(implicit(DX)), r(implicit(AX))])
-Instruction("Cdq", "cdq", [w(implicit(EDX)), r(implicit(EAX))])
-Instruction("Cqo", "cqo", [w(implicit(RDX)), r(implicit(RAX))])
+Instruction("cwd", "cwd", [implicit(w(DX)), implicit(r(AX))])
+Instruction("cdq", "cdq", [implicit(w(EDX)), implicit(r(EAX))])
+Instruction("cqo", "cqo", [implicit(w(RDX)), implicit(r(RAX))])
