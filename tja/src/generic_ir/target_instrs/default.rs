@@ -3,7 +3,7 @@ use crate::{
     lir,
 };
 
-pub struct Instruction;
+pub enum Instruction {}
 
 impl super::InstrName for Instruction {
     fn name(&self) -> &'static str {
