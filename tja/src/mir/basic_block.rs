@@ -7,6 +7,6 @@ new_key_type! {
 
 pub(super) struct Block {
     params: Vec<VregIdx>,
-    first_instr: Option<InstructionId>,
-    last_instr: Option<InstructionId>,
+    pub(super) first_instr: Option<InstructionId>,
+    pub(super) last_instr: Option<InstructionId>,
 }
