@@ -1,6 +1,6 @@
 use crate::ast::{Expr, Pattern};
 
-pub trait Visitor: Sized {
+pub(crate) trait Visitor: Sized {
     fn visit_pat(&self, pat: &Pattern) {
         walk_pat(self, pat);
     }
@@ -10,7 +10,7 @@ pub trait Visitor: Sized {
     }
 }
 
-pub fn walk_pat<T: Visitor>(visitor: &T, pat: &Pattern) {
+pub(crate) fn walk_pat<T: Visitor>(visitor: &T, pat: &Pattern) {
     match pat {
         Pattern::Application { args, .. } => {
             for pat in args {
@@ -21,7 +21,7 @@ pub fn walk_pat<T: Visitor>(visitor: &T, pat: &Pattern) {
     }
 }
 
-pub fn walk_expr<T: Visitor>(visitor: &T, expr: &Expr) {
+pub(crate) fn walk_expr<T: Visitor>(visitor: &T, expr: &Expr) {
     match expr {
         Expr::Call { args, .. } => {
             for expr in args {

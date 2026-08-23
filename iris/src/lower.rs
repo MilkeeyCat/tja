@@ -6,15 +6,15 @@ use index_vec::{IndexVec, define_index_type, index_vec};
 use std::collections::{BTreeMap, HashMap};
 
 define_index_type! {
-    pub struct ConstIdx = usize;
+    pub(crate) struct ConstIdx = usize;
 }
 
 define_index_type! {
-    pub struct TyIdx = usize;
+    pub(crate) struct TyIdx = usize;
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum BuiltinTy {
+pub(crate) enum BuiltinTy {
     Bool,
     U8,
     U16,
@@ -47,7 +47,7 @@ impl std::fmt::Display for BuiltinTy {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Type {
+pub(crate) enum Type {
     Builtin(BuiltinTy),
     External(String),
 }
@@ -62,11 +62,11 @@ impl std::fmt::Display for Type {
 }
 
 define_index_type! {
-    pub struct ExprIdx = usize;
+    pub(crate) struct ExprIdx = usize;
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Expr {
+pub(crate) enum Expr {
     Integer { value: i64, ty: TyIdx },
     Parameter(usize),
     Bool(bool),
@@ -79,49 +79,49 @@ pub enum Expr {
 }
 
 #[derive(Debug)]
-pub struct RuleSet {
-    pub decl: DeclIdx,
-    pub tree: Decision,
-    pub exprs: IndexVec<ExprIdx, Expr>,
+pub(crate) struct RuleSet {
+    pub(crate) decl: DeclIdx,
+    pub(crate) tree: Decision,
+    pub(crate) exprs: IndexVec<ExprIdx, Expr>,
 }
 
 define_index_type! {
-    pub struct DeclIdx = usize;
+    pub(crate) struct DeclIdx = usize;
 }
 
 #[derive(Debug)]
-pub struct Declaration {
-    pub name: String,
-    pub arg_tys: Vec<TyIdx>,
-    pub ret_ty: TyIdx,
-    pub partial: bool,
-    pub constructor: Option<Constructor>,
-    pub extractor: Option<Extractor>,
+pub(crate) struct Declaration {
+    pub(crate) name: String,
+    pub(crate) arg_tys: Vec<TyIdx>,
+    pub(crate) ret_ty: TyIdx,
+    pub(crate) partial: bool,
+    pub(crate) constructor: Option<Constructor>,
+    pub(crate) extractor: Option<Extractor>,
 }
 
 #[derive(Debug)]
-pub struct Constructor {
-    pub name: String,
+pub(crate) struct Constructor {
+    pub(crate) name: String,
 }
 
 #[derive(Debug)]
-pub struct Extractor {
-    pub name: String,
-    pub infallible: bool,
+pub(crate) struct Extractor {
+    pub(crate) name: String,
+    pub(crate) infallible: bool,
 }
 
 #[derive(Debug)]
-pub struct Const {
-    pub name: String,
-    pub ty: TyIdx,
+pub(crate) struct Const {
+    pub(crate) name: String,
+    pub(crate) ty: TyIdx,
 }
 
 #[derive(Debug, Default)]
-pub struct Module {
-    pub rulesets: Vec<RuleSet>,
-    pub consts: IndexVec<ConstIdx, Const>,
-    pub types: IndexVec<TyIdx, Type>,
-    pub decls: IndexVec<DeclIdx, Declaration>,
+pub(crate) struct Module {
+    pub(crate) rulesets: Vec<RuleSet>,
+    pub(crate) consts: IndexVec<ConstIdx, Const>,
+    pub(crate) types: IndexVec<TyIdx, Type>,
+    pub(crate) decls: IndexVec<DeclIdx, Declaration>,
 }
 
 impl From<ModuleLowerer> for Module {
@@ -136,26 +136,26 @@ impl From<ModuleLowerer> for Module {
 }
 
 define_index_type! {
-    pub struct RuleIdx = usize;
+    pub(crate) struct RuleIdx = usize;
 }
 
 #[derive(Debug)]
-pub struct Rule<'a> {
-    pub args: Vec<Pattern>,
-    pub priority: i64,
-    pub guards: &'a [Guard],
-    pub body: &'a Body,
+pub(crate) struct Rule<'a> {
+    pub(crate) args: Vec<Pattern>,
+    pub(crate) guards: &'a [Guard],
+    pub(crate) body: &'a Body,
+    priority: i64,
 }
 
 #[derive(Default)]
-pub struct ModuleLowerer {
-    pub types: IndexVec<TyIdx, Type>,
-    pub type_map: HashMap<String, TyIdx>,
-    pub consts: IndexVec<ConstIdx, Const>,
-    pub const_map: HashMap<String, ConstIdx>,
-    pub decls: IndexVec<DeclIdx, Declaration>,
-    pub decl_map: BTreeMap<String, DeclIdx>,
-    pub rulesets: Vec<RuleSet>,
+pub(crate) struct ModuleLowerer {
+    pub(crate) const_map: HashMap<String, ConstIdx>,
+    pub(crate) decls: IndexVec<DeclIdx, Declaration>,
+    pub(crate) decl_map: BTreeMap<String, DeclIdx>,
+    pub(crate) types: IndexVec<TyIdx, Type>,
+    type_map: HashMap<String, TyIdx>,
+    consts: IndexVec<ConstIdx, Const>,
+    rulesets: Vec<RuleSet>,
 }
 
 impl ModuleLowerer {
@@ -353,14 +353,14 @@ impl ModuleLowerer {
     }
 }
 
-pub type EnvIdx = RuleIdx;
+pub(crate) type EnvIdx = RuleIdx;
 
-pub struct RuleSetLowerer<'a> {
-    pub lowerer: &'a ModuleLowerer,
-    pub decl: DeclIdx,
-    pub exprs: IndexVec<ExprIdx, Expr>,
-    pub expr_map: HashMap<Expr, ExprIdx>,
-    pub envs: HashMap<EnvIdx, HashMap<String, ExprIdx>>,
+pub(crate) struct RuleSetLowerer<'a> {
+    pub(crate) lowerer: &'a ModuleLowerer,
+    pub(crate) decl: DeclIdx,
+    pub(crate) exprs: IndexVec<ExprIdx, Expr>,
+    expr_map: HashMap<Expr, ExprIdx>,
+    envs: HashMap<EnvIdx, HashMap<String, ExprIdx>>,
 }
 
 impl<'a> RuleSetLowerer<'a> {
@@ -387,14 +387,14 @@ impl<'a> RuleSetLowerer<'a> {
         }
     }
 
-    pub fn create_expr(&mut self, expr: Expr) -> ExprIdx {
+    pub(crate) fn create_expr(&mut self, expr: Expr) -> ExprIdx {
         *self
             .expr_map
             .entry(expr.clone())
             .or_insert(self.exprs.push(expr))
     }
 
-    pub fn bind_var(&mut self, env: EnvIdx, name: String, expr: ExprIdx) {
+    pub(crate) fn bind_var(&mut self, env: EnvIdx, name: String, expr: ExprIdx) {
         assert!(
             self.envs
                 .get_mut(&env)
@@ -404,7 +404,12 @@ impl<'a> RuleSetLowerer<'a> {
         );
     }
 
-    pub fn lower_body(&mut self, env: EnvIdx, body: &Body, ty: TyIdx) -> (Vec<ExprIdx>, ExprIdx) {
+    pub(crate) fn lower_body(
+        &mut self,
+        env: EnvIdx,
+        body: &Body,
+        ty: TyIdx,
+    ) -> (Vec<ExprIdx>, ExprIdx) {
         let mut bindings = Vec::new();
 
         for Let { name, ty, value } in &body.lets {
@@ -423,7 +428,12 @@ impl<'a> RuleSetLowerer<'a> {
         (bindings, expr)
     }
 
-    pub fn lower_expr(&mut self, expr: &ast::Expr, env: EnvIdx, ty: Option<TyIdx>) -> ExprIdx {
+    pub(crate) fn lower_expr(
+        &mut self,
+        expr: &ast::Expr,
+        env: EnvIdx,
+        ty: Option<TyIdx>,
+    ) -> ExprIdx {
         match expr {
             ast::Expr::Call { name, args } => {
                 let decl = self.lowerer.expect_decl(name);
@@ -458,7 +468,7 @@ impl<'a> RuleSetLowerer<'a> {
         }
     }
 
-    pub fn expr_ty(&self, expr: ExprIdx) -> Option<TyIdx> {
+    pub(crate) fn expr_ty(&self, expr: ExprIdx) -> Option<TyIdx> {
         match &self.exprs[expr] {
             Expr::Integer { ty, .. } => Some(*ty),
             Expr::Parameter(idx) => Some(self.lowerer.decls[self.decl].arg_tys[*idx]),
@@ -482,7 +492,7 @@ impl<'a> RuleSetLowerer<'a> {
     }
 }
 
-pub fn run(definitions: Vec<Definition>) -> Module {
+pub(crate) fn run(definitions: Vec<Definition>) -> Module {
     let mut lowerer = ModuleLowerer::new();
 
     lowerer.lower_types(&definitions);

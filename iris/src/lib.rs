@@ -9,7 +9,7 @@ use lalrpop_util::lalrpop_mod;
 use lexer::Lexer;
 use std::path::Path;
 
-lalrpop_mod!(pub grammar);
+lalrpop_mod!(grammar);
 
 pub fn compile<P: AsRef<Path>>(input: &[P]) -> Result<String, std::fmt::Error> {
     let mut definitions = Vec::new();

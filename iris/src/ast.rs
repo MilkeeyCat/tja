@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum Definition {
+pub(crate) enum Definition {
     Declaration(Declaration),
     Extern(Extern),
     Type(Type),
@@ -7,15 +7,15 @@ pub enum Definition {
 }
 
 #[derive(Debug)]
-pub struct Declaration {
-    pub name: String,
-    pub arg_tys: Vec<String>,
-    pub ret_ty: String,
-    pub partial: bool,
+pub(crate) struct Declaration {
+    pub(crate) name: String,
+    pub(crate) arg_tys: Vec<String>,
+    pub(crate) ret_ty: String,
+    pub(crate) partial: bool,
 }
 
 #[derive(Debug)]
-pub enum Extern {
+pub(crate) enum Extern {
     Constructor {
         name: String,
         external_name: String,
@@ -32,7 +32,7 @@ pub enum Extern {
 }
 
 #[derive(Debug, Clone)]
-pub enum Pattern {
+pub(crate) enum Pattern {
     Application { name: String, args: Vec<Pattern> },
     Literal(Literal),
     Ident(String),
@@ -40,7 +40,7 @@ pub enum Pattern {
 }
 
 impl Pattern {
-    pub fn is_wildcard(&self) -> bool {
+    pub(crate) fn is_wildcard(&self) -> bool {
         match self {
             Self::Ident(_) | Self::Wildcard => true,
             Self::Application { .. } | Self::Literal(_) => false,
@@ -49,48 +49,48 @@ impl Pattern {
 }
 
 #[derive(Debug)]
-pub struct Type {
-    pub name: String,
-    pub external_name: String,
+pub(crate) struct Type {
+    pub(crate) name: String,
+    pub(crate) external_name: String,
 }
 
 #[derive(Debug)]
-pub struct Rule {
-    pub pat: Pattern,
-    pub priority: Option<i64>,
-    pub guards: Vec<Guard>,
-    pub body: Body,
+pub(crate) struct Rule {
+    pub(crate) pat: Pattern,
+    pub(crate) priority: Option<i64>,
+    pub(crate) guards: Vec<Guard>,
+    pub(crate) body: Body,
 }
 
 #[derive(Debug)]
-pub struct Let {
-    pub name: String,
-    pub ty: String,
-    pub value: Expr,
+pub(crate) struct Let {
+    pub(crate) name: String,
+    pub(crate) ty: String,
+    pub(crate) value: Expr,
 }
 
 #[derive(Debug)]
-pub struct Body {
-    pub lets: Vec<Let>,
-    pub expr: Expr,
+pub(crate) struct Body {
+    pub(crate) lets: Vec<Let>,
+    pub(crate) expr: Expr,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Expr {
+pub(crate) enum Expr {
     Call { name: String, args: Vec<Expr> },
     Literal(Literal),
     Ident(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Literal {
+pub(crate) enum Literal {
     Int(i64),
     Bool(bool),
     Const(String),
 }
 
 #[derive(Debug)]
-pub enum Guard {
+pub(crate) enum Guard {
     Pattern(Pattern, Expr),
     Expr(Expr),
 }

@@ -443,7 +443,7 @@ fn all_paths_return_value(decision: &Decision) -> bool {
     }
 }
 
-pub fn generate(module: Module) -> Result<String, std::fmt::Error> {
+pub(crate) fn generate(module: Module) -> Result<String, std::fmt::Error> {
     let mut buf = String::new();
     let mut indent_buf = IndentBuffer::new(&mut buf);
     let mut generator = ModuleGenerator::new(&module, &mut indent_buf);

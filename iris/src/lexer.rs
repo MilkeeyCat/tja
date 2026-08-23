@@ -3,7 +3,7 @@ use logos::{Logos, SpannedIter};
 #[derive(Debug, Clone, Logos)]
 #[logos(skip(r"[ \t\n\f]+"))]
 #[logos(skip(r"//[^\n]*", allow_greedy = true))]
-pub enum Token {
+pub(crate) enum Token {
     #[token("const")]
     Const,
     #[token("constructor")]
@@ -64,12 +64,12 @@ pub enum Token {
     Underscore,
 }
 
-pub type Spanned<Token, Location, Error> = Result<(Location, Token, Location), Error>;
+pub(crate) type Spanned<Token, Location, Error> = Result<(Location, Token, Location), Error>;
 
-pub struct Lexer<'input>(SpannedIter<'input, Token>);
+pub(crate) struct Lexer<'input>(SpannedIter<'input, Token>);
 
 impl<'input> Lexer<'input> {
-    pub fn new(input: &'input str) -> Self {
+    pub(crate) fn new(input: &'input str) -> Self {
         Self(Token::lexer(input).spanned())
     }
 }

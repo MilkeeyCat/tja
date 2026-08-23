@@ -52,7 +52,7 @@ Comma<T>: Vec<T> = {
     }
 };
 
-pub Definitions: Vec<Definition> = {
+pub(crate) Definitions: Vec<Definition> = {
     Definition => vec![<>],
     <mut defs:Definitions> <def:Definition> => {
         defs.push(def);

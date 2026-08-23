@@ -9,7 +9,7 @@ use index_vec::IndexVec;
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Constructor {
+enum Constructor {
     Int(i64),
     Bool(bool),
     External(DeclIdx),
@@ -42,13 +42,13 @@ impl Pattern {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Condition {
+pub(crate) enum Condition {
     Eq(ExprIdx, ExprIdx),
     Some(ExprIdx, ExprIdx),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Decision {
+pub(crate) enum Decision {
     If {
         condition: Condition,
         then: Box<Decision>,
@@ -418,7 +418,7 @@ fn is_sig_complete(ty: &Type, ctors: &BTreeSet<Constructor>) -> bool {
     }
 }
 
-pub fn compile(lowerer: &mut RuleSetLowerer, rules: IndexVec<RuleIdx, Rule>) -> Decision {
+pub(crate) fn compile(lowerer: &mut RuleSetLowerer, rules: IndexVec<RuleIdx, Rule>) -> Decision {
     let exprs = (0..lowerer.lowerer.decls[lowerer.decl].arg_tys.len())
         .map(|idx| lowerer.create_expr(Expr::Parameter(idx)))
         .collect();
