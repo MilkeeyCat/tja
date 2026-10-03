@@ -1,5 +1,9 @@
-use crate::ast::{Declaration, Definition, Type, Pattern, Rule, Expr, Literal, Extern, Let, Body, Guard};
+use crate::ast::{
+    Body, ConcreteTerm, ConcreteTermKind, Definition, Expr, Extern, GlobalKind, Guard, IntType,
+    Let, Literal, OverloadTerm, Pattern, Rule, Term, Type,
+};
 use crate::lexer::Token;
+use lalrpop_util::ParseError;
 
 grammar;
 
@@ -9,16 +13,17 @@ extern {
 
     enum Token {
         "const" => Token::Const,
-        "constructor" => Token::Constructor,
-        "decl" => Token::Decl,
         "extern" => Token::Extern,
-        "extractor" => Token::Extractor,
         "false" => Token::False,
+        "field" => Token::Field,
         "if" => Token::If,
-        "infallible" => Token::Infallible,
         "let" => Token::Let,
+        "multi" => Token::Multi,
+        "overload" => Token::Overload,
         "partial" => Token::Partial,
         "rule" => Token::Rule,
+        "term" => Token::Term,
+        "total" => Token::Total,
         "true" => Token::True,
         "type" => Token::Type,
 
@@ -30,10 +35,11 @@ extern {
         "=" => Token::Assign,
         ":" => Token::Colon,
         "," => Token::Comma,
-        "$" => Token::Dollar,
+        "." => Token::Dot,
         "{" => Token::LeftBracket,
         "(" => Token::LeftParen,
         "-" => Token::Minus,
+        "+" => Token::Plus,
         "}" => Token::RightBracket,
         ")" => Token::RightParen,
         ";" => Token::Semicolon,
@@ -41,8 +47,8 @@ extern {
     }
 }
 
-Comma<T>: Vec<T> = {
-    <mut v:(<T> ",")*> <e:T?> => match e {
+Separated<S, T>: Vec<T> = {
+    <mut v: (<T> S)*> <e: T?> => match e {
         None => v,
         Some(e) => {
             v.push(e);
@@ -52,68 +58,102 @@ Comma<T>: Vec<T> = {
     }
 };
 
-pub(crate) Definitions: Vec<Definition> = {
-    Definition => vec![<>],
-    <mut defs:Definitions> <def:Definition> => {
-        defs.push(def);
+Comma<T> = Separated<",", T>;
 
-        defs
-    }
-};
+pub(crate) Definitions: Vec<Definition> = <Definition*>;
 
 Definition: Definition = {
-    // I don't like partial being on decl but I don't know a better place for it
-    "decl" <partial:"partial"?> <name: "ident"> "(" <arg_tys: Comma<"ident">> ")" "->" <ret_ty: "ident"> ";" => Definition::Declaration(Declaration {name, arg_tys, ret_ty, partial: partial.is_some()}),
-    "type" <name:"ident"> "=" <external_name:"ident"> ";" => Definition::Type(Type {<>}),
-    "rule" <priority:"integer"?> <pat:Pattern> <guards:("if" <Guards>)?> "{" <body:Body> "}" => Definition::Rule(Rule {pat, priority, guards: guards.unwrap_or_default(), body}),
-    "extern" "constructor" <name:"ident"> "=" <external_name:"ident"> ";" => Definition::Extern(Extern::Constructor {<>}),
-    "extern" <infallible:"infallible"?> "extractor" <name:"ident"> "=" <external_name:"ident"> ";" => Definition::Extern(Extern::Extractor {name, external_name, infallible: infallible.is_some()}),
-    "extern" "const" <name:Const> ":" <ty:"ident"> ";" => Definition::Extern(Extern::Const {<>}),
-}
+    <Term> ";" => Definition::Term(<>),
+    <Extern> ";" => Definition::Extern(<>),
+    Rule => Definition::Rule(<>),
+};
 
-Guard: Guard = {
-    <expr:Expr> => Guard::Expr(<>),
-    "let" <pat:Pattern> "=" <expr:Expr> => Guard::Pattern(<>),
-}
+Term: Term = {
+    ConcreteTerm => Term::Concrete(<>),
+    OverloadTerm => Term::Overload(<>),
+};
 
-Guards: Vec<Guard> = {
-    <mut v:(<Guard> "&&")*> <e:Guard?> => match e {
-        None => v,
-        Some(e) => {
-            v.push(e);
+ConcreteTerm: ConcreteTerm = <kind: ConcreteTermKind> "term" <name: "ident"> "(" <arg_tys: Comma<Type>> ")" "->" <ret_ty: Type> => ConcreteTerm {<>};
 
-            v
-        }
+ConcreteTermKind: ConcreteTermKind = {
+    "partial" => ConcreteTermKind::Partial,
+    "total" => ConcreteTermKind::Total,
+    "multi" => ConcreteTermKind::Multi,
+};
+
+Type: Type = {
+    "(" <Comma<Type>> ")" => Type::Tuple(<>),
+    "ident" => Type::Ident(<>),
+};
+
+OverloadTerm: OverloadTerm = "overload" "term" <name: "ident"> "=" <terms: Separated<"+", "ident">> => OverloadTerm {<>};
+
+Extern: Extern = {
+    "extern" "type" <name: "ident"> <external_name: ("=" <"ident">)?> => Extern::Type {<>},
+    "extern" <term: ConcreteTerm> <external_name: ("=" <"ident">)?> => Extern::Term {<>},
+    "extern" "let" <name: "ident"> ":" <ty: Type> "=" <kind: GlobalKind> <external_name: "ident"> => Extern::Global {<>},
+};
+
+GlobalKind: GlobalKind = {
+    "const" => GlobalKind::Const,
+    "field" => GlobalKind::Field,
+};
+
+Rule: Rule = "rule" <pat: Pattern> <guards: ("if" <Separated<"&&", Guard>>)?> "{" <body: Body> "}" =>
+    Rule {
+        pat,
+        guards: guards.unwrap_or_default(),
+        body,
+    };
+
+Pattern: Pattern = {
+    <name: "ident"> "(" <args: Comma<Pattern>> ")" => Pattern::Application {<>},
+    "(" <Comma<Pattern>> ")" => Pattern::Tuple(<>),
+    Literal => Pattern::Literal(<>),
+    "ident" => Pattern::Ident(<>),
+    "_" => Pattern::Wildcard,
+};
+
+Guard: Guard = "let" <pat:Pattern> "=" <expr: Expr> => Guard {<>};
+
+Expr: Expr = {
+    <name: "ident"> "(" <args: Comma<Expr>> ")" => Expr::Call {<>},
+    "(" <Comma<Expr>> ")" => Expr::Tuple(<>),
+    <expr: Expr> "." <idx: "integer"> =>
+        Expr::TupleIndex {
+            expr: Box::new(expr),
+            idx: idx.try_into().unwrap(),
+        },
+    Literal => Expr::Literal(<>),
+    "ident" => Expr::Ident(<>),
+};
+
+Literal: Literal = {
+    <negative: "-"?> <value: "integer"> <ty: IntType?>  =>
+        Literal::Int{
+            value: if negative.is_some() { -value } else { value },
+            ty,
+        },
+    "true" => Literal::Bool(true),
+    "false" => Literal::Bool(false),
+};
+
+IntType: IntType = {
+    <ident: "ident"> =>? match ident.as_str() {
+        "i8" => Ok(IntType::I8),
+        "i16" => Ok(IntType::I16),
+        "i32" => Ok(IntType::I32),
+        "i64" => Ok(IntType::I64),
+        "isize" => Ok(IntType::Isize),
+        "u8" => Ok(IntType::U8),
+        "u16" => Ok(IntType::U16),
+        "u32" => Ok(IntType::U32),
+        "u64" => Ok(IntType::U64),
+        "usize" => Ok(IntType::Usize),
+        _ => Err(ParseError::from(())),
     }
 };
 
-Let: Let = {
-    "let" <name:"ident"> ":" <ty:"ident"> "=" <value:Expr> ";" => Let {<>}
-}
+Body: Body = <lets: Let*> <expr: Expr> => Body {<>};
 
-Body: Body = {
-    <lets:Let*> <expr:Expr> => Body {<>}
-}
-
-Expr: Expr = {
-    <name:"ident"> "(" <args:Comma<Expr>> ")" => Expr::Call {<>},
-    Literal => Expr::Literal(<>),
-    "ident" => Expr::Ident(<>),
-}
-
-Pattern: Pattern = {
-    "(" <name:"ident"> <args:Pattern*> ")" => Pattern::Application {<>},
-    "_" => Pattern::Wildcard,
-    Literal => Pattern::Literal(<>),
-    "ident" => Pattern::Ident(<>),
-}
-
-Literal: Literal = {
-    "-" <"integer"> => Literal::Int(-<>),
-    "integer" => Literal::Int(<>),
-    "true" => Literal::Bool(true),
-    "false" => Literal::Bool(false),
-    Const => Literal::Const(<>),
-}
-
-Const = "$" <"ident">;
+Let: Let = "let" <name: "ident"> ":" <ty: Type> "=" <value: Expr> ";" => Let {<>};
