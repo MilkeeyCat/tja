@@ -11,7 +11,7 @@ pub(crate) enum Term {
     Overload(OverloadTerm),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum ConcreteTermKind {
     Partial,
     Total,
@@ -39,7 +39,7 @@ pub(crate) enum Type {
     Ident(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum GlobalKind {
     Const,
     Field,
@@ -63,7 +63,7 @@ pub(crate) enum Extern {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum IntType {
     I8,
     I16,
