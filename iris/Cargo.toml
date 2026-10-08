@@ -11,7 +11,9 @@ path = "src/lib.rs"
 lalrpop = "0.22.2"
 
 [dependencies]
+derive_more = { version = "2.1.1", features = ["display"] }
 index_vec = "0.1.4"
 indexmap = "2.13.0"
 lalrpop-util = { version = "0.22.2", features = ["lexer", "unicode"] }
 logos = "0.16.1"
+slotmap = "1.1.1"

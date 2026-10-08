@@ -186,11 +186,13 @@ dependencies = [
 name = "iris"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "index_vec",
  "indexmap",
  "lalrpop",
  "lalrpop-util",
  "logos",
+ "slotmap",
 ]
 
 [[package]]
