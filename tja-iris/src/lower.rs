@@ -2,8 +2,9 @@ use crate::{
     ast::{self, Body, Definition, Guard, Let, Literal, Pattern},
     decision::{self, Decision},
 };
-use index_vec::{IndexVec, define_index_type, index_vec};
+use index_vec::{IndexVec, index_vec};
 use std::collections::{BTreeMap, HashMap};
+use tja_macros::define_index_type;
 
 define_index_type! {
     pub(crate) struct ConstIdx = usize;

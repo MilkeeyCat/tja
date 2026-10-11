@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tja",
-    "iris",
+    "tja-iris",
+    "tja-macros",
 ]
 resolver = "3"

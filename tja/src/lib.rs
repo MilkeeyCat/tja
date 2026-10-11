@@ -10,7 +10,7 @@ use crate::{
     mir::Target,
 };
 use derive_more::{Display, From};
-use index_vec::define_index_type;
+use tja_macros::define_index_type;
 
 define_index_type! {
     pub struct GlobalVariableIdx = usize;

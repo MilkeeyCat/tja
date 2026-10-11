@@ -1,9 +1,10 @@
 use crate::{hir::TargetInstruction, lir, mir::Abi};
-use index_vec::{IndexVec, define_index_type};
+use index_vec::IndexVec;
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt::Display,
 };
+use tja_macros::define_index_type;
 
 define_index_type! {
     pub struct TyIdx = usize;

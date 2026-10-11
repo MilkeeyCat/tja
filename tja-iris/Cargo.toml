@@ -1,11 +1,7 @@
 [package]
-name = "iris"
+name = "tja-iris"
 version = "0.1.0"
 edition = "2024"
-
-[lib]
-name = "iris"
-path = "src/lib.rs"
 
 [build-dependencies]
 lalrpop = "0.22.2"
@@ -15,3 +11,4 @@ index_vec = "0.1.4"
 indexmap = "2.13.0"
 lalrpop-util = { version = "0.22.2", features = ["lexer", "unicode"] }
 logos = "0.16.1"
+tja-macros = { version = "0.1.0", path = "../tja-macros" }

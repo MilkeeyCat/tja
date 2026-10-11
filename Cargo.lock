@@ -183,17 +183,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iris"
-version = "0.1.0"
-dependencies = [
- "index_vec",
- "indexmap",
- "lalrpop",
- "lalrpop-util",
- "logos",
-]
-
-[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -530,10 +519,30 @@ dependencies = [
  "derive_more",
  "index_vec",
  "indexmap",
- "iris",
  "paste",
  "slotmap",
  "smallvec",
+ "tja-iris",
+ "tja-macros",
+]
+
+[[package]]
+name = "tja-iris"
+version = "0.1.0"
+dependencies = [
+ "index_vec",
+ "indexmap",
+ "lalrpop",
+ "lalrpop-util",
+ "logos",
+ "tja-macros",
+]
+
+[[package]]
+name = "tja-macros"
+version = "0.1.0"
+dependencies = [
+ "index_vec",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 use derive_more::From;
-use index_vec::define_index_type;
+use tja_macros::define_index_type;
 
 define_index_type! {
     pub(super) struct VregIdx = usize;
