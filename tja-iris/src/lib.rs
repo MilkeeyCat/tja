@@ -1,4 +1,6 @@
 mod ast;
+mod codegen;
+mod late;
 mod lexer;
 #[cfg(test)]
 mod parser_tests;

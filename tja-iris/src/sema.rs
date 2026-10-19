@@ -8,32 +8,32 @@ use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
 use tja_macros::define_index_type;
 
 pub(crate) struct Program {
-    types: IndexVec<TypeIdx, Type>,
-    globals: IndexVec<GlobalIdx, Global>,
-    term_decls: IndexVec<TermDeclIdx, TermDecl>,
-    rules: BTreeMap<TermDeclIdx, Vec<Rule>>,
+    pub(crate) types: IndexVec<TypeIdx, Type>,
+    pub(crate) globals: IndexVec<GlobalIdx, Global>,
+    pub(crate) term_decls: IndexVec<TermDeclIdx, TermDecl>,
+    pub(crate) rules: BTreeMap<TermDeclIdx, Vec<Rule>>,
 }
 
 define_index_type! {
-    struct TypeIdx = usize;
+    pub(crate) struct TypeIdx = usize;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum Type {
+pub(crate) enum Type {
     Builtin(BuiltinType),
     External(String),
     Tuple(Vec<TypeIdx>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
-enum BuiltinType {
+pub(crate) enum BuiltinType {
     #[display("bool")]
     Bool,
     Int(IntType),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display)]
-enum IntType {
+pub(crate) enum IntType {
     #[display("i8")]
     I8,
     #[display("i16")]
@@ -109,22 +109,22 @@ impl std::fmt::Display for DisplayType<'_> {
 }
 
 define_index_type! {
-    struct GlobalIdx = usize;
+    pub(crate) struct GlobalIdx = usize;
 }
 
-struct Global {
-    name: String,
-    ty: TypeIdx,
-    kind: GlobalKind,
+pub(crate) struct Global {
+    pub(crate) name: String,
+    pub(crate) ty: TypeIdx,
+    pub(crate) kind: GlobalKind,
 }
 
-struct TermDecl {
-    kind: TermDeclKind,
-    name: String,
-    arg_tys: Vec<TypeIdx>,
-    ret_ty: TypeIdx,
-    is_external: bool,
-    is_pure: bool,
+pub(crate) struct TermDecl {
+    pub(crate) kind: TermDeclKind,
+    pub(crate) name: String,
+    pub(crate) arg_tys: Vec<TypeIdx>,
+    pub(crate) ret_ty: TypeIdx,
+    pub(crate) is_external: bool,
+    pub(crate) is_pure: bool,
 }
 
 define_index_type! {
@@ -139,10 +139,10 @@ enum TermSymbol {
     Overload(OverloadTermIdx),
 }
 
-struct Rule {
-    pats: Vec<Pattern>,
-    guards: Vec<Guard>,
-    body: Body,
+pub(crate) struct Rule {
+    pub(crate) pats: Vec<Pattern>,
+    pub(crate) guards: Vec<Guard>,
+    pub(crate) body: Body,
 }
 
 #[derive(Clone)]
@@ -158,7 +158,7 @@ enum ExprCtx {
 }
 
 define_index_type! {
-    struct VariableIdx = usize;
+    pub(crate) struct VariableIdx = usize;
 }
 
 struct RuleLoweringCtx<'a> {
@@ -660,7 +660,8 @@ impl<'a> RuleLoweringCtx<'a> {
     }
 }
 
-enum Pattern {
+#[derive(Clone)]
+pub(crate) enum Pattern {
     Application {
         term_decl: TermDeclIdx,
         pats: Vec<Self>,
@@ -674,13 +675,13 @@ enum Pattern {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct Expr {
-    kind: ExprKind,
-    ty: TypeIdx,
+pub(crate) struct Expr {
+    pub(crate) kind: ExprKind,
+    pub(crate) ty: TypeIdx,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-enum ExprKind {
+pub(crate) enum ExprKind {
     Call {
         term_decl: TermDeclIdx,
         args: Vec<Expr>,
@@ -696,14 +697,14 @@ enum ExprKind {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-enum Literal {
+pub(crate) enum Literal {
     Int(i64),
     Bool(bool),
 }
 
-struct Guard {
-    pat: Pattern,
-    expr: Expr,
+pub(crate) struct Guard {
+    pub(crate) pat: Pattern,
+    pub(crate) expr: Expr,
 }
 
 pub(crate) struct Body {
