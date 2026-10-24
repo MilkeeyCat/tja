@@ -1,15 +1,22 @@
 mod ast;
-mod decision;
-mod generator;
+mod codegen;
+mod late;
 mod lexer;
-mod lower;
-mod visitor;
+#[cfg(test)]
+mod parser_tests;
+mod sema;
 
 use lalrpop_util::lalrpop_mod;
-use lexer::Lexer;
+use tja_macros::define_index_type;
+
+use crate::lexer::Lexer;
 use std::path::Path;
 
 lalrpop_mod!(grammar);
+
+define_index_type! {
+    pub(crate) struct TermDeclIdx = usize;
+}
 
 pub fn compile<P: AsRef<Path>>(input: &[P]) -> Result<String, std::fmt::Error> {
     let mut definitions = Vec::new();
@@ -25,7 +32,11 @@ pub fn compile<P: AsRef<Path>>(input: &[P]) -> Result<String, std::fmt::Error> {
         );
     }
 
-    let module = lower::run(definitions);
+    let program = sema::run(definitions);
+    let program = late::run(program);
+    let mut buf = String::new();
 
-    generator::generate(module)
+    codegen::rust::generate(&program, &mut buf)?;
+
+    Ok(buf)
 }
