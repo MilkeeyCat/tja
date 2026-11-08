@@ -135,19 +135,16 @@ impl ValidateConstError {
             }
         };
 
-        return format!(
-            "const {}, projection {} - {}",
+        format!(
+            "const {}, projection [{}] - {}",
             const_.display(decls),
-            format!(
-                "[{}]",
-                self.projection
-                    .into_iter()
-                    .map(|idx| idx.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            self.projection
+                .into_iter()
+                .map(|idx| idx.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
             err
-        );
+        )
     }
 }
 

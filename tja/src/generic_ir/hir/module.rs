@@ -91,7 +91,7 @@ impl<TI: TargetInstruction> Module<TI> {
     pub fn display<'a>(&'a self, ty_storage: &'a TyStorage) -> DisplayModule<'a, TI> {
         DisplayModule {
             module: self,
-            ty_storage: ty_storage,
+            ty_storage,
         }
     }
 

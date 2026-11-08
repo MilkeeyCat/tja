@@ -40,8 +40,7 @@ impl<TI: hir::TargetInstruction> LoweringCtx<'_, TI> {
             self.hir_func
                 .block_params(block)
                 .iter()
-                .map(|value| value.ty().lir_ty_iter(self.ty_storage))
-                .flatten()
+                .flat_map(|value| value.ty().lir_ty_iter(self.ty_storage))
                 .collect()
         };
         let lir_block = self.lir_func_cursor.create_block(params);

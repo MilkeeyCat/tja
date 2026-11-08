@@ -215,7 +215,7 @@ fn imm_fits_in_ty(imm: Immediate, ty: Ty) -> bool {
 }
 
 fn is_valid_cast(from: Ty, to: Ty, is_trunc: bool) -> bool {
-    const CAST_ORDER: &'static [Ty] = &[Ty::I8, Ty::I16, Ty::I32, Ty::I64];
+    const CAST_ORDER: &[Ty] = &[Ty::I8, Ty::I16, Ty::I32, Ty::I64];
     let from = CAST_ORDER.iter().position(|ty| *ty == from);
     let to = CAST_ORDER.iter().position(|ty| *ty == to);
 
