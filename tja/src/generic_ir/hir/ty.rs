@@ -1,9 +1,6 @@
 use crate::{hir::TargetInstruction, lir, mir::Abi};
 use index_vec::IndexVec;
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    fmt::Display,
-};
+use std::{collections::HashMap, fmt::Display};
 use tja_macros::define_index_type;
 
 define_index_type! {
@@ -112,16 +109,10 @@ impl Storage {
     }
 
     pub fn add(&mut self, ty: Ty) -> TyIdx {
-        match self.types_map.entry(ty.clone()) {
-            Entry::Vacant(entry) => {
-                let idx = self.types.push(ty);
-
-                entry.insert(idx);
-
-                idx
-            }
-            Entry::Occupied(entry) => *entry.get(),
-        }
+        *self
+            .types_map
+            .entry(ty)
+            .or_insert_with_key(|ty| self.types.push(ty.clone()))
     }
 
     pub fn get(&self, idx: TyIdx) -> &Ty {
